@@ -1,6 +1,20 @@
 # Lekki Peculiar CBT — Product & Technical Plan
 
-> Status: **Draft v0.1** — living document. Open questions for the school are collected in [§13](#13-open-questions-for-the-school).
+> Status: **v0.2** — school's answers folded in (see [§0 Decisions](#0-decisions-confirmed-with-the-school)). Remaining open questions in [§13](#13-open-questions-for-the-school).
+
+---
+
+## 0. Decisions confirmed with the school
+
+| Topic | Answer | Consequence for the build |
+|---|---|---|
+| Where exams run | **School computer lab** | Terminal UI optimised for desktop/keyboard; device binding per lab PC. |
+| Lab internet | **Unreliable** | Offline-first exam engine is a **Phase 1 must-have**, not an enhancement (see §6.4). Recommend a 4G/5G MiFi as backup uplink — a full 60-student exam moves only a few MB. |
+| Concurrent students | **50–60 per sitting** | Well inside Supabase Pro / Vercel limits; answers are batched to keep request counts low. |
+| Timer on disconnect | **Keeps running** | Server-authoritative deadline; client keeps counting offline; answers timestamped and accepted if made before the deadline. |
+| Admin (HOD) scope | **By section** — Elementary HOD and College HOD. (A "Pre" section exists but doesn't use CBT.) | `admin_scopes` = section. `sections.cbt_enabled` flag keeps Pre out of the CBT UI. |
+| Admission numbers & photos | **Exist; will be imported** | Admission number = primary login key. Bulk import CSV + photo zip. |
+| Students who forget their number | Need an alternative that takes **<5 min to teach** | "I don't know my number" → pick class → type first letters of name → tap own photo (see §6.1). |
 
 ---
 
@@ -163,7 +177,7 @@ Once an assessment is **Approved**, questions are locked (a versioned snapshot i
 | Role | Scope | Typical person |
 |---|---|---|
 | **Super admin** | Whole school | Proprietor / IT lead |
-| **Admin** | A section, stage or department (e.g. "Senior College", "Science Dept") | Head of School, HOD |
+| **Admin** | A **section**: Elementary or College | Head of Section (HOD) |
 | **Invigilator** *(optional role)* | Specific live exam sessions | Lab attendant, teacher on duty |
 | **Teacher** | Their own teaching assignments | |
 | **Student** | Their own exam attempt only | |
@@ -191,14 +205,16 @@ Admins get **granular permissions**, granted and revoked by the super admin, e.g
 
 Students have **no personal portal** — they use an **exam terminal** (a dedicated URL on lab computers or their devices).
 
-### 6.1 Login (built to survive typos)
-1. **Student ID** is the key, formatted with a **check character**, e.g. `LPS-24-0137-K`. Input is case-insensitive and ignores dashes/spaces; the check character catches most mistyped IDs *before* hitting the database ("That ID doesn't look right — check the last letter").
-2. System shows **"Is this you?"** — full name, class and **photo**. Student confirms. Wrong student = cannot proceed silently.
-3. Fallback for students who forget their ID: pick **Class → tap your name/photo** from the list (only enabled while an exam for that class is live, and every such login is logged).
-4. Optional **exam access code** (short PIN shown on the lab screen / announced by the invigilator) so nobody outside the room can log in.
-5. Student sees only exams that are **Live for their class** (or make-ups granted to them).
+### 6.1 Login (built to survive typos — teachable in 5 minutes)
+The whole flow on the lab screen is three big steps:
 
-Printable **ID cards/slips with QR code** can be generated per class; scanning the QR fills in the ID (removes typos entirely on devices with cameras).
+1. **Type your admission number** — case-insensitive, spaces/dashes/slashes ignored, so `lps/2024/137`, `LPS 2024 137` and `lps-2024-137` all match. If there's no exact match the screen suggests close matches (typo tolerance) *with photos*.
+2. **"I don't know my number"** button (always visible) → tap your **class** → type the **first few letters of your first or last name** → tap **your photo**. Fuzzy matching tolerates spelling mistakes.
+3. **"Is this you?"** — full name, class, photo → **Yes, this is me**.
+
+Guards: an optional **lab code** (6 digits shown on the admin's live-exam screen, written on the board) stops anyone outside the lab logging in; every login records method (admission no. / name search), device and time; a student with an attempt already running on another PC is blocked and flagged until an invigilator unlocks it.
+
+What to teach students on day one: *"Type your admission number. If you forget it, press 'I don't know my number', pick your class, type your name, tap your picture."*
 
 ### 6.2 Pre-exam consent screen
 Subject, class, assessment type, teacher, number of questions, duration, instructions, rules → **"I understand — Start exam"**. The clock starts on the server at this moment.
@@ -212,13 +228,17 @@ Subject, class, assessment type, teacher, number of questions, duration, instruc
 - Connection indicator ("All answers saved" / "Offline — answers saved on this device").
 - Accessibility: large text toggle, high-contrast/dark mode, full keyboard navigation, screen-reader labels.
 
-### 6.4 Resume after disconnection (the tricky one)
-- Every answer is **saved to IndexedDB immediately** and **synced to the server** (debounced, plus a heartbeat every ~20s).
-- If the internet drops, the student **keeps working**; the answers queue locally and sync on reconnect. The exam paper is downloaded at start, so no network is needed mid-exam.
-- **Time is server-controlled**: `deadline = started_at + duration + granted_extra_time`. Closing the browser doesn't stop the clock (default policy; configurable).
-- **Same device returns** (browser crash, refresh): resumes automatically with all answers.
-- **Different device / re-login**: blocked by default → shows "Ask your invigilator". Invigilator/admin approves a **resume**, which is logged and flagged on the attempt. The admin can add compensatory time if the outage wasn't the student's fault.
-- If the deadline passes while offline, whatever reached the server + whatever syncs within a short grace window (e.g. 2 min, only answers timestamped before deadline) is graded.
+### 6.4 Offline-first engine & resume (critical: lab internet is unreliable)
+Connectivity is needed only for **two short moments**: logging in and starting. Everything in between works offline.
+
+- **At start** the PC downloads the student's whole paper (questions + options, already shuffled, **no answer key**) and stores it in IndexedDB together with the server deadline and the server–client clock offset.
+- **Every answer** is written to IndexedDB instantly, then pushed to the server in small batches (retry with back-off). A status pill shows *"All saved"* / *"Saved on this computer — will upload when internet returns"*.
+- **Timer keeps running** (school decision): `deadline = started_at + duration + extra_time_granted` is fixed by the server; the client counts down against it using the stored clock offset, online or not.
+- **Submit / time-up while offline**: the attempt is sealed locally ("Submitted — waiting for internet, don't switch off this PC") and uploaded automatically when the connection returns, even if the browser was closed and reopened on the same PC.
+- **Server acceptance rules**: answers are accepted only if stamped before the deadline (+ small clock-skew allowance); uploads arriving after the deadline are accepted until the exam window's **sync cut-off** (default 60 min after window end) and marked *late-sync* in the integrity report so an admin can see them.
+- **Same PC returns** (refresh, crash, power cut): resumes automatically with all answers and the correct remaining time.
+- **Different PC** (hardware fault): blocked by default → invigilator/admin taps **Unlock re-login** (logged, flagged). The student continues with answers the server already has plus anything synced from the old PC. Admin may grant compensatory time.
+- **Phase 2 — "Exam pack" pre-load**: the lab PCs download the encrypted paper and class roster while internet is good (e.g. morning); the admin's start code unlocks it, so login and start also work with no internet. Results sync later.
 
 ### 6.5 Missed exams / make-ups
 - An admin with `exam.grant_makeup` selects student(s) → sets a new window (e.g. tomorrow 9:00–10:00) → reason required.
@@ -352,15 +372,14 @@ Timelines are rough and assume one to two developers; we'll refine once open que
 
 ## 13. Open questions for the school
 
-1. **Devices & network:** Exams in a computer lab, on students' own devices, or both? How reliable is the lab internet? (Decides how hard we lean on offline mode and whether a local-network fallback is worth considering.)
-2. **Numbers:** Total students, and the largest number sitting an exam at the same time?
-3. **Timer policy on disconnect:** Keep running (our default) or pause until the student is back?
-4. **Results visibility:** Should students see scores/corrections right after submitting, or only after release?
-5. **Admin scoping:** Are HODs scoped by department (Science/Art/Commerce), by section (Elementary/College), or both?
-6. **Class naming:** What are the actual arm names (e.g. Year 7 Gold/Blue, JSS1A)? Do Senior College students take different subject combinations per track?
-7. **Student IDs:** Do students already have admission numbers we should reuse? Is there a photo archive to import?
-8. **Question content:** Do questions need images, diagrams, formulas (chemistry/maths)? Any audio (French listening)?
-9. **Grading output:** Do CBT scores feed into a larger term result (CA + exam weighting)? Does the school need the broadsheet in a specific format?
-10. **Teacher login:** Does the school use Google Workspace or Microsoft 365? (We can add "Sign in with Google/Microsoft".)
-11. **Penalties:** What should happen to a flagged student — automatic mark-down, or admin review only? (We recommend admin review only.)
-12. **Invigilators:** Are exams invigilated by teachers who should get a limited "invigilator" role?
+Answered (see §0): devices, network, concurrency, timer policy, admin scope, admission numbers/photos, alternative login.
+
+Still open:
+1. **Results visibility:** Should students see scores/corrections right after submitting, or only after release? *(Default built: score only, configurable per assessment.)*
+2. **Class naming:** Actual arm names (e.g. Year 7 Gold/Blue)? Do Senior College students take different subject combinations per track?
+3. **Question content:** Images, diagrams, formulas needed? Audio for French listening?
+4. **Grading output:** Do CBT scores feed a term result (CA + exam weighting)? Required broadsheet format?
+5. **Teacher login:** Google Workspace or Microsoft 365 at the school? (Can add "Sign in with Google/Microsoft".)
+6. **Penalties for flags:** automatic mark-down or admin review only? *(Default built: admin review only.)*
+7. **Invigilators:** Separate limited role, or do HODs/teachers invigilate?
+8. **Admission number format:** a sample, so the normaliser handles it exactly.

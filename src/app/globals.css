@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
+/* Design tokens. School colours live here so re-branding is a one-file change. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #f1f3f9;
+  --border: #e2e6f0;
+  --text: #141a2e;
+  --muted: #5b6480;
+  --brand: #1e3a8a;          /* deep navy */
+  --brand-strong: #172c6b;
+  --brand-soft: #e8edfb;
+  --accent: #d4a017;         /* gold */
+  --success: #15803d;
+  --success-soft: #e7f6ec;
+  --warning: #b45309;
+  --warning-soft: #fdf3e2;
+  --danger: #b91c1c;
+  --danger-soft: #fdeaea;
+  --info: #0369a1;
+  --info-soft: #e5f3fb;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #0d1120;
+    --surface: #151a2c;
+    --surface-2: #1b2136;
+    --border: #2a3150;
+    --text: #e8ebf5;
+    --muted: #9aa3bf;
+    --brand: #7c9cf5;
+    --brand-strong: #a3baf9;
+    --brand-soft: #1e2748;
+    --accent: #e6b940;
+    --success: #4ade80;
+    --success-soft: #12301f;
+    --warning: #fbbf24;
+    --warning-soft: #33260e;
+    --danger: #f87171;
+    --danger-soft: #3a1618;
+    --info: #38bdf8;
+    --info-soft: #0f2a3a;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0d1120;
+  --surface: #151a2c;
+  --surface-2: #1b2136;
+  --border: #2a3150;
+  --text: #e8ebf5;
+  --muted: #9aa3bf;
+  --brand: #7c9cf5;
+  --brand-strong: #a3baf9;
+  --brand-soft: #1e2748;
+  --accent: #e6b940;
+  --success: #4ade80;
+  --success-soft: #12301f;
+  --warning: #fbbf24;
+  --warning-soft: #33260e;
+  --danger: #f87171;
+  --danger-soft: #3a1618;
+  --info: #38bdf8;
+  --info-soft: #0f2a3a;
+}
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  color-scheme: light dark;
+}
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
 }

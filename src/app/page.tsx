@@ -3,6 +3,8 @@ import { Logo } from "@/components/brand";
 import { Alert } from "@/components/ui";
 import { isConfigured } from "@/lib/env";
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   const configured = isConfigured();
   return (

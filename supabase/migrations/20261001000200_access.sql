@@ -288,8 +288,13 @@ create policy questions_delete on public.questions for delete to authenticated
 -- ---------------------------------------------------------------------------
 -- Assessments: teacher drafts; status moves forward only through functions.
 -- ---------------------------------------------------------------------------
+-- Uses the row's own columns (not can_view_assessment(id)) so INSERT ... RETURNING can see the new row.
 create policy assessments_read on public.assessments for select to authenticated
-  using (public.can_view_assessment(id));
+  using (
+    created_by = auth.uid()
+    or public.teaches_subject(subject_id)
+    or public.admin_of_section(public.section_of_subject(subject_id))
+  );
 create policy assessments_insert on public.assessments for insert to authenticated
   with check (
     created_by = auth.uid() and status = 'draft' and paper is null

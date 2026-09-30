@@ -7,6 +7,7 @@ import { isConfigured } from "@/lib/env";
 import { setupSuperAdmin } from "./actions";
 
 export const metadata: Metadata = { title: "First-time setup" };
+export const dynamic = "force-dynamic";
 
 export default async function SetupPage() {
   let done = false;

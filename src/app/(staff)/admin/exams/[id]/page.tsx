@@ -82,7 +82,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
   const photos = await signPhotos(students.map((x) => x.photo_path));
   const terminalName = new Map((terminals ?? []).map((t) => [t.id as string, t.name as string]));
 
-  const now = Date.now();
+  const now = new Date().getTime();
   const latest = new Map<string, Attempt>();
   for (const t of attempts) {
     const prev = latest.get(t.student_id);
@@ -132,6 +132,11 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="text-sm">
+            {state === "live" ? (
+              <p className="mb-1 font-medium text-success">● Live — students in {s.className(w.class_id)} can start now.</p>
+            ) : state === "awaiting_start" ? (
+              <p className="mb-1 font-medium text-warning">Students are waiting. Press Start when everyone is seated.</p>
+            ) : null}
             <p>
               <span className="text-muted">Window:</span> {formatDateTime(w.starts_at)} → {formatTime(w.ends_at)}
             </p>

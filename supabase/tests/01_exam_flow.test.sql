@@ -133,8 +133,9 @@ from generate_series(1, 6) g;
 insert into public.assessments (subject_id, year_id, term_id, title, type, question_count, duration_minutes, created_by, settings)
 values ((select v from ids where k = 'bio'), (select v from ids where k = 'y4'), (select v from ids where k = 'term'),
         'Basic Science Test 1', 'test', 5, 20, (select v from ids where k = 'dixon'),
-        '{"shuffle_questions":true,"shuffle_options":true,"require_all_answered":true,"show_result":"score"}');
-insert into ids values ('asmt', (select id from public.assessments limit 1));
+        '{"shuffle_questions":true,"shuffle_options":true,"require_all_answered":true,"show_result":"score"}')
+returning id \gset asmt_
+insert into ids values ('asmt', :'asmt_id');
 insert into public.assessment_questions (assessment_id, question_id, position)
 select (select v from ids where k = 'asmt'), id, row_number() over (order by body) from public.questions;
 

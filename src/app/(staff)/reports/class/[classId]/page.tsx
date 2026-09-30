@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Table2 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ScoreCell } from "@/components/charts";
@@ -66,6 +67,7 @@ export default async function ClassBroadsheet(props: PageProps<"/reports/class/[
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={Table2}
         back={{ href: "/reports", label: "Reports" }}
         title={`${cls.name} — ${subjectId ? s.subjectById.get(subjectId)?.name : "all subjects"}`}
         description={

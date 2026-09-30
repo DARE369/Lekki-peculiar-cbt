@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UsersRound } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, EmptyState, Field, PageHeader, Select } from "@/components/ui";
@@ -28,7 +29,8 @@ export default async function MyClasses() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My classes" description="Classes and subjects you teach this session. Your Head of Section approves changes." />
+      <PageHeader
+        icon={UsersRound} title="My classes" description="Classes and subjects you teach this session. Your Head of Section approves changes." />
 
       {byClass.size === 0 ? (
         <Card>

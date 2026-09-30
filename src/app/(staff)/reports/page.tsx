@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 import { PercentBar } from "@/components/charts";
@@ -48,6 +49,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={BarChart3}
         title="Reports"
         description="Pick a test for question-by-question analysis, a class for the combined broadsheet, or a student for their full record."
       />

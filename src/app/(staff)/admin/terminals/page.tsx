@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MonitorSmartphone } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Alert, Badge, Card, CardHeader, EmptyState, Field, Input, PageHeader, Table, Td, Th } from "@/components/ui";
 import { can, requireAdmin } from "@/lib/auth";
@@ -16,6 +17,7 @@ export default async function TerminalsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={MonitorSmartphone}
         title="Lab computers"
         description="Only registered computers can open the student exam screen. This keeps exams in the lab and stops logins from home."
       />

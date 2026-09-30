@@ -1,21 +1,26 @@
 import type { Metadata, Viewport } from "next";
+import { themeInitScript } from "@/components/theme";
+import { brand } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Lekki Peculiar CBT", template: "%s · Lekki Peculiar CBT" },
-  description: "Computer-based testing for Lekki Peculiar School",
+  title: { default: `${brand.productName} · ${brand.schoolName}`, template: `%s · ${brand.productName}` },
+  description: `Computer-based testing for ${brand.schoolName}`,
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#1e3a8a" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1120" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f7fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0f1e" },
   ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );

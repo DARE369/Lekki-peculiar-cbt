@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CalendarRange } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, Checkbox, Field, Input, PageHeader } from "@/components/ui";
 import { requireSuperAdmin } from "@/lib/auth";
@@ -14,6 +15,7 @@ export default async function SchoolPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={CalendarRange}
         title="Sessions, terms & sections"
         description="Every test belongs to a term, so reports stay organised year after year. Switch the current term at the start of each term."
       />

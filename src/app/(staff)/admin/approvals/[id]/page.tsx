@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -51,6 +52,7 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={ClipboardCheck}
         back={{ href: "/admin/approvals", label: "Approvals" }}
         title={
           <span className="flex flex-wrap items-center gap-3">

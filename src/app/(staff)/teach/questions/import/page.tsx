@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Upload } from "lucide-react";
 import { Card, EmptyState, LinkButton, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
@@ -23,6 +24,7 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
   return (
     <div>
       <PageHeader
+        icon={Upload}
         title="Upload questions"
         description="Questions are checked before anything is saved. Duplicates already in the bank are skipped."
         back={assessmentId ? { href: `/teach/assessments/${assessmentId}`, label: "Back to test" } : { href: "/teach/questions", label: "Question bank" }}

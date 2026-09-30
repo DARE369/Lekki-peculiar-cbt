@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GraduationCap } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Avatar, Badge, Card, CardHeader, EmptyState, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
@@ -38,6 +39,7 @@ export default async function StudentsPage(props: PageProps<"/admin/students">) 
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={GraduationCap}
         title="Students"
         description="Students log in at the lab with their admission number, or by picking their class and name. Photos let them confirm it's them."
         actions={

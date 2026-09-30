@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UserCog } from "lucide-react";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Card, CardHeader, Checkbox, Field, Input, PageHeader } from "@/components/ui";
@@ -24,7 +25,8 @@ export default async function StaffMemberPage(props: PageProps<"/admin/staff/[id
   if (!m) notFound();
   return (
     <div className="max-w-2xl space-y-6">
-      <PageHeader title={m.full_name} description={m.email} back={{ href: "/admin/staff", label: "Staff" }} />
+      <PageHeader
+        icon={UserCog} title={m.full_name} description={m.email} back={{ href: "/admin/staff", label: "Staff" }} />
       <Card>
         <CardHeader title="Access" />
         <ActionForm action={updateStaffAccess} className="space-y-4 p-5">

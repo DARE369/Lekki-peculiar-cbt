@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClipboardCheck } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
@@ -30,7 +31,8 @@ export default async function Approvals() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Approvals" description="Check each test, then approve it and set the date for each class. Nobody can sit a test until you do." />
+      <PageHeader
+        icon={ClipboardCheck} title="Approvals" description="Check each test, then approve it and set the date for each class. Nobody can sit a test until you do." />
       <Card>
         <CardHeader title={`Waiting for you (${(pending ?? []).length})`} />
         {(pending ?? []).length === 0 ? (

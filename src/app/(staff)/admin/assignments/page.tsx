@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Users } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Alert, Badge, Card, CardHeader, EmptyState, Field, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 import { can, requireAdmin } from "@/lib/auth";
@@ -43,6 +44,7 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={Users}
         title="Teaching assignments"
         description={`Who teaches what in ${s.currentTerm?.session_name ?? "this session"}. Teachers only see students and results for their approved classes.`}
       />

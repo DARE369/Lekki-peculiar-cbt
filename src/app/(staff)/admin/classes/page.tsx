@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { School } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Textarea } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
@@ -20,7 +21,8 @@ export default async function ClassesPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Classes & subjects" description="Year groups are fixed (Year 1–6 Elementary, Year 7–12 College). Add the arms/classes and subjects for your section." />
+      <PageHeader
+        icon={School} title="Classes & subjects" description="Year groups are fixed (Year 1–6 Elementary, Year 7–12 College). Add the arms/classes and subjects for your section." />
       {sections.map((sec) => {
         const years = s.years.filter((y) => y.section_id === sec.id);
         const subjects = s.subjects.filter((x) => x.section_id === sec.id);

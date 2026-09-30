@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FileQuestion } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Alert, Card, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -21,7 +22,8 @@ export default async function EditQuestion(props: PageProps<"/teach/questions/[i
   const canEdit = q.owner_id === staff.id || staff.isAdmin;
   return (
     <div className="max-w-3xl space-y-4">
-      <PageHeader title="Edit question" back={{ href: `/teach/questions?subject=${q.subject_id}`, label: "Question bank" }} />
+      <PageHeader
+        icon={FileQuestion} title="Edit question" back={{ href: `/teach/questions?subject=${q.subject_id}`, label: "Question bank" }} />
       <Alert tone="info">
         Tests that are already approved keep their own frozen copy, so editing here won&apos;t change a test students are sitting.
         To fix a wrong answer after an exam, use <strong>Fix answer key</strong> in that test&apos;s question analysis.

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FilePlus2 } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
@@ -18,6 +19,7 @@ export default async function NewQuestion(props: PageProps<"/teach/questions/new
   return (
     <div className="max-w-3xl">
       <PageHeader
+        icon={FilePlus2}
         title="Add a question"
         back={assessmentId ? { href: `/teach/assessments/${assessmentId}`, label: "Back to test" } : { href: "/teach/questions", label: "Question bank" }}
       />

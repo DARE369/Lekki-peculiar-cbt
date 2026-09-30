@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Logo } from "@/components/brand";
+import { AuthLayout } from "@/components/auth-layout";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Alert, Card, Field, Input } from "@/components/ui";
+import { Alert, Field, Input } from "@/components/ui";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isConfigured } from "@/lib/env";
 import { setupSuperAdmin } from "./actions";
@@ -25,37 +25,38 @@ export default async function SetupPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <Logo className="mb-8" />
-        <Card className="p-6">
-          <h1 className="text-xl font-semibold">First-time setup</h1>
-          <p className="mt-1 mb-6 text-sm text-muted">Create the super administrator account. This page works only once.</p>
-          {problem ? (
-            <Alert tone="danger" title="Can't continue">{problem} See docs/DEPLOYMENT.md.</Alert>
-          ) : done ? (
-            <Alert tone="success" title="Setup is complete">
-              A super administrator already exists. <a href="/login" className="underline">Sign in</a>.
-            </Alert>
-          ) : (
-            <ActionForm action={setupSuperAdmin} className="space-y-4">
-              <Field label="Setup code" hint="The SETUP_SECRET value configured on the server.">
-                <Input name="secret" type="password" required />
-              </Field>
-              <Field label="Your full name">
-                <Input name="full_name" required />
-              </Field>
-              <Field label="School email">
-                <Input name="email" type="email" required />
-              </Field>
-              <Field label="Password" hint="At least 10 characters.">
-                <Input name="password" type="password" minLength={10} required />
-              </Field>
-              <SubmitButton className="w-full">Create super administrator</SubmitButton>
-            </ActionForm>
-          )}
-        </Card>
-      </div>
-    </main>
+    <AuthLayout title="First-time setup" subtitle="Create the super administrator account. This page works only once.">
+      {problem ? (
+        <Alert tone="danger" title="Can't continue">
+          {problem} See docs/DEPLOYMENT.md.
+        </Alert>
+      ) : done ? (
+        <Alert tone="success" title="Setup is complete">
+          A super administrator already exists.{" "}
+          <a href="/login" className="font-semibold underline">
+            Sign in
+          </a>
+          .
+        </Alert>
+      ) : (
+        <ActionForm action={setupSuperAdmin} className="space-y-4">
+          <Field label="Setup code" hint="The SETUP_SECRET value configured on the server.">
+            <Input name="secret" type="password" required className="h-11" />
+          </Field>
+          <Field label="Your full name">
+            <Input name="full_name" required className="h-11" />
+          </Field>
+          <Field label="School email">
+            <Input name="email" type="email" required className="h-11" />
+          </Field>
+          <Field label="Password" hint="At least 10 characters.">
+            <Input name="password" type="password" minLength={10} required className="h-11" />
+          </Field>
+          <SubmitButton className="w-full" size="lg">
+            Create super administrator
+          </SubmitButton>
+        </ActionForm>
+      )}
+    </AuthLayout>
   );
 }

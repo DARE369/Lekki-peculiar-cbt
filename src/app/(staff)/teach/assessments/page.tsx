@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BookOpenCheck } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -27,6 +28,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={BookOpenCheck}
         title="Tests & exams"
         description="Create a test, add questions, then submit it for approval. Your Head of Section sets the date."
         actions={<LinkButton href="/teach/assessments/new">New test or exam</LinkButton>}

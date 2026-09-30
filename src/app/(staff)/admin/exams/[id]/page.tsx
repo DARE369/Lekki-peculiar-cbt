@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CheckCircle2, Clock3, PenLine, Radio, UsersRound, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -112,6 +113,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={Radio}
         back={{ href: "/admin/exams", label: "Exams" }}
         title={
           <span className="flex flex-wrap items-center gap-3">
@@ -199,12 +201,13 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
       </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Stat label="Students" value={students.length} />
-        <Stat label="Writing" value={counts.writing} tone={counts.writing ? "info" : undefined} />
-        <Stat label="Submitted" value={counts.submitted} tone={counts.submitted ? "success" : undefined} />
-        <Stat label="Not started" value={counts.notStarted} tone={counts.notStarted && state !== "scheduled" ? "warning" : undefined} />
+        <Stat label="Students" value={students.length} icon={UsersRound} />
+        <Stat label="Writing" value={counts.writing} icon={PenLine} tone={counts.writing ? "info" : undefined} />
+        <Stat label="Submitted" value={counts.submitted} icon={CheckCircle2} tone={counts.submitted ? "success" : undefined} />
+        <Stat label="Not started" value={counts.notStarted} icon={Clock3} tone={counts.notStarted && state !== "scheduled" ? "warning" : undefined} />
         <Stat
           label="Offline / flagged"
+          icon={WifiOff}
           value={`${counts.offline} / ${counts.flagged}`}
           tone={counts.offline || counts.flagged ? "danger" : undefined}
           hint="Offline = no contact for 90s"

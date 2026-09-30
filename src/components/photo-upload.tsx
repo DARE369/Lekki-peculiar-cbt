@@ -110,7 +110,7 @@ export function BulkPhotoUpload({ students }: { students: { id: string; admissio
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <label className="inline-flex cursor-pointer items-center rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white dark:text-bg">
+        <label className="inline-flex cursor-pointer items-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-ink">
           Choose .zip of photos
           <input
             type="file"

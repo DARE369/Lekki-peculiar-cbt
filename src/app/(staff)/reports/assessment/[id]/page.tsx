@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Award, BarChart3, Sigma, SplitSquareHorizontal, TrendingDown, TrendingUp, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -38,6 +39,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={BarChart3}
         back={{ href: "/reports", label: "Reports" }}
         title={a.title}
         description={`${s.subjectById.get(a.subject_id)?.name} · ${s.yearById.get(a.year_id)?.name} · ${TYPE_LABEL[a.type]} · pass mark ${passMark}%`}
@@ -66,12 +68,12 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
       />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Sat" value={sum.count} />
-        <Stat label="Average" value={sum.mean == null ? "—" : `${sum.mean}%`} />
-        <Stat label="Median" value={sum.median == null ? "—" : `${sum.median}%`} />
-        <Stat label="Highest" value={sum.high == null ? "—" : `${sum.high}%`} />
-        <Stat label="Lowest" value={sum.low == null ? "—" : `${sum.low}%`} />
-        <Stat label="Passed" value={sum.passRate == null ? "—" : `${sum.passRate}%`} tone={sum.passRate != null && sum.passRate < 50 ? "danger" : undefined} />
+        <Stat label="Sat" value={sum.count} icon={UsersRound} />
+        <Stat label="Average" value={sum.mean == null ? "—" : `${sum.mean}%`} icon={Sigma} />
+        <Stat label="Median" value={sum.median == null ? "—" : `${sum.median}%`} icon={SplitSquareHorizontal} />
+        <Stat label="Highest" value={sum.high == null ? "—" : `${sum.high}%`} icon={TrendingUp} />
+        <Stat label="Lowest" value={sum.low == null ? "—" : `${sum.low}%`} icon={TrendingDown} />
+        <Stat label="Passed" icon={Award} value={sum.passRate == null ? "—" : `${sum.passRate}%`} tone={sum.passRate != null && sum.passRate < 50 ? "danger" : undefined} />
       </div>
 
       <nav className="flex gap-1 border-b border-border text-sm">

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ScrollText } from "lucide-react";
 import { Card, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateTime } from "@/lib/data";
@@ -47,6 +48,7 @@ export default async function AuditPage(props: PageProps<"/admin/audit">) {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={ScrollText}
         title="Audit log"
         description={staff.isSuperAdmin ? "Every privileged action in the system. Entries can't be edited or deleted." : "Your own privileged actions. The super admin sees everyone's."}
       />

@@ -1,81 +1,136 @@
 @import "tailwindcss";
+@import "@fontsource-variable/plus-jakarta-sans";
 
-/* Design tokens. School colours live here so re-branding is a one-file change. */
+/* Dark mode follows the resolved theme on <html data-theme>, set before paint by the inline
+   script in app/layout.tsx from the user's choice (light / dark / system). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ==========================================================================
+   BRAND — change these to re-colour the whole app.
+   Primary: deep royal blue. Accent: warm gold.
+   ========================================================================== */
 :root {
-  --bg: #f6f7fb;
+  color-scheme: light;
+
+  --bg: #f5f7fb;
+  --bg-tint: #eef2fb;
   --surface: #ffffff;
-  --surface-2: #f1f3f9;
-  --border: #e2e6f0;
-  --text: #141a2e;
-  --muted: #5b6480;
-  --brand: #1e3a8a;          /* deep navy */
-  --brand-strong: #172c6b;
-  --brand-soft: #e8edfb;
-  --accent: #d4a017;         /* gold */
-  --success: #15803d;
-  --success-soft: #e7f6ec;
-  --warning: #b45309;
-  --warning-soft: #fdf3e2;
-  --danger: #b91c1c;
-  --danger-soft: #fdeaea;
-  --info: #0369a1;
+  --surface-2: #f3f5fa;
+  --surface-3: #e8ecf5;
+  --border: #e2e7f0;
+  --border-strong: #cdd5e3;
+  --text: #0e1628;
+  --muted: #56617a;
+  --subtle: #8792a8;
+
+  --brand: #1d3f9a;
+  --brand-hover: #16317c;
+  --brand-soft: #e9efff;
+  --brand-softer: #f4f7ff;
+  --brand-ink: #ffffff;
+  --brand-2: #2f5fd0;
+
+  --accent: #d99a17;
+  --accent-soft: #fdf2d8;
+  --accent-ink: #1c1400;
+
+  --success: #13803e;
+  --success-soft: #e6f6ec;
+  --warning: #b05a06;
+  --warning-soft: #fff2de;
+  --danger: #c52a2a;
+  --danger-soft: #fdeceb;
+  --info: #0a6aa6;
   --info-soft: #e5f3fb;
+
+  /* Fixed (same in both themes): the deep brand panel and gold used on hero panels. */
+  --panel-1: #132c73;
+  --panel-2: #1d3f9a;
+  --panel-3: #2f5fd0;
+  --gold: #f1c04f;
+
+  --ring: rgb(29 63 154 / 0.35);
+  --shadow-sm: 0 1px 2px rgb(14 22 40 / 0.05);
+  --shadow-md: 0 1px 2px rgb(14 22 40 / 0.04), 0 6px 20px -8px rgb(14 22 40 / 0.12);
+  --shadow-lg: 0 2px 4px rgb(14 22 40 / 0.04), 0 18px 40px -16px rgb(14 22 40 / 0.22);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d1120;
-    --surface: #151a2c;
-    --surface-2: #1b2136;
-    --border: #2a3150;
-    --text: #e8ebf5;
-    --muted: #9aa3bf;
-    --brand: #7c9cf5;
-    --brand-strong: #a3baf9;
-    --brand-soft: #1e2748;
-    --accent: #e6b940;
-    --success: #4ade80;
-    --success-soft: #12301f;
-    --warning: #fbbf24;
-    --warning-soft: #33260e;
-    --danger: #f87171;
-    --danger-soft: #3a1618;
-    --info: #38bdf8;
-    --info-soft: #0f2a3a;
-  }
-}
 :root[data-theme="dark"] {
-  --bg: #0d1120;
-  --surface: #151a2c;
-  --surface-2: #1b2136;
-  --border: #2a3150;
-  --text: #e8ebf5;
-  --muted: #9aa3bf;
-  --brand: #7c9cf5;
-  --brand-strong: #a3baf9;
-  --brand-soft: #1e2748;
-  --accent: #e6b940;
+  color-scheme: dark;
+
+  --bg: #0a0f1e;
+  --bg-tint: #0e1530;
+  --surface: #111831;
+  --surface-2: #161f3d;
+  --surface-3: #1d284d;
+  --border: #222d54;
+  --border-strong: #32407a;
+  --text: #e9edf8;
+  --muted: #a2acc6;
+  --subtle: #717d9d;
+
+  --brand: #8eaeff;
+  --brand-hover: #aec5ff;
+  --brand-soft: #1a2552;
+  --brand-softer: #141d42;
+  --brand-ink: #0a0f1e;
+  --brand-2: #6b8ff0;
+
+  --accent: #f1c04f;
+  --accent-soft: #33280e;
+  --accent-ink: #1c1400;
+
   --success: #4ade80;
-  --success-soft: #12301f;
+  --success-soft: #0f2c1c;
   --warning: #fbbf24;
-  --warning-soft: #33260e;
+  --warning-soft: #33250b;
   --danger: #f87171;
-  --danger-soft: #3a1618;
+  --danger-soft: #3a1417;
   --info: #38bdf8;
-  --info-soft: #0f2a3a;
+  --info-soft: #0c2a3b;
+
+  --ring: rgb(142 174 255 / 0.45);
+  --shadow-sm: 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-md: 0 0 0 1px rgb(255 255 255 / 0.02), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.03), 0 24px 48px -20px rgb(0 0 0 / 0.7);
+}
+
+/* Without JavaScript, still honour the OS setting. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #0a0f1e;
+    --surface: #111831;
+    --surface-2: #161f3d;
+    --border: #222d54;
+    --text: #e9edf8;
+    --muted: #a2acc6;
+    --brand: #8eaeff;
+    --brand-soft: #1a2552;
+    --brand-ink: #0a0f1e;
+  }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-bg-tint: var(--bg-tint);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-text: var(--text);
   --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
   --color-brand: var(--brand);
-  --color-brand-strong: var(--brand-strong);
+  --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-softer: var(--brand-softer);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-2: var(--brand-2);
   --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
@@ -84,16 +139,58 @@
   --color-danger-soft: var(--danger-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow-soft: var(--shadow-sm);
+  --shadow-card: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
 html {
-  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
 }
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+/* Grid children may shrink below their content width (prevents sideways scrolling on phones;
+   wide tables scroll inside their own container instead). */
+.grid > * {
+  min-width: 0;
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Subtle patterned backdrop used on hero areas. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--border) 60%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--border) 60%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.bg-hero {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, color-mix(in oklab, var(--brand) 18%, transparent), transparent 60%),
+    radial-gradient(800px 400px at 110% 10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 60%),
+    var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {

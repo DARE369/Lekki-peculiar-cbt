@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UserRound } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, Field, Input, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -13,7 +14,8 @@ export default async function AccountPage() {
   const s = await getStructure();
   return (
     <div className="max-w-2xl space-y-6">
-      <PageHeader title="My account" description={staff.email} />
+      <PageHeader
+        icon={UserRound} title="My account" description={staff.email} />
       <Card>
         <CardHeader title="Access" />
         <div className="space-y-3 p-5 text-sm">

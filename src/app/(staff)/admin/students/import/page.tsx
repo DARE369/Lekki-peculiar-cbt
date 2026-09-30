@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { StudentImport } from "./student-import";
@@ -10,6 +11,7 @@ export default async function ImportStudentsPage() {
   return (
     <div>
       <PageHeader
+        icon={Upload}
         title="Import students"
         back={{ href: "/admin/students", label: "Students" }}
         description="After importing, upload photos in bulk from the Students page."

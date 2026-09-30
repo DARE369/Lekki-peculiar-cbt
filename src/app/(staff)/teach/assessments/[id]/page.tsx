@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BookOpenCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
@@ -97,6 +98,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={BookOpenCheck}
         back={{ href: "/teach/assessments", label: "Tests & exams" }}
         title={
           <span className="flex flex-wrap items-center gap-3">

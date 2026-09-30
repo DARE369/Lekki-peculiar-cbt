@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FileQuestion } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -40,6 +41,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={FileQuestion}
         title="Question bank"
         description="Questions are shared by all teachers of the same subject, so good questions get reused."
         actions={

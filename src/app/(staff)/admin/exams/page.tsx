@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, EmptyState, PageHeader, Table, Td, Th, cn } from "@/components/ui";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -48,6 +49,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={CalendarClock}
         title="Exams & live monitor"
         description="Open an exam to start it, watch progress and handle problems."
         actions={view === "today" ? <AutoRefresh seconds={20} /> : undefined}
@@ -57,7 +59,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
           <Link
             key={v}
             href={`/admin/exams?view=${v}`}
-            className={cn("rounded-md px-4 py-1.5", v === view ? "bg-brand text-white dark:text-bg" : "hover:bg-surface-2")}
+            className={cn("rounded-md px-4 py-1.5", v === view ? "bg-brand text-brand-ink" : "hover:bg-surface-2")}
           >
             {VIEWS[v]}
           </Link>

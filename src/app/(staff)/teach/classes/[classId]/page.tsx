@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UsersRound } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Avatar, Badge, Card, CardHeader, EmptyState, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -34,6 +35,7 @@ export default async function ClassPage(props: PageProps<"/teach/classes/[classI
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={UsersRound}
         back={{ href: "/teach/classes", label: "My classes" }}
         title={cls.name}
         description={`${s.sectionOfClass(classId)?.name} · ${(students ?? []).length} students`}

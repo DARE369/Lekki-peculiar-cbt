@@ -78,3 +78,9 @@ The app runs on **Vercel** with **Supabase** (Postgres, Auth, Storage). Budget a
 - **New session**: *Sessions & terms → New session*, then set the current term. Old results stay organised under their term.
 - **Backups**: Supabase Pro takes daily backups; for extra safety download CSVs from Reports at the end of each term.
 - **Updating the database**: new files in `supabase/migrations/` are applied with `npx supabase db push`.
+
+## Branding
+
+- **Colours:** the `BRAND` block at the top of `src/app/globals.css` (light and dark values, plus the fixed hero-panel blues and gold).
+- **Name, vision, core values, crest:** `src/lib/brand.ts`. Put the crest image in `public/brand/` and set `logoSrc` (e.g. `/brand/crest.png`); until then a monogram is drawn in the brand colours.
+- **Theme:** every user can switch Light / Dark / System (sidebar, sign-in page, exam screen). “System” follows the device setting live.

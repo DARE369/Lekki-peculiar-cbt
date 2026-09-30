@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UserCog } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
@@ -33,7 +34,8 @@ export default async function StaffPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Staff & permissions" description="Add teachers and Heads of Section, and decide exactly what each admin may do." />
+      <PageHeader
+        icon={UserCog} title="Staff & permissions" description="Add teachers and Heads of Section, and decide exactly what each admin may do." />
       <Card>
         <Table>
           <thead>

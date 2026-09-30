@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FilePlus2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
@@ -16,7 +17,8 @@ export default async function NewAssessment() {
   const sectionIds = new Set(subjects.map((x) => x.section_id));
   return (
     <div className="max-w-2xl">
-      <PageHeader title="New test or exam" back={{ href: "/teach/assessments", label: "Tests & exams" }} />
+      <PageHeader
+        icon={FilePlus2} title="New test or exam" back={{ href: "/teach/assessments", label: "Tests & exams" }} />
       {subjects.length === 0 ? (
         <Card>
           <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>} />

@@ -1,6 +1,13 @@
 # Lekki Peculiar CBT — Product & Technical Plan
 
-> Status: **v0.2** — school's answers folded in (see [§0 Decisions](#0-decisions-confirmed-with-the-school)). Remaining open questions in [§13](#13-open-questions-for-the-school).
+> Status: **v0.3** — Phase 1 built (see [Build status](#build-status)). School's answers in [§0](#0-decisions-confirmed-with-the-school); open questions in [§13](#13-open-questions-for-the-school).
+
+## Build status
+
+**Built (Phase 1 + parts of Phase 2):** school structure, staff roles & granular permissions, teaching assignments with approval, students with CSV import and bulk photo upload, question bank with Excel/CSV/text/JSON import, tests/exams/mocks/practice with settings, approval + per-class scheduling, admin Start/Pause/Close, live monitor, extra time, re-login unlock, void, make-ups, registered lab computers, offline-first exam terminal (typo-tolerant and name/photo login), auto-grading, answer-key correction with regrade, reports (per test, question analysis, integrity, class broadsheet, student record, CSV/print), audit log, dark mode and large text on the terminal.
+
+**Next up:** exam “pre-load packs” for starting with no internet (§6.4), PDF result slips/certificates, notifications, formula (KaTeX) and image upload for questions, teacher preview of a test as a student, practice mode without admin start, attendance report.
+
 
 ---
 

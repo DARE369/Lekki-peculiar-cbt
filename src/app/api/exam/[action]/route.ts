@@ -64,7 +64,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/exam/[action]">
     case "classes":
       return classes(terminal);
     case "search":
-      return search(req);
+      return search(req, terminal);
     case "session":
       return session(req, terminal);
     case "exams":
@@ -134,10 +134,17 @@ async function classes(terminal: Terminal) {
   return json({ classes: list });
 }
 
-async function search(req: Request) {
+async function search(req: Request, terminal: Terminal) {
   const body = await readJson<{ classId?: string; q?: string }>(req);
   if (!body?.classId || !z.string().uuid().safeParse(body.classId).success) return error("invalid", "Choose your class.");
   const db = createAdminClient();
+  const { data: cls } = await db
+    .from("classes")
+    .select("id, years!inner(sections!inner(school_id))")
+    .eq("id", body.classId)
+    .eq("years.sections.school_id", terminal.school_id)
+    .maybeSingle();
+  if (!cls) return error("invalid", "Choose your class.");
   const { data } = await db.rpc("exam_search_names", { p_class: body.classId, p_query: (body.q ?? "").slice(0, 60) });
   const ids = ((data ?? []) as { student_id: string }[]).map((r) => r.student_id);
   return json({ students: await studentCards(ids) });

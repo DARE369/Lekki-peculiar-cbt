@@ -1,0 +1,80 @@
+# Deployment guide
+
+The app runs on **Vercel** with **Supabase** (Postgres, Auth, Storage). Budget about 30 minutes.
+
+## 1. Create the Supabase project
+
+1. Create a project at [supabase.com](https://supabase.com). Pick the region closest to Lagos that Supabase offers (e.g. London). Save the database password somewhere safe.
+2. Upgrade to the **Pro plan before the first real exam**: daily backups, no pausing on inactivity, more connections.
+3. **Apply the database migrations** — pick one:
+   - **Supabase CLI** (recommended):
+     ```bash
+     npx supabase login
+     npx supabase link --project-ref <your-project-ref>
+     npx supabase db push
+     ```
+   - **SQL editor**: open each file in `supabase/migrations/` **in filename order** and run it.
+
+   This creates every table, the security rules, the exam functions, the default structure (Pre-School / Elementary / College, Years 1–12, Science/Art/Commerce tracks, the 2026/2027 session and common subjects) and the storage buckets.
+4. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off “Allow new users to sign up”**. Staff accounts are created only by the super admin.
+5. **Authentication → URL Configuration**:
+   - Site URL: your Vercel address, e.g. `https://lekki-cbt.vercel.app`
+   - Redirect URLs: add `https://lekki-cbt.vercel.app/auth/callback` (and your custom domain's, if any)
+6. **Email (optional but recommended)**: Supabase's built-in email is heavily rate-limited. For sign-in links, invitations and password resets, add custom SMTP under **Authentication → Emails → SMTP Settings** (e.g. Resend, Zoho Mail or the school's Google Workspace).
+7. **Project Settings → API**: copy the Project URL, the anon/publishable key and the service_role/secret key for the next step.
+
+## 2. Deploy on Vercel
+
+1. Vercel → **Add New… → Project** → import `DARE369/Lekki-peculiar-cbt`.
+2. Framework: Next.js (auto-detected). No build settings to change.
+3. Add the environment variables from [`.env.example`](../.env.example):
+
+   | Variable | Value |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | service_role / secret key |
+   | `EXAM_TOKEN_SECRET` | output of `openssl rand -base64 48` |
+   | `SETUP_SECRET` | any code you choose, used once on `/setup` |
+
+   (If you use Vercel's Supabase integration, the first three are filled in for you.)
+4. Deploy. Production deploys follow the repository's production branch (`main` by default) — merge the work branch into `main`, or deploy the branch as a Preview to try it first.
+
+## 3. First sign-in
+
+1. Open `https://<your-app>/setup`, enter the `SETUP_SECRET`, your name, school email and a password. This creates the **super admin**; the page then locks itself.
+2. **Sessions & terms**: check the current term.
+3. **Staff & permissions**: add the Elementary and College Heads of Section (role *Head of Section*, pick their section). Default permissions cover approving, starting exams, extra time, unlocking computers, students, teaching assignments and lab computers. **Make-ups and voiding are off by default** — tick them for the people you trust with exceptions.
+4. Add teachers (a temporary password is shown to pass on, or an invitation email if SMTP is set up).
+
+## 4. School data (Heads of Section)
+
+1. **Classes & subjects**: add the arms for each year (e.g. `Year 7 Gold, Year 7 Blue`), set tracks for Senior College classes, adjust subjects.
+2. **Students → Import from spreadsheet**: CSV with `Admission No, First Name, Surname, Other Names, Gender, Class` (template on the page). Re-importing updates existing students, which is also how to move classes at the start of a session.
+3. **Students → Upload photos in bulk**: a `.zip` of photos named by admission number (`LPS-2024-0137.jpg`). Photos are shrunk in the browser before upload.
+4. Teachers pick what they teach under **My classes**; approve under **Teaching assignments** (or assign directly).
+
+## 5. The computer lab
+
+1. **Lab computers → Create registration code**.
+2. On every lab PC, open `https://<your-app>/exam`, enter the code and a name like `Lab 1 – PC 14`. Set that page as the browser's home page. Only registered PCs can open exams.
+3. Load `/exam` once on each PC while the internet is working so the page is cached for offline use.
+4. Recommended: Chrome in kiosk mode (`chrome --kiosk https://<your-app>/exam`) and a **4G/5G MiFi as a backup uplink**. A full sitting of 60 students moves only a few megabytes.
+
+## 6. Exam-day checklist (Head of Section)
+
+- [ ] Test approved and scheduled for each class (**Approvals**)
+- [ ] Lab PCs on `/exam` before students arrive
+- [ ] Students seated and logged in — they wait on “Waiting for your supervisor to start”
+- [ ] **Exams → open the exam → ▶ Start exam now**
+- [ ] Watch the live monitor: *Offline* rows are still safe (answers are on the PC); *Re-login* means someone tried another PC
+- [ ] Power cut? **Extra time for everyone** once power is back
+- [ ] A PC dies? Move the student to another PC, then open their row → **Unlock re-login**
+- [ ] Absent students → **Make-up exam** with a new time slot
+- [ ] Students who submit while offline see “saved on this computer” — **don't switch those PCs off** until the monitor shows them *Submitted*
+
+## Maintenance
+
+- **New session**: *Sessions & terms → New session*, then set the current term. Old results stay organised under their term.
+- **Backups**: Supabase Pro takes daily backups; for extra safety download CSVs from Reports at the end of each term.
+- **Updating the database**: new files in `supabase/migrations/` are applied with `npx supabase db push`.

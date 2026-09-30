@@ -243,3 +243,38 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
   await expect(hod.getByText("Name login").or(hod.getByText("Not started")).first()).toBeVisible();
   await shot(hod, "13-monitor");
 });
+
+test("teacher sees organised reports and can fix an answer key", async ({ browser }) => {
+  const page = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await page.goto("/reports");
+  await page.getByRole("link", { name: "Basic Science Test 1" }).click();
+  await expect(page.getByRole("link", { name: "Charles Okafor" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "60%" })).toBeVisible();
+  await shot(page, "14-results");
+
+  await page.getByRole("link", { name: "Questions" }).click();
+  await expect(page.getByText("Sorted hardest first")).toBeVisible();
+  await shot(page, "15-item-analysis");
+
+  // Charles answered "one" (the original key A) on two questions; make one of those keys A.
+  const hardest = page.locator("tbody tr").first();
+  await hardest.getByText("Fix answer key").click();
+  await hardest.getByRole("combobox").selectOption("A");
+  page.once("dialog", (d) => d.accept());
+  await hardest.getByRole("button", { name: "Regrade" }).click();
+  await expect(page.getByText(/regraded/)).toBeVisible();
+  await page.getByRole("link", { name: "Students" }).click();
+  await expect(page.getByRole("cell", { name: "80%" })).toBeVisible();
+
+  await page.goto("/reports");
+  await page.getByRole("link", { name: "Year 4 Gold" }).click();
+  await expect(page.getByRole("columnheader", { name: "Basic Science" })).toBeVisible();
+  await expect(page.getByText("Class average")).toBeVisible();
+  await shot(page, "16-broadsheet");
+
+  await page.getByRole("link", { name: /Charles Okafor/ }).click();
+  await expect(page.getByText("Summary by subject")).toBeVisible();
+  await page.getByText(/question missed or wrong/).click();
+  await expect(page.getByText(/Correct: two/)).toBeVisible();
+  await shot(page, "17-student");
+});

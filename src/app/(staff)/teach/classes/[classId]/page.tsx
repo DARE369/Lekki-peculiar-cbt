@@ -37,7 +37,7 @@ export default async function ClassPage(props: PageProps<"/teach/classes/[classI
         back={{ href: "/teach/classes", label: "My classes" }}
         title={cls.name}
         description={`${s.sectionOfClass(classId)?.name} · ${(students ?? []).length} students`}
-        actions={<LinkButton href={`/reports/teacher?class=${classId}`}>Class results</LinkButton>}
+        actions={<LinkButton href={`/reports/class/${classId}`}>Class results</LinkButton>}
       />
       <div className="flex flex-wrap gap-1.5">
         {(mine ?? []).map((m) => (

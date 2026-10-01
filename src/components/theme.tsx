@@ -11,11 +11,11 @@ const KEY = "lp-theme";
  * Runs in <head> before first paint: resolves light/dark/system to data-theme on <html>
  * and keeps following the OS while the preference is "system".
  */
-export const themeInitScript = `(function(){try{var d=document.documentElement,p=localStorage.getItem("${KEY}")||"system",m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=p==="system"?(m.matches?"dark":"light"):p;d.setAttribute("data-theme",t);d.setAttribute("data-theme-pref",p)}a();m.addEventListener("change",function(){p=localStorage.getItem("${KEY}")||"system";a()})}catch(e){}})()`;
+export const themeInitScript = `(function(){try{var d=document.documentElement,p=localStorage.getItem("${KEY}")||"light",m=window.matchMedia("(prefers-color-scheme: dark)");function a(){var t=p==="system"?(m.matches?"dark":"light"):p;d.setAttribute("data-theme",t);d.setAttribute("data-theme-pref",p)}a();m.addEventListener("change",function(){p=localStorage.getItem("${KEY}")||"light";a()})}catch(e){}})()`;
 
 function readPref(): ThemePref {
-  if (typeof document === "undefined") return "system";
-  return (document.documentElement.getAttribute("data-theme-pref") as ThemePref) || "system";
+  if (typeof document === "undefined") return "light";
+  return (document.documentElement.getAttribute("data-theme-pref") as ThemePref) || "light";
 }
 
 function apply(pref: ThemePref) {
@@ -35,7 +35,7 @@ const OPTIONS: { value: ThemePref; label: string; Icon: typeof Sun }[] = [
 
 /** Segmented Light / Dark / System switch. */
 export function ThemeSwitcher({ className, compact = false }: { className?: string; compact?: boolean }) {
-  const [pref, setPref] = useState<ThemePref>("system");
+  const [pref, setPref] = useState<ThemePref>("light");
   useEffect(() => {
     // Sync with what the head script resolved (runs once after hydration).
     // eslint-disable-next-line react-hooks/set-state-in-effect

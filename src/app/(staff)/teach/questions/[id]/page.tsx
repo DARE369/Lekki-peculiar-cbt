@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Alert, Card, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
-import { teachableSubjects } from "@/lib/scope";
+import { labelSubjects, teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
 import { QuestionForm } from "../question-form";
 
@@ -33,7 +33,7 @@ export default async function EditQuestion(props: PageProps<"/teach/questions/[i
       {!canEdit ? <Alert tone="warning">Only the teacher who added this question (or an admin) can edit it.</Alert> : null}
       <Card className="p-5">
         <QuestionForm
-          subjects={allSubjects}
+          subjects={labelSubjects(allSubjects, s)}
           years={s.years.filter((y) => y.section_id === s.subjectById.get(q.subject_id)?.section_id)}
           values={q}
           assessmentId={assessmentId}

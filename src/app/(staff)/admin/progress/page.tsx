@@ -8,6 +8,7 @@ import { getStructure } from "@/lib/data";
 import { formatDeadline, getQuestionSettings, getUploadProgress, type ProgressRow } from "@/lib/onboarding";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { resendInvite, saveDeadlines } from "./actions";
+import { Readiness } from "./readiness";
 
 export const metadata: Metadata = { title: "Staff progress" };
 
@@ -95,6 +96,8 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
         title="Staff progress"
         description="Who has signed in, chosen their subjects and uploaded their questions — and the deadlines they're working to."
       />
+
+      {me.isSuperAdmin ? <Readiness s={s} schoolDeadline={settings.defaultDeadline} /> : null}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Signed in" value={`${rows.filter((r) => r.signedIn).length} / ${rows.length}`} />

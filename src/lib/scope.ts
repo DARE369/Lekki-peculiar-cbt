@@ -41,3 +41,10 @@ export async function visibleClassIds(staff: StaffContext, s: Structure): Promis
   }
   return ids;
 }
+
+/** For pick-lists: adds the section to subjects whose name appears in more than one section ("English Language (College)"). */
+export function labelSubjects(subjects: Subject[], s: Structure): Subject[] {
+  const count = new Map<string, number>();
+  for (const x of subjects) count.set(x.name, (count.get(x.name) ?? 0) + 1);
+  return subjects.map((x) => ((count.get(x.name) ?? 0) > 1 ? { ...x, name: `${x.name} (${s.sectionById.get(x.section_id)?.name ?? ""})` } : x));
+}

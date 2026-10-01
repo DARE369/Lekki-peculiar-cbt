@@ -94,6 +94,7 @@ test("super admin adds a Head of Section and a teacher", async ({ browser }) => 
   await page.getByLabel("Role").selectOption("admin");
   await page.getByLabel("Elementary").check();
   await page.getByRole("checkbox", { name: "Grant make-up exams" }).check();
+  await page.getByLabel("How should they sign in the first time?").selectOption("password");
   await page.getByRole("button", { name: "Add staff member" }).click();
   const msg = page.getByText(/Temporary password: (\S+)/);
   await expect(msg).toBeVisible();
@@ -102,6 +103,7 @@ test("super admin adds a Head of Section and a teacher", async ({ browser }) => 
   await page.getByLabel("Full name").fill("Mr Dixon");
   await page.getByLabel("School email").fill("dixon@lps.test");
   await page.getByLabel("Role").selectOption("teacher");
+  await page.getByLabel("How should they sign in the first time?").selectOption("password");
   await page.getByRole("button", { name: "Add staff member" }).click();
   const msg2 = page.getByText(/Mr Dixon added. Temporary password: (\S+)/);
   await expect(msg2).toBeVisible();
@@ -110,6 +112,7 @@ test("super admin adds a Head of Section and a teacher", async ({ browser }) => 
   // A failed submission keeps what was typed (React would otherwise reset the form).
   await page.getByLabel("Full name").fill("Mr Dixon Again");
   await page.getByLabel("School email").fill("dixon@lps.test");
+  await page.getByLabel("How should they sign in the first time?").selectOption("password");
   await page.getByRole("button", { name: "Add staff member" }).click();
   await expect(page.getByText(/already belongs to a staff member/)).toBeVisible();
   await expect(page.getByLabel("Full name")).toHaveValue("Mr Dixon Again");
@@ -468,9 +471,13 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await owner.getByLabel("Elementary").fill(due);
   await owner.getByRole("button", { name: "Save deadlines" }).click();
   await expect(owner.getByText("Deadlines saved.")).toBeVisible();
+  // The super admin sees what's still missing before inviting staff.
+  await expect(owner.getByText(/^(Before you|Ready to) invite staff$/)).toBeVisible();
+  await expect(owner.getByText("Question deadline set")).toBeVisible();
   await owner.goto("/admin/staff");
   await owner.getByLabel("Full name").fill("Mrs Ada Bello");
   await owner.getByLabel("School email").fill("ada@lps.test");
+  await owner.getByLabel("How should they sign in the first time?").selectOption("password");
   await owner.getByRole("button", { name: "Add staff member" }).click();
   const msg = owner.getByText(/Mrs Ada Bello added. Temporary password: (\S+)/);
   await expect(msg).toBeVisible();
@@ -533,6 +540,9 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("questions uploaded")).toContainText("3");
   await expect(ada.getByText(/\/ 40|of 40/)).toHaveCount(0);
   await shot(ada, "19-dashboard-checklist");
+  // While waiting for approval, New test explains why and points to uploading.
+  await ada.goto("/teach/assessments/new");
+  await expect(ada.getByText("Your subjects are waiting for approval")).toBeVisible();
 
   // Staff progress shows her phone and where she is.
   await owner.goto("/admin/progress");
@@ -644,4 +654,32 @@ test("links from Supabase emails (invite, magic link, reset) sign the person in"
   await page.context().clearCookies();
   await page.goto(link);
   await expect(page.getByText("This link has expired or was already used.")).toBeVisible();
+});
+
+test("forgot password sends a branded email whose link opens the new-password form", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await page.getByLabel("School email").fill(OWNER.email);
+  const sentAfter = Date.now();
+  await page.getByRole("button", { name: "Email me a reset link" }).click();
+  await expect(page.getByText(/a reset link is on its way/)).toBeVisible();
+
+  const mailDir = "/var/tmp/sblogs/mail";
+  let mail = "";
+  await expect(async () => {
+    const f = readdirSync(mailDir)
+      .filter((x) => Number(x.split("-")[0]) >= sentAfter - 1000)
+      .map((x) => readFileSync(`${mailDir}/${x}`, "utf8"))
+      .find((m) => new RegExp(`^To: .*${OWNER.email}`, "mi").test(m));
+    expect(f).toBeTruthy();
+    mail = f!.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }).toPass({ timeout: 10_000 });
+  expect(mail).toContain("Choose your password");
+  expect(mail).toContain("Warm regards,");
+
+  const link = mail.match(/href="([^"]+)"[^>]*>Set my password/)![1].replace(/&amp;/g, "&");
+  await page.goto(link);
+  await expect(page).toHaveURL(/\/account\?reset=1$/);
+  await expect(page.getByText("Choose a new password")).toBeVisible();
+  await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
 });

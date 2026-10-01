@@ -11,19 +11,18 @@ export const metadata: Metadata = { title: "My account" };
 
 export default async function AccountPage(props: PageProps<"/account">) {
   const staff = await requireStaff();
-  const { welcome } = await props.searchParams;
+  const { reset } = await props.searchParams;
   const s = await getStructure();
   return (
-    <div className="max-w-2xl space-y-6">
-      <PageHeader
-        icon={UserRound} title="My account" description={staff.email} />
-      {welcome ? (
-        <Alert tone="success" title={`Welcome, ${staff.fullName}!`}>
-          Your account is ready. Set a password below so you can sign in next time — or skip it and use Continue with Google on the
-          sign-in page if the school has switched that on. Then open the menu to get started.
+    <div className="flex max-w-2xl flex-col gap-6">
+      <PageHeader icon={UserRound} title="My account" description={staff.email} />
+      {reset ? (
+        <Alert tone="info" title="Choose a new password">
+          You are signed in from the reset link. Type a new password in the box below and press Update password. You will use it the next
+          time you sign in.
         </Alert>
       ) : null}
-      <Card>
+      <Card className={reset ? "order-last" : undefined}>
         <CardHeader title="Access" />
         <div className="space-y-3 p-5 text-sm">
           <p>
@@ -43,7 +42,7 @@ export default async function AccountPage(props: PageProps<"/account">) {
           ) : null}
         </div>
       </Card>
-      <Card>
+      <Card className={reset ? "order-last" : undefined}>
         <CardHeader title="Phone number" description="So the school can reach you about questions and exams." />
         <ActionForm action={updatePhone} className="flex flex-wrap items-end gap-3 p-5">
           <Field label="Phone" className="min-w-56 flex-1">
@@ -52,8 +51,8 @@ export default async function AccountPage(props: PageProps<"/account">) {
           <SubmitButton variant="secondary">Save</SubmitButton>
         </ActionForm>
       </Card>
-      <Card>
-        <CardHeader title="Change password" />
+      <Card id="password">
+        <CardHeader title={reset ? "New password" : "Change password"} />
         <ActionForm action={changePassword} className="space-y-4 p-5" resetOnSuccess>
           <input type="email" name="username" value={staff.email} autoComplete="username" readOnly hidden />
           <Field label="New password">

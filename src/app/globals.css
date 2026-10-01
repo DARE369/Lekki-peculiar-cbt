@@ -2,7 +2,7 @@
 @import "@fontsource-variable/plus-jakarta-sans";
 
 /* Dark mode follows the resolved theme on <html data-theme>, set before paint by the inline
-   script in app/layout.tsx from the user's choice (light / dark / system). */
+   script in app/layout.tsx from the user's choice (light / dark / system). Light unless they pick otherwise. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ==========================================================================
@@ -95,21 +95,6 @@
   --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.03), 0 24px 48px -20px rgb(0 0 0 / 0.7);
 }
 
-/* Without JavaScript, still honour the OS setting. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    color-scheme: dark;
-    --bg: #0a0f1e;
-    --surface: #111831;
-    --surface-2: #161f3d;
-    --border: #222d54;
-    --text: #e9edf8;
-    --muted: #a2acc6;
-    --brand: #8eaeff;
-    --brand-soft: #1a2552;
-    --brand-ink: #0a0f1e;
-  }
-}
 
 @theme inline {
   --color-bg: var(--bg);

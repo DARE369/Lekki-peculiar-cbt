@@ -3,7 +3,7 @@ import { Upload } from "lucide-react";
 import { Card, EmptyState, LinkButton, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
-import { teachableSubjects } from "@/lib/scope";
+import { labelSubjects, teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
 import { ImportWizard } from "./import-wizard";
 
@@ -37,7 +37,7 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
         </Card>
       ) : (
         <ImportWizard
-          subjects={subjects}
+          subjects={labelSubjects(subjects, s)}
           years={s.years}
           defaultSubject={subjectId}
           defaultYear={yearId}

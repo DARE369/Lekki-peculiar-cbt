@@ -38,13 +38,32 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
       .filter((y) => adminHere || y.classes.length > 0);
     return { subjectId: sub.id, label: `${sub.name} (${s.sectionById.get(sub.section_id)?.name})`, years };
   }).filter((o) => o.years.length > 0);
+  // Teachers whose choices are still waiting can't build a test yet, but they can upload questions.
+  const { count: waiting } = options.length
+    ? { count: 0 }
+    : await supabase
+        .from("teaching_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("teacher_id", staff.id)
+        .eq("session_id", s.currentSessionId ?? "")
+        .eq("status", "requested");
   return (
     <div className="max-w-2xl">
       <PageHeader
         icon={FilePlus2} title="New test or exam" back={{ href: "/teach/assessments", label: "Tests & exams" }} />
       {options.length === 0 ? (
         <Card>
-          <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>} />
+          {waiting ? (
+            <EmptyState
+              title="Your subjects are waiting for approval"
+              action={<LinkButton href="/teach/questions/import">Upload questions</LinkButton>}
+            >
+              You can make a test once your Head of Section approves your subjects and classes. We&apos;ll email you when that
+              happens. Until then, you can upload your questions.
+            </EmptyState>
+          ) : (
+            <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>} />
+          )}
         </Card>
       ) : (
         <Card className="p-5">

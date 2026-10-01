@@ -96,6 +96,10 @@ Bulk add (Staff & permissions → Bulk add staff) and single add can email each 
 4. **Authentication → URL Configuration → Site URL** must be the live address (e.g. `https://lekki-peculiar-cbt.vercel.app`); the email's fallback link uses it.
 5. **Authentication → Rate Limits → "Rate limit for sending emails"**: raise it (e.g. to 100 per hour) before inviting all staff at once. If the limit is hit, bulk add stops sending and lists who still needs an invite — upload the same file again later; people already added are skipped.
 6. Optional: **Authentication → Sign In / Providers → Email → Email OTP Expiration** controls how long the button works (up to 86400 seconds = 24 hours). After it expires, staff use **Forgot password?** or **Continue with Google**.
+7. **Reset password** and **Magic link** templates (same page): paste [`reset-password.html`](email-templates/reset-password.html) (subject `Set your password — Peculiar CBT`) and [`magic-link.html`](email-templates/magic-link.html) (subject `Your sign-in link — Peculiar CBT`). These are sent by **Forgot password?**, **Email me a sign-in link** and **Resend invitation** for someone already registered; without them staff get Supabase's plain three-line email.
+8. **Authentication → URL Configuration → Redirect URLs**: add `https://<your-site>/**` so links can return to `/auth/callback?next=…`.
+
+Before inviting, open **Staff progress** as super admin: the **Before you invite staff** card lists anything still missing (current term, classes, subjects, Heads of Section, deadlines, app email settings).
 
 ## Staff onboarding, deadlines and approval emails
 

@@ -105,9 +105,9 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
           </div>
           <AccessFields sections={s.sections} />
           <Field label="How should they sign in the first time?">
-            <Select name="method" defaultValue="password">
-              <option value="password">Show me a temporary password to give them</option>
+            <Select name="method" defaultValue="invite">
               <option value="invite">Email them an invitation link</option>
+              <option value="password">Show me a temporary password to give them</option>
             </Select>
           </Field>
           <SubmitButton>Add staff member</SubmitButton>

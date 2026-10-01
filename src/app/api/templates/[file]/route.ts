@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 
 const EXAMPLES = [
   ["What is the powerhouse of the cell?", "Nucleus", "Mitochondria", "Ribosome", "Golgi body", "", "B", "Cells", "Easy", "Mitochondria produce energy (ATP)."],
@@ -41,6 +42,28 @@ function csvCell(v: string) {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
+/** A minimal Word document holding the plain-text example, one paragraph per line (instructions are on the upload page). */
+async function wordTemplate() {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const paras = [...AIKEN.trimEnd().split("\n")]
+    .map((line) => `<w:p><w:r><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`)
+    .join("");
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paras}</w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: "uint8array" });
+}
+
 export async function GET(_: Request, ctx: RouteContext<"/api/templates/[file]">) {
   const { file } = await ctx.params;
   if (file === "questions.csv") {
@@ -52,6 +75,14 @@ export async function GET(_: Request, ctx: RouteContext<"/api/templates/[file]">
   if (file === "questions.txt") {
     return new Response(AIKEN, {
       headers: { "content-type": "text/plain; charset=utf-8", "content-disposition": 'attachment; filename="questions-template.txt"' },
+    });
+  }
+  if (file === "questions.docx") {
+    return new Response(Buffer.from(await wordTemplate()), {
+      headers: {
+        "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "content-disposition": 'attachment; filename="questions-template.docx"',
+      },
     });
   }
   if (file === "questions.json") {

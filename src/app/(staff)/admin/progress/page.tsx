@@ -11,13 +11,14 @@ import { resendInvite, saveDeadlines } from "./actions";
 
 export const metadata: Metadata = { title: "Staff progress" };
 
-type Stage = "invited" | "setup" | "no_subjects" | "uploading" | "done" | "ready";
+type Stage = "invited" | "setup" | "no_subjects" | "no_questions" | "uploading" | "done" | "ready";
 const STAGE: Record<Stage, [string, "neutral" | "warning" | "info" | "success" | "danger"]> = {
   invited: ["Not signed in yet", "danger"],
   setup: ["Setting up", "warning"],
   no_subjects: ["No subjects chosen", "warning"],
-  uploading: ["Uploading questions", "info"],
-  done: ["All questions in", "success"],
+  no_questions: ["No questions yet", "warning"],
+  uploading: ["Adding questions", "info"],
+  done: ["Tests sent for approval", "success"],
   ready: ["Set up", "success"],
 };
 const FILTERS: [string, string][] = [
@@ -73,9 +74,11 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
           ? p.role === "admin"
             ? "ready"
             : "no_subjects"
-          : mine.every((r) => r.done)
+          : mine.every((r) => r.testsSubmitted > 0)
             ? "done"
-            : "uploading";
+            : mine.some((r) => r.questions > 0)
+              ? "uploading"
+              : "no_questions";
     return { ...p, mine, signedIn, stage };
   });
   const filter = typeof sp.show === "string" ? sp.show : "all";
@@ -97,26 +100,21 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
         <Stat label="Signed in" value={`${rows.filter((r) => r.signedIn).length} / ${rows.length}`} />
         <Stat label="Finished setup" value={`${rows.filter((r) => r.onboarded_at).length} / ${rows.length}`} />
         <Stat label="Waiting for approval" value={progress.filter((r) => !r.approved).length} hint="subject & year groups" />
-        <Stat label="All questions in" value={`${teachers.filter((r) => r.stage === "done").length} / ${teachers.length}`} hint="teachers" />
+        <Stat label="Tests sent for approval" value={`${teachers.filter((r) => r.stage === "done").length} / ${teachers.length}`} hint="teachers with a test for every subject & year" />
       </div>
 
       <Card>
         <CardHeader
           icon={CalendarClock}
-          title="Question deadlines"
-          description={`The date teachers should finish uploading. A section date overrides the school date for that section.${me.isSuperAdmin ? "" : " You can set the date for your section."}`}
+          title="Deadlines"
+          description={`The date teachers should have their questions uploaded and tests sent for approval. A section date overrides the school date for that section.${me.isSuperAdmin ? "" : " You can set the date for your section."}`}
         />
         <ActionForm action={saveDeadlines} className="space-y-4 p-5">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {me.isSuperAdmin ? (
-              <>
-                <Field label="Whole school">
-                  <Input name="school_deadline" type="date" defaultValue={settings.defaultDeadline ?? ""} />
-                </Field>
-                <Field label="Questions per subject" hint="For each subject and year group a teacher teaches.">
-                  <Input name="questions_per_subject" type="number" min={1} max={500} defaultValue={settings.perSubject} required />
-                </Field>
-              </>
+              <Field label="Whole school">
+                <Input name="school_deadline" type="date" defaultValue={settings.defaultDeadline ?? ""} />
+              </Field>
             ) : null}
             {cbtSections.map((sec) => (
               <Field key={sec.id} label={sec.name} hint={me.isSuperAdmin ? "Leave empty to use the school date." : undefined}>
@@ -189,15 +187,20 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                             <li key={`${p.subjectId}:${p.yearId}`} className="text-sm">
                               <span className="font-medium">{s.subjectById.get(p.subjectId)?.name}</span>{" "}
                               <span className="text-muted">· {s.yearById.get(p.yearId)?.name}</span>{" "}
-                              <span className={cn("font-semibold", p.done ? "text-success" : "text-text")}>
-                                {p.questions}/{p.target}
+                              <span className="font-semibold">
+                                {p.questions} question{p.questions === 1 ? "" : "s"}
                               </span>
+                              {p.testsSubmitted ? (
+                                <span className="ml-1.5 text-xs font-semibold text-success">· {p.testsSubmitted} test{p.testsSubmitted === 1 ? "" : "s"} sent</span>
+                              ) : p.testsDraft ? (
+                                <span className="ml-1.5 text-xs text-muted">· test in progress</span>
+                              ) : null}
                               {!p.approved ? (
                                 <Badge tone="warning" className="ml-1.5">
                                   awaiting approval
                                 </Badge>
                               ) : null}
-                              {p.deadline && !p.done ? <span className="ml-1.5 text-xs text-muted">due {formatDeadline(p.deadline)}</span> : null}
+                              {p.deadline && !p.testsSubmitted ? <span className="ml-1.5 text-xs text-muted">due {formatDeadline(p.deadline)}</span> : null}
                             </li>
                           ))}
                         </ul>

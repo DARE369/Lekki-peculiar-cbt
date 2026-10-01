@@ -1,5 +1,5 @@
 export type StaffRole = "super_admin" | "admin" | "teacher";
-export type AssessmentType = "test" | "exam" | "mock" | "practice";
+export type AssessmentType = "test" | "exam" | "mock_test" | "mock" | "practice";
 export type AssessmentStatus = "draft" | "pending_approval" | "changes_requested" | "approved" | "archived";
 export type WindowState = "scheduled" | "awaiting_start" | "live" | "paused" | "closed";
 export type AttemptStatus = "in_progress" | "submitted" | "voided";
@@ -94,7 +94,8 @@ export const DEFAULT_SETTINGS: AssessmentSettings = {
 export const TYPE_DEFAULTS: Record<AssessmentType, { questions: number; minutes: number; label: string }> = {
   test: { questions: 20, minutes: 30, label: "Test" },
   exam: { questions: 40, minutes: 60, label: "Exam" },
-  mock: { questions: 40, minutes: 60, label: "Mock" },
+  mock_test: { questions: 20, minutes: 30, label: "Test mock" },
+  mock: { questions: 40, minutes: 60, label: "Exam mock" },
   practice: { questions: 20, minutes: 30, label: "Practice" },
 };
 

@@ -5,14 +5,15 @@ import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select }
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
-import { TYPE_DEFAULTS } from "@/lib/types";
 import { createAssessment } from "../../actions";
 import { TestTarget, type TargetOption } from "./test-target";
+import { TypeFields } from "./type-fields";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "New test or exam" };
 
-export default async function NewAssessment() {
+export default async function NewAssessment(props: PageProps<"/teach/assessments/new">) {
+  const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
   const subjects = await teachableSubjects(staff, s);
@@ -48,36 +49,15 @@ export default async function NewAssessment() {
       ) : (
         <Card className="p-5">
           <ActionForm action={createAssessment} className="space-y-5">
-            <Field label="Type">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {(Object.keys(TYPE_DEFAULTS) as (keyof typeof TYPE_DEFAULTS)[]).map((t, i) => (
-                  <label
-                    key={t}
-                    className="flex cursor-pointer flex-col rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft"
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <input type="radio" name="type" value={t} defaultChecked={i === 0} className="accent-[var(--brand)]" />
-                      {TYPE_DEFAULTS[t].label}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {TYPE_DEFAULTS[t].questions} questions · {TYPE_DEFAULTS[t].minutes} min
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </Field>
-            <TestTarget options={options} />
+            <TypeFields />
+            <TestTarget
+              options={options}
+              defaultSubject={typeof sp.subject === "string" ? sp.subject : undefined}
+              defaultYear={typeof sp.year === "string" ? sp.year : undefined}
+            />
             <Field label="Title" hint="Leave blank to use e.g. “Biology Test”.">
               <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Number of questions" hint="Leave blank for the default (20 for tests, 40 for exams).">
-                <Input name="question_count" type="number" min={1} max={200} />
-              </Field>
-              <Field label="Time allowed (minutes)">
-                <Input name="duration_minutes" type="number" min={1} max={600} />
-              </Field>
-            </div>
             <Field label="Term">
               <Select name="term_id" defaultValue={s.currentTerm?.id}>
                 {s.terms.map((t) => (

@@ -184,18 +184,26 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
       <>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">How to upload your questions</h1>
         <p className="mt-2 text-base text-muted">It takes three simple steps. You can come back to this any time from your dashboard.</p>
-        {deadline ? <DeadlineBox deadline={deadline} perSubject={settings.perSubject} /> : null}
+        {deadline ? <DeadlineBox deadline={deadline} /> : null}
         <ol className="mt-6 space-y-4">
-          <HowStep n={1} icon={<Download className="size-5" />} title="Download the Excel template">
-            <a href="/api/templates/questions.xlsx" className="font-semibold text-brand hover:underline">
-              Download the question template (Excel)
+          <HowStep n={1} icon={<FileSpreadsheet className="size-5" />} title="Write your questions the way you like">
+            In Word, Excel, or just copy and paste — or type them one at a time. Templates for each are on the upload page (
+            <a href="/api/templates/questions.docx" className="font-semibold text-brand hover:underline">
+              Word
             </a>
+            ,{" "}
+            <a href="/api/templates/questions.xlsx" className="font-semibold text-brand hover:underline">
+              Excel
+            </a>
+            ).
           </HowStep>
-          <HowStep n={2} icon={<FileSpreadsheet className="size-5" />} title="Type your questions">
-            One question per row: the question, options A to D, and the letter of the correct answer.
+          <HowStep n={2} icon={<Upload className="size-5" />} title="Upload and check them">
+            Go to <strong>Question bank → Upload</strong>, pick the subject, year group and format. You can edit or remove any question before it&apos;s
+            saved, and edit it again later.
           </HowStep>
-          <HowStep n={3} icon={<Upload className="size-5" />} title="Upload the file">
-            Go to <strong>Question bank → Upload</strong>, choose the subject and year group, then pick your file. We check it before saving.
+          <HowStep n={3} icon={<Download className="size-5" />} title="Build your test or exam">
+            Under <strong>Tests &amp; exams</strong>, choose Test, Exam, Test mock or Exam mock, set the time and number of questions, then submit it for
+            approval.
           </HowStep>
         </ol>
         <p className="mt-6 rounded-xl bg-surface-2 px-4 py-3 text-sm">
@@ -224,7 +232,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
       <>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Your section{names.length > 1 ? "s" : ""}: {names.join(" & ") || "—"}</h1>
         <p className="mt-2 text-base text-muted">As Head of Section, you keep things moving for your teachers. Here&apos;s what to do:</p>
-        {deadline ? <DeadlineBox deadline={deadline} perSubject={settings.perSubject} /> : null}
+        {deadline ? <DeadlineBox deadline={deadline} /> : null}
         <ol className="mt-6 space-y-4">
           <HowStep n={1} title="Approve your teachers' subjects">
             Open <strong>Teaching assignments</strong>, tick the requests and press <strong>Approve ticked</strong>. Each teacher gets an email.
@@ -256,16 +264,14 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
   }
 }
 
-function DeadlineBox({ deadline, perSubject }: { deadline: string; perSubject: number }) {
+function DeadlineBox({ deadline }: { deadline: string }) {
   const days = daysUntil(deadline);
   return (
     <div className="mt-5 flex gap-3 rounded-2xl border-l-4 border-accent bg-accent-soft px-4 py-3">
       <CalendarClock className="mt-0.5 size-5 shrink-0 text-[color:var(--warning)]" aria-hidden />
       <p className="text-sm leading-relaxed">
-        Upload by <strong>{formatDeadline(deadline)}</strong>
+        Upload your questions and build your tests by <strong>{formatDeadline(deadline)}</strong>
         {days >= 0 ? ` (${days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} left`})` : " (this date has passed)"}.
-        <br />
-        Aim for <strong>{perSubject} questions</strong> for each subject and year group you teach.
       </p>
     </div>
   );

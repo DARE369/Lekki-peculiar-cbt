@@ -21,7 +21,8 @@ export const WINDOW_LABEL: Record<WindowState, [string, Tone]> = {
 export const TYPE_LABEL: Record<AssessmentType, string> = {
   test: "Test",
   exam: "Exam",
-  mock: "Mock",
+  mock_test: "Test mock",
+  mock: "Exam mock",
   practice: "Practice",
 };
 

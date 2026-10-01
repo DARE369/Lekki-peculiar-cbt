@@ -209,11 +209,16 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                       </div>
                     </div>
                     {editable ? (
-                      <form action={removeQuestionFromAssessment}>
-                        <input type="hidden" name="assessment_id" value={a.id} />
-                        <input type="hidden" name="question_id" value={q.id} />
-                        <button className="text-xs text-muted hover:text-danger">Remove</button>
-                      </form>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <Link href={`/teach/questions/${q.id}?assessment=${a.id}`} className="text-xs font-semibold text-brand hover:underline">
+                          Edit
+                        </Link>
+                        <form action={removeQuestionFromAssessment}>
+                          <input type="hidden" name="assessment_id" value={a.id} />
+                          <input type="hidden" name="question_id" value={q.id} />
+                          <button className="text-xs text-muted hover:text-danger">Remove</button>
+                        </form>
+                      </div>
                     ) : null}
                   </li>
                 ))}
@@ -284,6 +289,19 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
               <fieldset disabled={!editable} className="space-y-4">
                 <Field label="Title">
                   <Input name="title" defaultValue={a.title} required />
+                </Field>
+                <Field label="Type">
+                  <Select name="type" defaultValue={a.type}>
+                    <optgroup label="Live">
+                      <option value="test">Test</option>
+                      <option value="exam">Exam</option>
+                    </optgroup>
+                    <optgroup label="Mock">
+                      <option value="mock_test">Test mock</option>
+                      <option value="mock">Exam mock</option>
+                    </optgroup>
+                    {a.type === "practice" ? <option value="practice">Practice</option> : null}
+                  </Select>
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Questions per student">

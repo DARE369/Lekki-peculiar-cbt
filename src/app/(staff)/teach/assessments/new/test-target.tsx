@@ -10,10 +10,14 @@ export type TargetOption = {
 };
 
 /** Subject → year group → which of the teacher's classes (arms) the test is for. */
-export function TestTarget({ options }: { options: TargetOption[] }) {
-  const [subjectId, setSubjectId] = useState(options.length === 1 ? options[0].subjectId : "");
+export function TestTarget({ options, defaultSubject, defaultYear }: { options: TargetOption[]; defaultSubject?: string; defaultYear?: string }) {
+  const [subjectId, setSubjectId] = useState(
+    options.some((o) => o.subjectId === defaultSubject) ? defaultSubject! : options.length === 1 ? options[0].subjectId : "",
+  );
   const subject = options.find((o) => o.subjectId === subjectId);
-  const [yearId, setYearId] = useState(subject?.years.length === 1 ? subject.years[0].yearId : "");
+  const [yearId, setYearId] = useState(
+    subject?.years.some((y) => y.yearId === defaultYear) ? defaultYear! : subject?.years.length === 1 ? subject.years[0].yearId : "",
+  );
   const year = subject?.years.find((y) => y.yearId === yearId);
 
   return (

@@ -41,9 +41,9 @@ export async function notifyAssignmentDecisions(assignmentIds: string[]) {
       let body = `<p style="margin:0 0 14px">Dear ${esc(who.full_name)},</p>`;
       if (approved.length) {
         body += `<p style="margin:0">Your Head of Section has <strong>approved</strong> these subjects and classes for you:</p>${lines(approved)}`;
-        body += `<p style="margin:16px 0 0">Please upload <strong>${settings.perSubject} questions</strong> for each subject and year group${
-          deadlines[0] ? ` by <strong>${esc(formatDeadline(deadlines[0]))}</strong>` : ""
-        }. You can also build your tests now.</p>`;
+        body += `<p style="margin:16px 0 0">You can now upload your questions and build your tests${
+          deadlines[0] ? `. Please have them ready by <strong>${esc(formatDeadline(deadlines[0]))}</strong>` : ""
+        }.</p>`;
       }
       if (declined.length) {
         body += `<p style="margin:${approved.length ? "18px" : "0"} 0 0">These were <strong>not approved</strong>:</p>${lines(declined)}<p style="margin:10px 0 0">If you think this is a mistake, please speak to your Head of Section.</p>`;

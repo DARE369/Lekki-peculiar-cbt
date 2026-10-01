@@ -101,7 +101,7 @@ Bulk add (Staff & permissions → Bulk add staff) and single add can email each 
 
 - **First sign-in setup.** Every new teacher and Head of Section is guided through a few screens on first sign-in: confirm name, phone number, choose a password (skipped for Google sign-in), then teachers pick their subjects and classes and see how to upload questions. Super admins skip it.
 - **Upload while waiting.** Teachers can add questions as soon as they've chosen a subject; building tests still needs the Head of Section's approval.
-- **Deadlines.** Administration → **Staff progress**: the super admin sets the whole-school deadline and how many questions are expected per subject and year group; a section date (Elementary / College) overrides it. Heads of Section can set their own section's date. Teachers see the deadline and their progress on the dashboard.
+- **Deadlines.** Administration → **Staff progress**: the super admin sets the whole-school deadline (there is no fixed number of questions — teachers decide); a section date (Elementary / College) overrides it. Heads of Section can set their own section's date. Teachers see the deadline and their progress on the dashboard.
 - **Staff progress** also lists who hasn't signed in (with **Resend invitation**), who is still setting up, and each teacher's questions per subject.
 - **Approval emails.** When subjects/classes are approved or declined, and when a test is approved or sent back, the teacher gets an email. These come from the app, so add these on **Vercel → Settings → Environment Variables** (same Google mailbox and app password as Supabase SMTP), then redeploy:
 
@@ -114,7 +114,7 @@ Bulk add (Staff & permissions → Bulk add staff) and single add can email each 
   | `SMTP_FROM` | `Lekki Peculiar School <peace.denise@peculiarschools.com>` (optional) |
 
   Without them the app works normally and simply doesn't send these emails.
-- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` and then `supabase/migrations/20261003000100_assessment_classes.sql` in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
+- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` then `supabase/migrations/20261003000100_assessment_classes.sql` and `supabase/migrations/20261004000100_mock_test.sql` in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
 
 ## Maintenance
 

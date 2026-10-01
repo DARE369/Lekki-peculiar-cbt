@@ -3,13 +3,13 @@ import { cache } from "react";
 import type { Structure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 
-export type QuestionSettings = { defaultDeadline: string | null; perSubject: number };
+export type QuestionSettings = { defaultDeadline: string | null };
 
-/** The school's default question deadline and how many questions are expected per subject and year. */
+/** The school's default deadline for uploading questions and building tests. */
 export const getQuestionSettings = cache(async (): Promise<QuestionSettings> => {
   const supabase = await createClient();
-  const { data } = await supabase.from("schools").select("question_deadline, questions_per_subject").maybeSingle();
-  return { defaultDeadline: data?.question_deadline ?? null, perSubject: data?.questions_per_subject ?? 40 };
+  const { data } = await supabase.from("schools").select("question_deadline").maybeSingle();
+  return { defaultDeadline: data?.question_deadline ?? null };
 });
 
 /** A section's deadline if set (e.g. College), otherwise the school's default. ISO date (YYYY-MM-DD) or null. */
@@ -24,23 +24,36 @@ export type ProgressRow = {
   yearId: string;
   approved: boolean;
   classIds: string[];
+  /** Questions this teacher has in the bank for this subject and year group. */
   questions: number;
-  target: number;
+  /** Tests/exams they've started (drafts) and sent for approval or had approved. */
+  testsDraft: number;
+  testsSubmitted: number;
   deadline: string | null;
-  done: boolean;
 };
 
-/** Upload progress per subject and year group, for one teacher or (admins) everyone they oversee. */
+/** Progress per subject and year group, for one teacher or (admins) everyone they oversee. No fixed target. */
 export async function getUploadProgress(s: Structure, teacherId: string | null): Promise<ProgressRow[]> {
   const supabase = await createClient();
-  const [settings, { data }] = await Promise.all([
+  let tests = supabase.from("assessments").select("created_by, subject_id, year_id, status").eq("term_id", s.currentTerm?.id ?? "");
+  if (teacherId) tests = tests.eq("created_by", teacherId);
+  const [settings, { data }, { data: testRows }] = await Promise.all([
     getQuestionSettings(),
     supabase.rpc("upload_progress", teacherId ? { p_teacher: teacherId } : {}),
+    tests,
   ]);
+  const testCount = new Map<string, { draft: number; submitted: number }>();
+  for (const t of (testRows ?? []) as { created_by: string; subject_id: string; year_id: string; status: string }[]) {
+    const k = `${t.created_by}:${t.subject_id}:${t.year_id}`;
+    const c = testCount.get(k) ?? { draft: 0, submitted: 0 };
+    if (t.status === "pending_approval" || t.status === "approved") c.submitted += 1;
+    else c.draft += 1;
+    testCount.set(k, c);
+  }
   type Raw = { teacher_id: string; subject_id: string; year_id: string; approved: boolean; class_ids: string[]; questions: number };
   return ((data ?? []) as Raw[])
     .map((r) => {
-      const sectionId = s.subjectById.get(r.subject_id)?.section_id;
+      const c = testCount.get(`${r.teacher_id}:${r.subject_id}:${r.year_id}`);
       return {
         teacherId: r.teacher_id,
         subjectId: r.subject_id,
@@ -48,9 +61,9 @@ export async function getUploadProgress(s: Structure, teacherId: string | null):
         approved: r.approved,
         classIds: r.class_ids,
         questions: r.questions,
-        target: settings.perSubject,
-        deadline: deadlineForSection(sectionId, s, settings),
-        done: r.questions >= settings.perSubject,
+        testsDraft: c?.draft ?? 0,
+        testsSubmitted: c?.submitted ?? 0,
+        deadline: deadlineForSection(s.subjectById.get(r.subject_id)?.section_id, s, settings),
       };
     })
     .sort(

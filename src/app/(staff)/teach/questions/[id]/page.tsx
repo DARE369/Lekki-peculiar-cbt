@@ -12,6 +12,8 @@ export const metadata: Metadata = { title: "Edit question" };
 
 export default async function EditQuestion(props: PageProps<"/teach/questions/[id]">) {
   const { id } = await props.params;
+  const sp = await props.searchParams;
+  const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
   const staff = await requireStaff();
   const s = await getStructure();
   const supabase = await createClient();
@@ -23,7 +25,7 @@ export default async function EditQuestion(props: PageProps<"/teach/questions/[i
   return (
     <div className="max-w-3xl space-y-4">
       <PageHeader
-        icon={FileQuestion} title="Edit question" back={{ href: `/teach/questions?subject=${q.subject_id}`, label: "Question bank" }} />
+        icon={FileQuestion} title="Edit question" back={assessmentId ? { href: `/teach/assessments/${assessmentId}`, label: "Back to test" } : { href: `/teach/questions?subject=${q.subject_id}`, label: "Question bank" }} />
       <Alert tone="info">
         Tests that are already approved keep their own frozen copy, so editing here won&apos;t change a test students are sitting.
         To fix a wrong answer after an exam, use <strong>Fix answer key</strong> in that test&apos;s question analysis.
@@ -34,6 +36,7 @@ export default async function EditQuestion(props: PageProps<"/teach/questions/[i
           subjects={allSubjects}
           years={s.years.filter((y) => y.section_id === s.subjectById.get(q.subject_id)?.section_id)}
           values={q}
+          assessmentId={assessmentId}
         />
       </Card>
     </div>

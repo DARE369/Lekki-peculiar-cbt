@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { fail, int, ok, str, type ActionResult } from "@/lib/actions";
+import { fail, ok, str, type ActionResult } from "@/lib/actions";
 import { inviteData } from "@/lib/invite";
 import { siteOrigin } from "@/lib/site";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
@@ -11,7 +11,7 @@ import type { StaffRole } from "@/lib/types";
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Question deadlines. Super admins set the school-wide deadline, the questions-per-subject target and every section's
+ * Question deadlines. Super admins set the school-wide deadline and every section's
  * deadline; Heads of Section set the deadline for their own sections.
  */
 export async function saveDeadlines(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -22,12 +22,7 @@ export async function saveDeadlines(_: ActionResult, fd: FormData): Promise<Acti
     return v && DATE.test(v) ? v : null;
   };
   if (me.isSuperAdmin) {
-    const perSubject = int(fd, "questions_per_subject", 40);
-    if (perSubject < 1 || perSubject > 500) return fail("Questions per subject must be between 1 and 500.");
-    const { error } = await admin
-      .from("schools")
-      .update({ question_deadline: date("school_deadline"), questions_per_subject: perSubject })
-      .eq("id", me.schoolId);
+    const { error } = await admin.from("schools").update({ question_deadline: date("school_deadline") }).eq("id", me.schoolId);
     if (error) return fail(error);
   }
   const { data: sections } = await admin.from("sections").select("id").eq("school_id", me.schoolId).eq("cbt_enabled", true);

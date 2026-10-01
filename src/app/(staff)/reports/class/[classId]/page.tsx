@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Class broadsheet" };
 
-const TYPES = { all: "Tests, exams & mocks", test: "Tests only", exam: "Exams only", mock: "Mocks only", practice: "Practice only" } as const;
+const TYPES = { all: "Tests, exams & mocks", test: "Tests only", exam: "Exams only", mock_test: "Test mocks only", mock: "Exam mocks only", practice: "Practice only" } as const;
 
 export default async function ClassBroadsheet(props: PageProps<"/reports/class/[classId]">) {
   const { classId } = await props.params;

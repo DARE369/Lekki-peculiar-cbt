@@ -151,7 +151,7 @@ export default async function Dashboard() {
       </section>
 
       {showChecklist ? (
-        <UploadChecklist rows={myProgress} s={s} perSubject={settings.perSubject} fallbackDeadline={settings.defaultDeadline} />
+        <UploadChecklist rows={myProgress} s={s} fallbackDeadline={settings.defaultDeadline} />
       ) : null}
 
       {/* Quick actions */}

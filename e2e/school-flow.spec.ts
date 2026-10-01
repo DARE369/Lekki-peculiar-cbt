@@ -31,6 +31,26 @@ async function signIn(browser: Browser, email: string, password: string) {
   return page;
 }
 
+/** A small Word document: question 1 with typed letters, question 2 using Word's automatic lettered list. */
+async function wordFile() {
+  const JSZip = (await import("jszip")).default;
+  const p = (t: string, list?: boolean) =>
+    `<w:p>${list ? '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' : ""}<w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
+  const body = [
+    p("1. What is 2 + 3?"), p("A. 4"), p("B. 5"), p("C. 6"), p("ANSWER: B"), p(""),
+    p("2. What is the capital of Nigeria?"), p("Kano", true), p("Abuja", true), p("Lagos", true), p("ANSWER: B"),
+  ].join("");
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>`);
+  zip.file("word/document.xml", `<?xml version="1.0"?><w:document ${W}><w:body>${body}</w:body></w:document>`);
+  zip.file(
+    "word/numbering.xml",
+    `<?xml version="1.0"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="upperLetter"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`,
+  );
+  return Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+}
+
 /** First sign-in setup, taking the shortest path (the full flow has its own test). */
 async function quickOnboarding(page: Page, password: string) {
   for (let i = 0; i < 5; i++) {
@@ -182,6 +202,7 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
 
   await page.getByRole("link", { name: "Upload into this test" }).click();
   const text = Array.from({ length: 6 }, (_, i) => `Question number ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: B\nTOPIC: Topic ${i % 2}`).join("\n\n");
+  await page.getByRole("button", { name: "Copy and paste" }).click();
   await page.getByPlaceholder(/What is 2 \+ 2/).fill(text);
   await page.getByRole("button", { name: "Check pasted questions" }).click();
   await expect(page.getByText("6 ready · 0 need fixing")).toBeVisible();
@@ -444,7 +465,6 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   const owner = await signIn(browser, OWNER.email, OWNER.password);
   await owner.goto("/admin/progress");
   const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
-  await owner.getByLabel("Questions per subject").fill("3");
   await owner.getByLabel("Elementary").fill(due);
   await owner.getByRole("button", { name: "Save deadlines" }).click();
   await expect(owner.getByText("Deadlines saved.")).toBeVisible();
@@ -492,32 +512,33 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await ada.getByRole("button", { name: "Continue" }).click();
 
   await expect(ada.getByRole("heading", { name: "How to upload your questions" })).toBeVisible();
-  await expect(ada.getByText("Aim for 3 questions")).toBeVisible();
+  await expect(ada.getByText("Upload your questions and build your tests by")).toBeVisible();
   await ada.getByRole("button", { name: "Go to my dashboard" }).click();
   await expect(ada).toHaveURL(/\/dashboard/);
 
   // Dashboard checklist: waiting for approval, but uploading is allowed.
-  const checklist = ada.locator("div", { has: ada.getByRole("heading", { name: "Your question upload" }) }).first();
+  const checklist = ada.locator("div", { has: ada.getByRole("heading", { name: "Your subjects and classes" }) }).first();
   await expect(ada.getByText("You haven't been assigned any classes yet")).toHaveCount(0);
   await expect(checklist.getByText("Deadline:")).toBeVisible();
   await expect(checklist.getByText("Waiting for approval — you can still upload").first()).toBeVisible();
-  await checklist.locator("li", { hasText: "Year 4" }).getByRole("link", { name: "Upload" }).click();
+  await checklist.locator("li", { hasText: "Year 4" }).getByRole("link", { name: "Upload questions" }).click();
   await expect(ada.getByLabel("Year group")).toHaveValue(/.+/);
   const text = Array.from({ length: 3 }, (_, i) => `Ada question ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: A`).join("\n\n");
+  await ada.getByRole("button", { name: "Copy and paste" }).click();
   await ada.getByPlaceholder(/What is 2 \+ 2/).fill(text);
   await ada.getByRole("button", { name: "Check pasted questions" }).click();
   await ada.getByRole("button", { name: "Import 3 questions" }).click();
   await expect(ada.getByText("Added 3 questions.")).toBeVisible();
   await ada.goto("/dashboard");
-  await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("Done")).toBeVisible();
-  await expect(ada.getByText("1 of 3 done")).toBeVisible();
+  await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("questions uploaded")).toContainText("3");
+  await expect(ada.getByText(/\/ 40|of 40/)).toHaveCount(0);
   await shot(ada, "19-dashboard-checklist");
 
   // Staff progress shows her phone and where she is.
   await owner.goto("/admin/progress");
   const row = owner.getByRole("row", { name: /Mrs Ada Bello/ });
   await expect(row.getByText("08035551234")).toBeVisible();
-  await expect(row.getByText("Uploading questions")).toBeVisible();
+  await expect(row.getByText("Adding questions")).toBeVisible();
   await expect(row.getByText("awaiting approval").first()).toBeVisible();
 
   // Head of Section approves; Ada gets one email listing both classes.
@@ -552,8 +573,35 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await expect(ada.locator(`select[name="year_id"]`).locator("option:not([disabled])")).toHaveText(["Year 4", "Year 5"]);
   await ada.locator(`select[name="year_id"]`).selectOption({ label: "Year 4" });
   await expect(ada.getByLabel("Year 4 Gold")).toBeChecked();
+  await ada.getByRole("button", { name: /^Exam mock/ }).click();
+  await expect(ada.getByLabel("Number of questions")).toHaveValue("40");
+  await ada.getByRole("button", { name: "45 min" }).click();
+  await expect(ada.getByLabel("Time allowed (minutes)")).toHaveValue("45");
   await ada.getByRole("button", { name: "Create and add questions" }).click();
-  await expect(ada.getByText(/Mathematics · Year 4 Gold/)).toBeVisible();
+  await expect(ada.getByText("Mathematics · Year 4 Gold · Exam mock · 40 questions · 45 minutes")).toBeVisible();
+
+  // Upload a Word file: typed letters in question 1, Word's automatic A/B/C list in question 2.
+  await ada.getByRole("link", { name: "Upload into this test" }).click();
+  await expect(ada.getByRole("button", { name: "Word document", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await ada.getByLabel("Choose a Word document file").setInputFiles({
+    name: "maths.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: await wordFile(),
+  });
+  await expect(ada.getByText("2 ready · 0 need fixing")).toBeVisible();
+  await expect(ada.getByText("A. Kano")).toBeVisible(); // automatic lettering came through
+  await ada.getByRole("button", { name: "Edit question 1" }).click();
+  await ada.getByLabel("Correct answer").selectOption("C");
+  await ada.getByRole("button", { name: "Done" }).click();
+  await expect(ada.getByText("C. 6 ✓")).toBeVisible();
+  await ada.getByRole("button", { name: "Remove question 2" }).click();
+  await ada.getByRole("button", { name: "Import 1 question" }).click();
+  await expect(ada).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+$/);
+  await expect(ada.getByText("Questions (1)")).toBeVisible();
+  // ...and it can still be edited after saving.
+  await ada.getByRole("link", { name: "Edit", exact: true }).click();
+  await expect(ada.getByRole("heading", { name: "Edit question" })).toBeVisible();
+  await ada.getByRole("link", { name: "Back to test" }).click();
   await ctx.close();
 });
 

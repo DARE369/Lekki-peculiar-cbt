@@ -78,6 +78,11 @@ export async function saveQuestion(_: ActionResult, fd: FormData): Promise<Actio
   if (id) {
     const { error } = await supabase.from("questions").update(row).eq("id", id);
     if (error) return fail(error);
+    const backTo = str(fd, "assessment_id");
+    if (backTo) {
+      revalidatePath(`/teach/assessments/${backTo}`);
+      redirect(`/teach/assessments/${backTo}`);
+    }
   } else {
     const subjectId = str(fd, "subject_id");
     if (!subjectId) return fail("Choose a subject.");
@@ -245,11 +250,13 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
   if (duration < 1 || duration > 600) return fail("Duration must be between 1 and 600 minutes.");
   const title = str(fd, "title");
   if (!title) return fail("Give it a title.");
+  const rawType = str(fd, "type") as AssessmentType;
+  const type = rawType && rawType in TYPE_DEFAULTS ? rawType : null;
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("assessments")
-    .update({ title, settings, question_count: questionCount, duration_minutes: duration })
+    .update({ title, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}) })
     .eq("id", id)
     .select("id");
   if (error) return fail(error);

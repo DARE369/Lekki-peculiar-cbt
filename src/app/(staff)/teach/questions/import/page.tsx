@@ -15,11 +15,13 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
   const s = await getStructure();
   const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   let subjectId = typeof sp.subject === "string" ? sp.subject : undefined;
+  let yearId = typeof sp.year === "string" ? sp.year : undefined;
   const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
   if (assessmentId) {
     const supabase = await createClient();
-    const { data } = await supabase.from("assessments").select("subject_id").eq("id", assessmentId).maybeSingle();
+    const { data } = await supabase.from("assessments").select("subject_id, year_id").eq("id", assessmentId).maybeSingle();
     subjectId = data?.subject_id ?? subjectId;
+    yearId = data?.year_id ?? yearId;
   }
   return (
     <div>
@@ -38,7 +40,7 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
           subjects={subjects}
           years={s.years}
           defaultSubject={subjectId}
-          defaultYear={typeof sp.year === "string" ? sp.year : undefined}
+          defaultYear={yearId}
           assessmentId={assessmentId}
         />
       )}

@@ -52,6 +52,9 @@ PGRST_DB_URI="postgres://authenticator@localhost:$PGPORT/$DB?host=$PGHOST" PGRST
   DATABASE_URL="postgres://supabase_auth_admin@localhost:$PGPORT/$DB?host=$PGHOST&search_path=auth" \
   GOTRUE_JWT_SECRET="$JWT_SECRET" GOTRUE_JWT_EXP=3600 GOTRUE_JWT_AUD=authenticated GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated \
   GOTRUE_JWT_ADMIN_ROLES=service_role API_EXTERNAL_URL=http://127.0.0.1:54321/auth/v1 GOTRUE_SITE_URL=http://localhost:3000 \
+  GOTRUE_EXTERNAL_GOOGLE_ENABLED=true GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=local-test.apps.googleusercontent.com \
+  GOTRUE_EXTERNAL_GOOGLE_SECRET=local-test-secret GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://127.0.0.1:54321/auth/v1/callback \
+  GOTRUE_URI_ALLOW_LIST="http://localhost:3000/**" \
   GOTRUE_MAILER_AUTOCONFIRM=true GOTRUE_EXTERNAL_EMAIL_ENABLED=true GOTRUE_DISABLE_SIGNUP=false PORT=54332 GOTRUE_API_HOST=127.0.0.1 \
   nohup ./auth serve </dev/null >"$LOGS/gotrue.log" 2>&1 &)
 nohup node proxy.mjs </dev/null >"$LOGS/proxy.log" 2>&1 &

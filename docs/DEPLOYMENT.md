@@ -73,6 +73,19 @@ The app runs on **Vercel** with **Supabase** (Postgres, Auth, Storage). Budget a
 - [ ] Absent students → **Make-up exam** with a new time slot
 - [ ] Students who submit while offline see “saved on this computer” — **don't switch those PCs off** until the monitor shows them *Submitted*
 
+## Sign in with Google (optional)
+
+Staff whose school email is a Google Workspace account can use **Continue with Google** on the sign-in page. Only people already added under **Staff & permissions** get in — the Google email must match their staff email. Any other Google account is turned away and nothing is kept for it.
+
+1. **Google Cloud Console** (signed in as a Workspace admin) → create a project → **APIs & Services → OAuth consent screen**: user type **Internal** (only peculiarschools.com accounts can use it), app name "Peculiar CBT", support email.
+2. **APIs & Services → Credentials → Create credentials → OAuth client ID** → type **Web application**. Under **Authorised redirect URIs** add `https://<project-ref>.supabase.co/auth/v1/callback` (Supabase shows the exact URL on its Google provider page). Copy the **Client ID** and **Client secret**.
+3. **Supabase → Authentication → Sign In / Providers → Google**: switch on, paste the Client ID and secret, save.
+4. **Supabase → Authentication → Sign In / Providers**: switch **off** "Allow new users to sign up". Staff accounts are still created by the app; this just stops strangers from creating accounts.
+5. **Supabase → Authentication → URL Configuration**: Redirect URLs must include `https://<your-site>/auth/callback` (it is already needed for invites).
+6. Optional: on Vercel set `GOOGLE_HOSTED_DOMAIN=peculiarschools.com` so the Google account chooser prefers school accounts.
+
+The button appears on the sign-in page by itself within about five minutes of switching the provider on. Passwords and email links keep working alongside it.
+
 ## Maintenance
 
 - **New session**: *Sessions & terms → New session*, then set the current term. Old results stay organised under their term.

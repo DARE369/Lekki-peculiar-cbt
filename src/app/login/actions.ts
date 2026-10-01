@@ -46,6 +46,21 @@ export async function sendPasswordReset(_: ActionResult, fd: FormData): Promise<
   return ok("If that email belongs to a staff account, a reset link is on its way.");
 }
 
+/** Starts "Continue with Google". Only Google accounts that match an existing staff email get in (see /auth/callback). */
+export async function signInWithGoogle(fd: FormData) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${await origin()}/auth/callback?next=${encodeURIComponent(safeNext(str(fd, "next")))}`,
+      // Show the account chooser, preferring school accounts. The real check is the staff list.
+      queryParams: { prompt: "select_account", ...(process.env.GOOGLE_HOSTED_DOMAIN ? { hd: process.env.GOOGLE_HOSTED_DOMAIN } : {}) },
+    },
+  });
+  if (error || !data.url) redirect("/login?error=google");
+  redirect(data.url);
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();

@@ -316,3 +316,17 @@ test("teacher sees organised reports and can fix an answer key", async ({ browse
   await expect(page.getByText(/Correct: two/)).toBeVisible();
   await shot(page, "17-student");
 });
+
+test("staff can start Google sign-in; non-staff Google accounts are turned away", async ({ page }) => {
+  await page.goto("/login");
+  const toGoogle = page.waitForRequest((r) => r.url().startsWith("https://accounts.google.com/"));
+  await page.getByRole("button", { name: "Continue with Google" }).click();
+  const googleUrl = new URL((await toGoogle).url());
+  expect(googleUrl.searchParams.get("client_id")).toBe("local-test.apps.googleusercontent.com");
+  expect(googleUrl.searchParams.get("prompt")).toBe("select_account");
+
+  // What Supabase sends back when sign-ups are off and the Google account isn't a staff account.
+  await page.goto("/auth/callback?error=access_denied&error_description=Signups+not+allowed+for+this+instance");
+  await expect(page).toHaveURL(/\/login\?error=not-staff/);
+  await expect(page.getByText("That Google account isn't on the staff list.")).toBeVisible();
+});

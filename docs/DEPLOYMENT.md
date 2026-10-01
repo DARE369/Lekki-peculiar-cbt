@@ -86,6 +86,17 @@ Staff whose school email is a Google Workspace account can use **Continue with G
 
 The button appears on the sign-in page by itself within about five minutes of switching the provider on. Passwords and email links keep working alongside it.
 
+## Staff invitation email
+
+Bulk add (Staff & permissions → Bulk add staff) and single add can email each person an invitation. The email is Supabase's **Invite user** email, so its wording is set in Supabase:
+
+1. **Supabase → Authentication → Email Templates → Invite user.**
+2. Subject: `You're invited to Peculiar CBT — Lekki Peculiar School`
+3. Message body: paste the contents of [`docs/email-templates/invite.html`](email-templates/invite.html). It greets the person by name, says their role (and section for Heads of Section) and lists the next steps for that role. Edit the wording freely; keep the `{{ ... }}` parts.
+4. **Authentication → URL Configuration → Site URL** must be the live address (e.g. `https://lekki-peculiar-cbt.vercel.app`); the email's fallback link uses it.
+5. **Authentication → Rate Limits → "Rate limit for sending emails"**: raise it (e.g. to 100 per hour) before inviting all staff at once. If the limit is hit, bulk add stops sending and lists who still needs an invite — upload the same file again later; people already added are skipped.
+6. Optional: **Authentication → Sign In / Providers → Email → Email OTP Expiration** controls how long the button works (up to 86400 seconds = 24 hours). After it expires, staff use **Forgot password?** or **Continue with Google**.
+
 ## Maintenance
 
 - **New session**: *Sessions & terms → New session*, then set the current term. Old results stay organised under their term.

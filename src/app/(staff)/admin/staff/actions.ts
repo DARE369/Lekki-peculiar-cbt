@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin, type StaffContext } from "@/lib/auth";
 import { fail, ok, str, type ActionResult } from "@/lib/actions";
+import { brand } from "@/lib/brand";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import type { StaffImportRow } from "@/lib/import/staff";
 import { readSheetCells } from "@/lib/import/xlsx";
@@ -69,6 +70,51 @@ async function saveStaffRecord(
   return null;
 }
 
+async function siteOrigin() {
+  const h = await headers();
+  return `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+}
+
+/** Extra details the invitation email template can use: {{ .Data.first_name }}, {{ .Data.role }} etc. */
+function inviteData(fullName: string, role: StaffRole, sectionNames: string[]) {
+  const words = fullName.split(/\s+/).filter(Boolean);
+  const titles = /^(mr|mrs|ms|miss|dr|prof|pastor|rev)\.?$/i;
+  return {
+    full_name: fullName,
+    first_name: (titles.test(words[0] ?? "") ? words.slice(0, 2).join(" ") : words[0]) ?? fullName,
+    role,
+    role_label: role === "super_admin" ? "Super admin" : role === "admin" ? "Head of Section" : "Teacher",
+    sections: sectionNames.join(", "),
+    school: brand.schoolName,
+  };
+}
+
+/**
+ * Sends Supabase's invitation email (customise it under Authentication → Email Templates → Invite user; a ready-made
+ * template is in docs/email-templates/invite.html). Returns the new sign-in account, or why it failed.
+ */
+async function inviteLogin(
+  admin: Admin,
+  email: string,
+  data: ReturnType<typeof inviteData>,
+): Promise<{ userId: string; reused: boolean } | { error: string; rateLimited?: boolean }> {
+  const { data: res, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    data,
+    redirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent("/account?welcome=1")}`,
+  });
+  if (res?.user) return { userId: res.user.id, reused: false };
+  if (error && /already|registered|exists/i.test(error.message)) {
+    const userId = await findAuthUserId(admin, email);
+    return userId ? { userId, reused: true } : { error: "Could not find the existing sign-in account for that email." };
+  }
+  // The sign-in account may have been created before sending failed; remove it so a retry starts clean.
+  const orphan = await findAuthUserId(admin, email);
+  if (orphan) await admin.auth.admin.deleteUser(orphan);
+  const msg = error?.message ?? "Could not send the invitation.";
+  if (/rate|limit|too many/i.test(msg)) return { error: "Email limit reached", rateLimited: true };
+  return { error: /sending|smtp|email/i.test(msg) ? "The invitation email could not be sent (check SMTP settings)" : msg };
+}
+
 const SMTP_HELP =
   "The invitation email could not be sent, so nothing was saved. Check Supabase → Authentication → Emails → SMTP settings " +
   "(host, port, username, app password, and that the sender address matches the SMTP account), then try again — " +
@@ -97,20 +143,11 @@ export async function createStaff(_: ActionResult, fd: FormData): Promise<Action
   let reusedAccount = false;
 
   if (method === "invite") {
-    const h = await headers();
-    const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: `${origin}/auth/callback?next=/account` });
-    if (data?.user) {
-      userId = data.user.id;
-    } else if (error && /already|registered|exists/i.test(error.message)) {
-      userId = await findAuthUserId(admin, email);
-      reusedAccount = true;
-    } else {
-      // The sign-in account may still have been created before sending failed; remove it so a retry starts clean.
-      const orphan = await findAuthUserId(admin, email);
-      if (orphan) await admin.auth.admin.deleteUser(orphan);
-      return fail(/sending|smtp|email/i.test(error?.message ?? "") ? SMTP_HELP : (error?.message ?? "Could not send the invitation."));
-    }
+    const { data: secs } = access.sections.length ? await admin.from("sections").select("name").in("id", access.sections) : { data: [] };
+    const r = await inviteLogin(admin, email, inviteData(fullName, access.role, (secs ?? []).map((x) => x.name)));
+    if ("error" in r) return fail(r.rateLimited ? "Supabase's hourly email limit was reached. Try again later, or raise it under Authentication → Rate Limits." : SMTP_HELP);
+    userId = r.userId;
+    reusedAccount = r.reused;
   } else {
     password = tempPassword();
     const r = await createLoginWithPassword(admin, email, password);
@@ -160,23 +197,26 @@ export type BulkStaffResult = {
  */
 export async function bulkAddStaff(
   rows: Pick<StaffImportRow, "full_name" | "email" | "role" | "sections">[],
-  method: "password" | "google",
+  method: "invite" | "password" | "google",
 ): Promise<{ results: BulkStaffResult[] } | { error: string }> {
   const me = await requireSuperAdmin();
   if (!Array.isArray(rows) || rows.length === 0) return { error: "No staff to add." };
-  if (rows.length > 300) return { error: "Add at most 300 staff at a time." };
+  if (rows.length > 50) return { error: "Send at most 50 staff per request." };
   const admin = createAdminClient();
   const [{ data: sections }, { data: existing }] = await Promise.all([
     admin.from("sections").select("id, name, code").eq("school_id", me.schoolId),
     admin.from("staff").select("email"),
   ]);
   const sectionId = new Map<string, string>();
+  const sectionName = new Map<string, string>();
   for (const x of sections ?? []) {
+    sectionName.set(x.id, x.name);
     sectionId.set(x.name.toLowerCase(), x.id);
     sectionId.set(x.code.toLowerCase(), x.id);
   }
   const taken = new Set((existing ?? []).map((x) => x.email.toLowerCase()));
   const results: BulkStaffResult[] = [];
+  let emailLimitHit = false;
 
   for (const raw of rows) {
     const email = String(raw.email ?? "").trim().toLowerCase();
@@ -196,10 +236,22 @@ export async function bulkAddStaff(
       results.push({ ...base, status: "failed", note: `Unknown section "${raw.sections.join(", ")}"` });
       continue;
     }
-    const password = tempPassword() + (method === "google" ? tempPassword() : "");
-    const login = await createLoginWithPassword(admin, email, password);
+    if (emailLimitHit) {
+      results.push({ ...base, status: "failed", note: "Not sent — email limit reached. Upload the file again later; people already added are skipped." });
+      continue;
+    }
+    const password = method === "password" ? tempPassword() : tempPassword() + tempPassword();
+    const login =
+      method === "invite"
+        ? await inviteLogin(admin, email, inviteData(fullName, role, (ids as string[]).map((id) => sectionName.get(id) ?? "")))
+        : await createLoginWithPassword(admin, email, password);
     if ("error" in login) {
-      results.push({ ...base, status: "failed", note: login.error });
+      if ("rateLimited" in login && login.rateLimited) emailLimitHit = true;
+      results.push({
+        ...base,
+        status: "failed",
+        note: emailLimitHit ? "Not sent — email limit reached. Upload the file again later; people already added are skipped." : login.error,
+      });
       continue;
     }
     const saved = await saveStaffRecord(admin, me, {
@@ -218,7 +270,9 @@ export async function bulkAddStaff(
     results.push({
       ...base,
       status: "added",
-      note: role === "admin" ? "Head of Section" : "Teacher",
+      note:
+        (role === "admin" ? "Head of Section" : "Teacher") +
+        (method === "invite" ? (login.reused ? " · already had a sign-in account, no email sent — they can use Forgot password" : " · invitation emailed") : ""),
       password: method === "password" ? password : undefined,
     });
   }
@@ -228,7 +282,7 @@ export async function bulkAddStaff(
       actor_id: me.id,
       action: "staff.bulk_created",
       entity: "staff",
-      detail: { count: added.length, emails: added.map((r) => r.email) },
+      detail: { count: added.length, method, emails: added.map((r) => r.email) },
     });
   }
   revalidatePath("/admin/staff");

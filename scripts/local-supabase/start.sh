@@ -19,6 +19,7 @@ export PGHOST PGPORT
 pkill -x postgrest 2>/dev/null || true
 pkill -x auth 2>/dev/null || true
 pkill -f "^node proxy.mjs" 2>/dev/null || true
+pkill -f "^node mail-sink.mjs" 2>/dev/null || true
 sleep 1
 
 mkdir -p "$TOOLS"
@@ -45,6 +46,9 @@ fi
 
 LOGS=${LOGS:-/var/tmp/sblogs}
 mkdir -p "$LOGS"
+# Local email: a sink that saves messages to $LOGS/mail and serves the real invite template.
+rm -rf "$LOGS/mail"
+MAIL_DIR="$LOGS/mail" nohup node mail-sink.mjs </dev/null >"$LOGS/mail-sink.log" 2>&1 &
 PGRST_DB_URI="postgres://authenticator@localhost:$PGPORT/$DB?host=$PGHOST" PGRST_DB_SCHEMAS=public PGRST_DB_ANON_ROLE=anon \
   PGRST_JWT_SECRET="$JWT_SECRET" PGRST_SERVER_PORT=54331 PGRST_DB_POOL=20 \
   nohup "$TOOLS/postgrest" </dev/null >"$LOGS/postgrest.log" 2>&1 &
@@ -55,6 +59,9 @@ PGRST_DB_URI="postgres://authenticator@localhost:$PGPORT/$DB?host=$PGHOST" PGRST
   GOTRUE_EXTERNAL_GOOGLE_ENABLED=true GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=local-test.apps.googleusercontent.com \
   GOTRUE_EXTERNAL_GOOGLE_SECRET=local-test-secret GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://127.0.0.1:54321/auth/v1/callback \
   GOTRUE_URI_ALLOW_LIST="http://localhost:3000/**" \
+  GOTRUE_SMTP_HOST=127.0.0.1 GOTRUE_SMTP_PORT=2525 GOTRUE_SMTP_USER=sink GOTRUE_SMTP_PASS=sink GOTRUE_SMTP_ADMIN_EMAIL=noreply@lps.test \
+  GOTRUE_MAILER_TEMPLATES_INVITE=http://127.0.0.1:8899/invite.html GOTRUE_MAILER_SUBJECTS_INVITE="You're invited to Peculiar CBT" \
+  GOTRUE_MAILER_URLPATHS_INVITE=/auth/v1/verify GOTRUE_RATE_LIMIT_EMAIL_SENT=1000 \
   GOTRUE_MAILER_AUTOCONFIRM=true GOTRUE_EXTERNAL_EMAIL_ENABLED=true GOTRUE_DISABLE_SIGNUP=false PORT=54332 GOTRUE_API_HOST=127.0.0.1 \
   nohup ./auth serve </dev/null >"$LOGS/gotrue.log" 2>&1 &)
 nohup node proxy.mjs </dev/null >"$LOGS/proxy.log" 2>&1 &

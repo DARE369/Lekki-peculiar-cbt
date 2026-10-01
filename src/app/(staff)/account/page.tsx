@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { UserRound } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, CardHeader, Field, Input, PageHeader } from "@/components/ui";
+import { Alert, Badge, Card, CardHeader, Field, Input, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { PERMISSIONS } from "@/lib/types";
@@ -9,13 +9,20 @@ import { changePassword } from "./actions";
 
 export const metadata: Metadata = { title: "My account" };
 
-export default async function AccountPage() {
+export default async function AccountPage(props: PageProps<"/account">) {
   const staff = await requireStaff();
+  const { welcome } = await props.searchParams;
   const s = await getStructure();
   return (
     <div className="max-w-2xl space-y-6">
       <PageHeader
         icon={UserRound} title="My account" description={staff.email} />
+      {welcome ? (
+        <Alert tone="success" title={`Welcome, ${staff.fullName}!`}>
+          Your account is ready. Set a password below so you can sign in next time — or skip it and use Continue with Google on the
+          sign-in page if the school has switched that on. Then open the menu to get started.
+        </Alert>
+      ) : null}
       <Card>
         <CardHeader title="Access" />
         <div className="space-y-3 p-5 text-sm">

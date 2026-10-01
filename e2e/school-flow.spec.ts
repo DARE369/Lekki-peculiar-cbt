@@ -1,6 +1,6 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import ExcelJS from "exceljs";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
 // Walks the whole school workflow on a fresh database:
@@ -364,6 +364,52 @@ test("super admin bulk adds staff and deletes one; staff with exam work can't be
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: /^Delete Mr Dixon/ }).click();
   await expect(page.getByText(/can't be deleted/)).toBeVisible();
+});
+
+test("bulk add emails each person an invitation with steps for their role", async ({ browser }) => {
+  const page = await signIn(browser, OWNER.email, OWNER.password);
+  await page.goto("/admin/staff/import");
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Staff");
+  ws.addRow(["Full Name", "Email", "Role", "Section"]);
+  ws.addRow(["Mrs Ngozi Obi", "ngozi@lps.test", "Teacher", ""]);
+  ws.addRow(["Mr Femi Lawal", "femi@lps.test", "Head of Section", "College"]);
+  await page.getByLabel("Staff spreadsheet").setInputFiles({
+    name: "staff.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(await wb.xlsx.writeBuffer()),
+  });
+  await expect(page.getByLabel(/Email each person an invitation/)).toBeChecked();
+  await page.getByRole("button", { name: "Add and invite 2 staff" }).click();
+  await expect(page.getByText("Added 2 of 2.")).toBeVisible();
+  await expect(page.getByText(/Invitations are on their way/)).toBeVisible();
+
+  // Read what the auth server actually sent (decoding quoted-printable).
+  const mailDir = "/var/tmp/sblogs/mail";
+  const mailTo = (addr: string) => {
+    const raw = readdirSync(mailDir)
+      .map((f) => readFileSync(`${mailDir}/${f}`, "utf8"))
+      .find((m) => new RegExp(`^To: .*${addr}`, "mi").test(m));
+    if (!raw) throw new Error(`no email for ${addr}`);
+    return raw.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  };
+  const teacherMail = mailTo("ngozi@lps.test");
+  expect(teacherMail).toContain("Dear Mrs Ngozi,");
+  expect(teacherMail).toContain("a <strong>Teacher</strong>");
+  expect(teacherMail).toContain("<strong>My classes</strong>");
+  expect(teacherMail).not.toContain("Teaching assignments");
+  const hodMail = mailTo("femi@lps.test");
+  expect(hodMail).toContain("<strong>Head of Section</strong> for <strong>College</strong>");
+  expect(hodMail).toContain("<strong>Teaching assignments</strong>");
+
+  // Accepting the invitation signs her in and shows the welcome note.
+  const link = teacherMail.match(/href="([^"]+)"[^>]*>Accept invitation/)![1].replace(/&amp;/g, "&");
+  const ctx = await browser.newContext();
+  const ngozi = await ctx.newPage();
+  await ngozi.goto(link);
+  await expect(ngozi).toHaveURL(/\/account\?welcome=1$/);
+  await expect(ngozi.getByText("Welcome, Mrs Ngozi Obi!")).toBeVisible();
+  await ctx.close();
 });
 
 test("staff can start Google sign-in; non-staff Google accounts are turned away", async ({ page }) => {

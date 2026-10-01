@@ -16,7 +16,8 @@ function csvCell(v: string) {
 export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
   const [rows, setRows] = useState<StaffImportRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [method, setMethod] = useState<"google" | "password">("google");
+  const [method, setMethod] = useState<"invite" | "google" | "password">("invite");
+  const [progress, setProgress] = useState<string | null>(null);
   const [results, setResults] = useState<BulkStaffResult[] | null>(null);
   const [reading, startReading] = useTransition();
   const [pending, start] = useTransition();
@@ -79,7 +80,9 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
           Added {added} of {results.length}.{" "}
           {withPasswords
             ? "Download the list now — the temporary passwords are shown only once. Give each person theirs privately; they can change it under My account."
-            : "They can sign in with Continue with Google using their school email."}
+            : results.some((r) => r.note.includes("invitation emailed"))
+              ? "Invitations are on their way. Each one has an Accept invitation button and the steps for their role. Anyone who misses it can use Forgot password? on the sign-in page."
+              : "They can sign in with Continue with Google using their school email."}
         </Alert>
         <Card>
           <CardHeader
@@ -168,6 +171,16 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
             <fieldset className="space-y-2 text-sm">
               <legend className="mb-1 font-medium">How will they sign in?</legend>
               <label className="flex items-start gap-2">
+                <input type="radio" name="method" checked={method === "invite"} onChange={() => setMethod("invite")} className="mt-1 accent-[var(--brand)]" />
+                <span>
+                  <span className="font-medium">Email each person an invitation</span>
+                  <span className="block text-xs text-muted">
+                    Uses the school&apos;s invitation email with their role and what to do next. Supabase limits emails per hour — raise it under
+                    Authentication → Rate Limits before inviting everyone.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
                 <input type="radio" name="method" checked={method === "google"} onChange={() => setMethod("google")} className="mt-1 accent-[var(--brand)]" />
                 <span>
                   <span className="font-medium">Continue with Google</span>
@@ -186,16 +199,24 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
               disabled={pending || good.length === 0}
               onClick={() =>
                 start(async () => {
-                  const r = await bulkAddStaff(
-                    good.map(({ full_name, email, role, sections }) => ({ full_name, email, role, sections })),
-                    method,
-                  );
-                  if ("error" in r) setError(r.error);
-                  else setResults(r.results);
+                  // Small batches keep each request short and show progress.
+                  const all: BulkStaffResult[] = [];
+                  const list = good.map(({ full_name, email, role, sections }) => ({ full_name, email, role, sections }));
+                  for (let i = 0; i < list.length; i += 10) {
+                    setProgress(`${Math.min(i, list.length)} of ${list.length} done…`);
+                    const r = await bulkAddStaff(list.slice(i, i + 10), method);
+                    if ("error" in r) {
+                      setError(r.error);
+                      break;
+                    }
+                    all.push(...r.results);
+                  }
+                  setProgress(null);
+                  if (all.length) setResults(all);
                 })
               }
             >
-              {pending ? `Adding ${good.length} staff…` : `Add ${good.length} staff`}
+              {pending ? `Adding staff… ${progress ?? ""}` : method === "invite" ? `Add and invite ${good.length} staff` : `Add ${good.length} staff`}
             </Button>
           </div>
           <div className="max-h-[480px] overflow-y-auto">

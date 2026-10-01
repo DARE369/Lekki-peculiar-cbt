@@ -92,7 +92,7 @@ Bulk add (Staff & permissions → Bulk add staff) and single add can email each 
 
 1. **Supabase → Authentication → Email Templates → Invite user.**
 2. Subject: `The CBT Application is now live — your invitation from Lekki Peculiar School`
-3. Message body: paste the contents of [`docs/email-templates/invite.html`](email-templates/invite.html). It greets the person by name, says their role (and section for Heads of Section) and lists the next steps for that role. Edit the wording freely; keep the `{{ ... }}` parts.
+3. Message body: clear the box first (Source tab → Ctrl+A → Delete), then paste the contents of [`docs/email-templates/invite.min.html`](email-templates/invite.min.html) (compact copy, ~9,400 characters; Supabase allows 50,000). The readable version for editing is [`invite.html`](email-templates/invite.html). It greets the person by name, says their role (and section for Heads of Section) and lists the next steps for that role. Edit the wording freely; keep the `{{ ... }}` parts.
 4. **Authentication → URL Configuration → Site URL** must be the live address (e.g. `https://lekki-peculiar-cbt.vercel.app`); the email's fallback link uses it.
 5. **Authentication → Rate Limits → "Rate limit for sending emails"**: raise it (e.g. to 100 per hour) before inviting all staff at once. If the limit is hit, bulk add stops sending and lists who still needs an invite — upload the same file again later; people already added are skipped.
 6. Optional: **Authentication → Sign In / Providers → Email → Email OTP Expiration** controls how long the button works (up to 86400 seconds = 24 hours). After it expires, staff use **Forgot password?** or **Continue with Google**.

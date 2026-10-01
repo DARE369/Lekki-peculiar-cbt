@@ -1,8 +1,11 @@
 # Brand assets
 
-Put the school's logo here as **`crest.png`** (transparent background, about 300–600 px wide).
+Made from the school logo. Served publicly, e.g. `https://lekki-peculiar-cbt.vercel.app/brand/email-logo.png`.
 
-Files in this folder are served from the live site, e.g.
-`https://lekki-peculiar-cbt.vercel.app/brand/crest.png` — that address is what the invitation email uses.
+| File | Used for |
+|---|---|
+| `crest.png` | Full logo (name + motto), transparent — sign-in page |
+| `emblem.png` | Emblem only, transparent — sidebar, headers, exam screen |
+| `email-logo.png` | Full logo on white — invitation email header |
 
-After adding the logo, set `logoSrc: "/brand/crest.png"` in `src/lib/brand.ts` so the app shows it too.
+Browser-tab icons are `src/app/icon.png` and `src/app/apple-icon.png`. Paths are set in `src/lib/brand.ts`.

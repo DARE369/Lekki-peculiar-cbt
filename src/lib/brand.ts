@@ -8,9 +8,8 @@ export const brand = {
   /** Shown on the landing and sign-in pages. */
   vision: "Imparting intellectual, leadership and moral values in a perfectly conducive atmosphere.",
   coreValues: ["Creativity", "Culture", "Cleanliness", "Care", "Christ"],
-  /**
-   * Put the school's crest in /public (e.g. /public/brand/crest.png) and set its path here.
-   * Until then a monogram mark is drawn in the brand colours.
-   */
-  logoSrc: null as string | null,
+  /** Emblem without the wording, for small places (sidebar, headers). Set to null to draw a monogram instead. */
+  logoSrc: "/brand/emblem.png" as string | null,
+  /** Full logo with the school name and motto (sign-in page, emails). */
+  fullLogoSrc: "/brand/crest.png",
 };

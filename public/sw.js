@@ -1,8 +1,8 @@
 // Offline support for the exam terminal (/exam). Keeps the exam page and its scripts cached so
 // a lab computer can reload the page mid-exam with no internet. Answers themselves live in
 // IndexedDB (see src/components/exam/store.ts); API calls are never cached.
-const CACHE = "cbt-exam-v1";
-const SHELL = ["/exam"];
+const CACHE = "cbt-exam-v2";
+const SHELL = ["/exam", "/brand/emblem.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -44,8 +44,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Hashed build assets never change: cache first.
-  if (url.pathname.startsWith("/_next/static/") || url.pathname === "/favicon.ico") {
+  // Hashed build assets and the school logo: cache first.
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/brand/") || url.pathname === "/icon.png") {
     event.respondWith(
       caches.match(req).then(
         (hit) =>

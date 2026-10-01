@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
-import { Crest, Logo } from "@/components/brand";
+import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
 import { brand } from "@/lib/brand";
 
@@ -15,7 +15,11 @@ export function AuthLayout({ children, title, subtitle }: { children: React.Reac
           <Logo inverted />
         </Link>
         <div className="relative mt-auto max-w-md">
-          <Crest size={72} />
+          {/* The full logo on a white card, so its red and navy lettering stays legible on the dark panel. */}
+          <div className="w-fit rounded-3xl bg-white p-5 shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={brand.fullLogoSrc} alt={brand.schoolName} width={220} height={189} className="h-auto w-[220px]" />
+          </div>
           <h2 className="mt-8 text-4xl leading-tight font-bold tracking-tight">{brand.schoolName}</h2>
           <p className="mt-4 text-lg leading-relaxed text-white/80">{brand.vision}</p>
           <ul className="mt-8 flex flex-wrap gap-2">

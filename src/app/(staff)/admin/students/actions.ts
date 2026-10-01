@@ -6,6 +6,8 @@ import { z } from "zod";
 import { can, requireAdmin } from "@/lib/auth";
 import { bool, fail, ok, str, type ActionResult } from "@/lib/actions";
 import { getStructure } from "@/lib/data";
+import { normalizeAdmission, normalizeClassName } from "@/lib/import/students";
+import { readSheetCells } from "@/lib/import/xlsx";
 import { PHOTO_BUCKET } from "@/lib/photos";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 
@@ -58,8 +60,25 @@ const importRow = z.object({
   class_name: z.string().trim().optional().default(""),
 });
 
-/** Bulk create/update students from rows parsed in the browser. Matches classes by name. */
-export async function importStudents(rows: unknown[]): Promise<ActionResult> {
+/** Reads an uploaded Excel file into plain cells for the import preview. */
+export async function readStudentSheet(fd: FormData): Promise<{ cells: string[][] } | { error: string }> {
+  try {
+    await requireStudentManager();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not allowed" };
+  }
+  const file = fd.get("file");
+  if (!(file instanceof File)) return { error: "No file chosen." };
+  if (file.size > 3 * 1024 * 1024) return { error: "The file is larger than 3 MB." };
+  const cells = await readSheetCells(await file.arrayBuffer());
+  return cells ? { cells } : { error: "Could not read this Excel file. Save it as .xlsx (or CSV) and try again." };
+}
+
+/**
+ * Bulk create/update students from rows parsed in the browser. Matches classes by name.
+ * With skipUnknownClasses, rows whose class doesn't exist (e.g. Pre-School) are left out instead of stopping the import.
+ */
+export async function importStudents(rows: unknown[], opts: { skipUnknownClasses?: boolean } = {}): Promise<ActionResult> {
   let staff;
   try {
     staff = await requireStudentManager();
@@ -69,8 +88,9 @@ export async function importStudents(rows: unknown[]): Promise<ActionResult> {
   if (!Array.isArray(rows) || rows.length === 0) return fail("No rows to import.");
   if (rows.length > 3000) return fail("Import at most 3000 students at a time.");
   const s = await getStructure();
-  const classByName = new Map(s.classes.map((c) => [c.name.toLowerCase().replace(/\s+/g, " "), c.id]));
+  const classByName = new Map(s.classes.map((c) => [normalizeClassName(c.name), c.id]));
   const problems: string[] = [];
+  const skipped = new Map<string, number>();
   const records = [];
   for (const [i, raw] of rows.entries()) {
     const parsed = importRow.safeParse(raw);
@@ -79,7 +99,11 @@ export async function importStudents(rows: unknown[]): Promise<ActionResult> {
       continue;
     }
     const r = parsed.data;
-    const classId = r.class_name ? classByName.get(r.class_name.toLowerCase().replace(/\s+/g, " ")) : null;
+    const classId = r.class_name ? classByName.get(normalizeClassName(r.class_name)) : null;
+    if (r.class_name && !classId && opts.skipUnknownClasses) {
+      skipped.set(r.class_name, (skipped.get(r.class_name) ?? 0) + 1);
+      continue;
+    }
     if (r.class_name && !classId) {
       problems.push(`Row ${i + 2}: class "${r.class_name}" not found`);
       continue;
@@ -96,12 +120,22 @@ export async function importStudents(rows: unknown[]): Promise<ActionResult> {
       active: true,
     });
   }
+  const seen = new Map<string, number>();
+  for (const [i, r] of records.entries()) {
+    const key = normalizeAdmission(r.admission_no);
+    if (seen.has(key)) problems.push(`Rows ${seen.get(key)! + 2} and ${i + 2}: same admission number ${r.admission_no}`);
+    else seen.set(key, i);
+  }
   if (problems.length) return fail(`Nothing was imported. Fix these first:\n${problems.slice(0, 20).join("\n")}${problems.length > 20 ? `\n…and ${problems.length - 20} more` : ""}`);
   const supabase = await createClient();
   const { error } = await supabase.from("students").upsert(records, { onConflict: "school_id,admission_key" });
   if (error) return fail(error);
   revalidatePath("/admin/students");
-  return ok(`Imported ${records.length} students (existing admission numbers were updated).`);
+  const skippedText = [...skipped].map(([c, n]) => `${c} (${n})`).join(", ");
+  return ok(
+    `Imported ${records.length} students (existing admission numbers were updated).` +
+      (skipped.size ? `\nSkipped — class not set up: ${skippedText}.` : ""),
+  );
 }
 
 /** Lets the browser upload a (resized) photo straight to storage. */

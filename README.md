@@ -11,7 +11,7 @@ Computer-based testing for Lekki Peculiar School: an exam terminal for the compu
 |---|---|
 | **Exam terminal** (`/exam`) | Registered lab PCs only · login by admission number (typos tolerated) or class → name → photo · “Is this you?” · waits for the admin's Start · timer keeps running · answers saved on the PC and synced in the background · survives outages, reloads and offline submission · flags, palette, keyboard answers · score/corrections per teacher setting |
 | **Teachers** | Request classes/subjects · shared question bank · upload Excel, CSV, plain text (Aiken) or JSON with preview · tests (20 q) / exams (40 q) / mocks / practice with settings (shuffle, must-answer-all, flagging, back navigation, what students see) · submit for approval |
-| **Heads of Section** | Approve & schedule per class · live monitor: Start/Pause/Close, extra time, unlock another PC, void, make-ups · students with bulk CSV + photo zip · teaching assignments · classes & subjects · lab computers · audit log |
+| **Heads of Section** | Approve & schedule per class · live monitor: Start/Pause/Close, extra time, unlock another PC, void, make-ups · students imported from Excel or CSV + photo zip · teaching assignments · classes & subjects · lab computers · audit log |
 | **Super admin** | Staff, roles, section scopes and granular permissions (e.g. who may grant make-ups) · sessions & terms |
 | **Reports** | Per test: positions, stats, distribution, hardest questions, most-chosen wrong option, fix-answer-key + regrade, integrity signals · class broadsheet (students × subjects, drill into a subject) · student record with every missed question · CSV/print |
 

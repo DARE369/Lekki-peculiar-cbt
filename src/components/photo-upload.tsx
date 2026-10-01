@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import JSZip from "jszip";
 import { Alert } from "@/components/ui";
+import { normalizeAdmission } from "@/lib/import/students";
 import { photoUploadUrl, setPhotoPath } from "@/app/(staff)/admin/students/actions";
 
 /** Shrinks a photo to a passport-sized JPEG so lab computers load it quickly. */
@@ -63,13 +64,6 @@ export function SinglePhotoUpload({ studentId }: { studentId: string }) {
       {error ? <Alert tone="danger">{error}</Alert> : null}
     </div>
   );
-}
-
-function normalizeAdmission(raw: string) {
-  return raw
-    .replace(/(^|[^0-9])0+([0-9])/g, "$1$2")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toUpperCase();
 }
 
 /**

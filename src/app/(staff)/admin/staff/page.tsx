@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Mail, UserCog } from "lucide-react";
+import { Mail, UserCog, Users } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Card, CardHeader, Field, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
 import { requireSuperAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
@@ -18,8 +18,9 @@ const ROLE: Record<string, [string, "brand" | "info" | "neutral"]> = {
   teacher: ["Teacher", "neutral"],
 };
 
-export default async function StaffPage() {
+export default async function StaffPage(props: PageProps<"/admin/staff">) {
   await requireSuperAdmin();
+  const { deleted } = await props.searchParams;
   const s = await getStructure();
   const supabase = await createClient();
   const [{ data: staff }, { data: perms }, { data: scopes }] = await Promise.all([
@@ -35,7 +36,16 @@ export default async function StaffPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={UserCog} title="Staff & permissions" description="Add teachers and Heads of Section, and decide exactly what each admin may do." />
+        icon={UserCog}
+        title="Staff & permissions"
+        description="Add teachers and Heads of Section, and decide exactly what each admin may do."
+        actions={
+          <LinkButton href="/admin/staff/import" variant="secondary">
+            <Users /> Bulk add staff
+          </LinkButton>
+        }
+      />
+      {typeof deleted === "string" ? <Alert tone="success">{deleted} was deleted.</Alert> : null}
       <Card>
         <Table>
           <thead>

@@ -17,6 +17,17 @@ export const PERMISSIONS = {
 } as const;
 export type Permission = keyof typeof PERMISSIONS;
 
+/** What a new Head of Section gets by default. Make-ups and voiding stay off until granted. */
+export const HOD_DEFAULT_PERMISSIONS: Permission[] = [
+  "exam.approve",
+  "exam.start",
+  "exam.extend_time",
+  "attempt.unlock",
+  "students.manage",
+  "teachers.manage",
+  "terminals.manage",
+];
+
 export interface Section {
   id: string;
   code: string;

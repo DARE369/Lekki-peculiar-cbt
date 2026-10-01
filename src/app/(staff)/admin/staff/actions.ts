@@ -3,10 +3,13 @@
 import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { requireSuperAdmin } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireSuperAdmin, type StaffContext } from "@/lib/auth";
 import { fail, ok, str, type ActionResult } from "@/lib/actions";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { PERMISSIONS, type Permission, type StaffRole } from "@/lib/types";
+import type { StaffImportRow } from "@/lib/import/staff";
+import { readSheetCells } from "@/lib/import/xlsx";
+import { HOD_DEFAULT_PERMISSIONS, PERMISSIONS, type Permission, type StaffRole } from "@/lib/types";
 
 function tempPassword() {
   // Readable: no 0/O/1/l confusion.
@@ -30,6 +33,38 @@ async function findAuthUserId(admin: ReturnType<typeof createAdminClient>, email
     const hit = data.users.find((u) => u.email?.toLowerCase() === email);
     if (hit) return hit.id;
     if (data.users.length < 1000) return null;
+  }
+  return null;
+}
+
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+/** Creates (or reuses) the sign-in account for an email with the given password. */
+async function createLoginWithPassword(admin: Admin, email: string, password: string): Promise<{ userId: string; reused: boolean } | { error: string }> {
+  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (data?.user) return { userId: data.user.id, reused: false };
+  if (error && /already|registered|exists/i.test(error.message)) {
+    // A sign-in account exists without a staff record (e.g. an earlier failed invite): reuse it.
+    const userId = await findAuthUserId(admin, email);
+    if (!userId) return { error: "Could not find the existing sign-in account for that email." };
+    await admin.auth.admin.updateUserById(userId, { password, email_confirm: true });
+    return { userId, reused: true };
+  }
+  return { error: error?.message ?? "Could not create the account." };
+}
+
+/** Writes the staff row, section scopes and permissions. Returns an error message, or null. */
+async function saveStaffRecord(
+  admin: Admin,
+  me: StaffContext,
+  a: { userId: string; email: string; fullName: string; role: StaffRole; sections: string[]; permissions: Permission[] },
+): Promise<string | null> {
+  const { error } = await admin.from("staff").insert({ id: a.userId, school_id: me.schoolId, email: a.email, full_name: a.fullName, role: a.role });
+  if (error) return error.message;
+  if (a.sections.length) await admin.from("admin_sections").insert(a.sections.map((section_id) => ({ staff_id: a.userId, section_id })));
+  if (a.permissions.length) {
+    await admin.from("staff_permissions").insert(a.permissions.map((permission) => ({ staff_id: a.userId, permission, granted_by: me.id })));
   }
   return null;
 }
@@ -78,26 +113,15 @@ export async function createStaff(_: ActionResult, fd: FormData): Promise<Action
     }
   } else {
     password = tempPassword();
-    const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-    if (data?.user) {
-      userId = data.user.id;
-    } else if (error && /already|registered|exists/i.test(error.message)) {
-      // A sign-in account exists without a staff record (e.g. an earlier failed invite): reuse it.
-      userId = await findAuthUserId(admin, email);
-      if (userId) await admin.auth.admin.updateUserById(userId, { password, email_confirm: true });
-      reusedAccount = true;
-    } else {
-      return fail(error?.message ?? "Could not create the account.");
-    }
+    const r = await createLoginWithPassword(admin, email, password);
+    if ("error" in r) return fail(r.error);
+    userId = r.userId;
+    reusedAccount = r.reused;
   }
   if (!userId) return fail("Could not find or create the sign-in account for that email.");
 
-  const { error } = await admin.from("staff").insert({ id: userId, school_id: me.schoolId, email, full_name: fullName, role: access.role });
-  if (error) return fail(error);
-  if (access.sections.length) await admin.from("admin_sections").insert(access.sections.map((section_id) => ({ staff_id: userId, section_id })));
-  if (access.permissions.length) {
-    await admin.from("staff_permissions").insert(access.permissions.map((permission) => ({ staff_id: userId, permission, granted_by: me.id })));
-  }
+  const saved = await saveStaffRecord(admin, me, { userId, email, fullName, ...access });
+  if (saved) return fail(saved);
   await admin.from("audit_log").insert({ actor_id: me.id, action: "staff.created", entity: "staff", entity_id: userId, detail: { email, role: access.role } });
   revalidatePath("/admin/staff");
   if (password) {
@@ -108,6 +132,149 @@ export async function createStaff(_: ActionResult, fd: FormData): Promise<Action
       ? `${fullName} added. They already had a sign-in account, so no invitation was sent — they can use “Forgot password?” on the sign-in page, or reset their password from their staff page.`
       : `${fullName} added and an invitation email was sent.`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Bulk add
+// ---------------------------------------------------------------------------
+export async function readStaffSheet(fd: FormData): Promise<{ cells: string[][] } | { error: string }> {
+  await requireSuperAdmin();
+  const file = fd.get("file");
+  if (!(file instanceof File)) return { error: "No file chosen." };
+  if (file.size > 3 * 1024 * 1024) return { error: "The file is larger than 3 MB." };
+  const cells = await readSheetCells(await file.arrayBuffer());
+  return cells ? { cells } : { error: "Could not read this Excel file. Save it as .xlsx (or CSV) and try again." };
+}
+
+export type BulkStaffResult = {
+  full_name: string;
+  email: string;
+  status: "added" | "skipped" | "failed";
+  note: string;
+  password?: string;
+};
+
+/**
+ * Adds many staff at once. method "password" gives each a temporary password (shown once, in the results);
+ * "google" gives them an unguessable password nobody sees — they sign in with Google (or get a reset later).
+ */
+export async function bulkAddStaff(
+  rows: Pick<StaffImportRow, "full_name" | "email" | "role" | "sections">[],
+  method: "password" | "google",
+): Promise<{ results: BulkStaffResult[] } | { error: string }> {
+  const me = await requireSuperAdmin();
+  if (!Array.isArray(rows) || rows.length === 0) return { error: "No staff to add." };
+  if (rows.length > 300) return { error: "Add at most 300 staff at a time." };
+  const admin = createAdminClient();
+  const [{ data: sections }, { data: existing }] = await Promise.all([
+    admin.from("sections").select("id, name, code").eq("school_id", me.schoolId),
+    admin.from("staff").select("email"),
+  ]);
+  const sectionId = new Map<string, string>();
+  for (const x of sections ?? []) {
+    sectionId.set(x.name.toLowerCase(), x.id);
+    sectionId.set(x.code.toLowerCase(), x.id);
+  }
+  const taken = new Set((existing ?? []).map((x) => x.email.toLowerCase()));
+  const results: BulkStaffResult[] = [];
+
+  for (const raw of rows) {
+    const email = String(raw.email ?? "").trim().toLowerCase();
+    const fullName = String(raw.full_name ?? "").trim();
+    const role: StaffRole = raw.role === "admin" ? "admin" : "teacher";
+    const base = { full_name: fullName, email };
+    if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      results.push({ ...base, status: "failed", note: "Missing name or invalid email" });
+      continue;
+    }
+    if (taken.has(email)) {
+      results.push({ ...base, status: "skipped", note: "Already on the staff list" });
+      continue;
+    }
+    const ids = role === "admin" ? (raw.sections ?? []).map((n) => sectionId.get(String(n).trim().toLowerCase())) : [];
+    if (ids.some((x) => !x)) {
+      results.push({ ...base, status: "failed", note: `Unknown section "${raw.sections.join(", ")}"` });
+      continue;
+    }
+    const password = tempPassword() + (method === "google" ? tempPassword() : "");
+    const login = await createLoginWithPassword(admin, email, password);
+    if ("error" in login) {
+      results.push({ ...base, status: "failed", note: login.error });
+      continue;
+    }
+    const saved = await saveStaffRecord(admin, me, {
+      userId: login.userId,
+      email,
+      fullName,
+      role,
+      sections: ids as string[],
+      permissions: role === "admin" ? HOD_DEFAULT_PERMISSIONS : [],
+    });
+    if (saved) {
+      results.push({ ...base, status: "failed", note: saved });
+      continue;
+    }
+    taken.add(email);
+    results.push({
+      ...base,
+      status: "added",
+      note: role === "admin" ? "Head of Section" : "Teacher",
+      password: method === "password" ? password : undefined,
+    });
+  }
+  const added = results.filter((r) => r.status === "added");
+  if (added.length) {
+    await admin.from("audit_log").insert({
+      actor_id: me.id,
+      action: "staff.bulk_created",
+      entity: "staff",
+      detail: { count: added.length, emails: added.map((r) => r.email) },
+    });
+  }
+  revalidatePath("/admin/staff");
+  return { results };
+}
+
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+/**
+ * Permanently removes a staff member and their sign-in account. Refused for anyone whose work is part of the
+ * school's records (questions or tests they wrote) — deactivate them instead, which keeps reports intact.
+ */
+export async function deleteStaff(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const me = await requireSuperAdmin();
+  const id = str(fd, "id");
+  if (!id) return fail("Missing staff member.");
+  if (id === me.id) return fail("You can't delete your own account.");
+  const admin = createAdminClient();
+  const { data: m } = await admin.from("staff").select("id, email, full_name, role").eq("id", id).maybeSingle();
+  if (!m) return fail("That staff member no longer exists.");
+  if (m.role === "super_admin") {
+    const { count } = await admin.from("staff").select("id", { count: "exact", head: true }).eq("role", "super_admin").eq("active", true);
+    if ((count ?? 0) <= 1) return fail("This is the only super admin. Make someone else a super admin first.");
+  }
+  const [{ count: questions }, { count: tests }] = await Promise.all([
+    admin.from("questions").select("id", { count: "exact", head: true }).eq("owner_id", id),
+    admin.from("assessments").select("id", { count: "exact", head: true }).eq("created_by", id),
+  ]);
+  if ((questions ?? 0) + (tests ?? 0) > 0) {
+    return fail(
+      `${m.full_name} wrote ${questions ?? 0} question(s) and ${tests ?? 0} test(s)/exam(s), which are part of students' results, so they can't be deleted. ` +
+        "Untick “Active” above and save instead — they won't be able to sign in, and their work stays in the reports.",
+    );
+  }
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) return fail(`Could not delete: ${error.message}`);
+  await admin.from("audit_log").insert({
+    actor_id: me.id,
+    action: "staff.deleted",
+    entity: "staff",
+    entity_id: id,
+    detail: { email: m.email, full_name: m.full_name, role: m.role },
+  });
+  revalidatePath("/admin/staff");
+  redirect("/admin/staff?deleted=" + encodeURIComponent(m.full_name));
 }
 
 export async function updateStaffAccess(_: ActionResult, fd: FormData): Promise<ActionResult> {

@@ -2,17 +2,7 @@
 
 import { useState } from "react";
 import { Field, Select } from "@/components/ui";
-import { PERMISSIONS, type Permission, type Section, type StaffRole } from "@/lib/types";
-
-const HOD_DEFAULT: Permission[] = [
-  "exam.approve",
-  "exam.start",
-  "exam.extend_time",
-  "attempt.unlock",
-  "students.manage",
-  "teachers.manage",
-  "terminals.manage",
-];
+import { HOD_DEFAULT_PERMISSIONS as HOD_DEFAULT, PERMISSIONS, type Permission, type Section, type StaffRole } from "@/lib/types";
 
 export function AccessFields({
   sections,

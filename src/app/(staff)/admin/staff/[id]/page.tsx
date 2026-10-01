@@ -8,13 +8,13 @@ import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import type { Permission, StaffRole } from "@/lib/types";
 import { AccessFields } from "../access-fields";
-import { resetStaffPassword, updateStaffAccess } from "../actions";
+import { deleteStaff, resetStaffPassword, updateStaffAccess } from "../actions";
 
 export const metadata: Metadata = { title: "Staff member" };
 
 export default async function StaffMemberPage(props: PageProps<"/admin/staff/[id]">) {
   const { id } = await props.params;
-  await requireSuperAdmin();
+  const me = await requireSuperAdmin();
   const s = await getStructure();
   const supabase = await createClient();
   const [{ data: m }, { data: perms }, { data: scopes }] = await Promise.all([
@@ -53,6 +53,20 @@ export default async function StaffMemberPage(props: PageProps<"/admin/staff/[id
           </SubmitButton>
         </ActionForm>
       </Card>
+      {m.id !== me.id ? (
+        <Card className="border-danger/40">
+          <CardHeader
+            title="Delete staff member"
+            description="Removes them and their sign-in completely. Only possible for people who haven't written any questions or tests — for everyone else, untick Active above, which blocks sign-in but keeps their work in the reports."
+          />
+          <ActionForm action={deleteStaff} className="p-5">
+            <input type="hidden" name="id" value={m.id} />
+            <SubmitButton variant="danger" confirm={`Permanently delete ${m.full_name}? This can't be undone.`}>
+              Delete {m.full_name}
+            </SubmitButton>
+          </ActionForm>
+        </Card>
+      ) : null}
     </div>
   );
 }

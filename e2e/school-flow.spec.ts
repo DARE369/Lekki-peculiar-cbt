@@ -317,6 +317,53 @@ test("teacher sees organised reports and can fix an answer key", async ({ browse
   await shot(page, "17-student");
 });
 
+test("super admin bulk adds staff and deletes one; staff with exam work can't be deleted", async ({ browser }) => {
+  const page = await signIn(browser, OWNER.email, OWNER.password);
+  await page.goto("/admin/staff");
+  await page.getByRole("link", { name: "Bulk add staff" }).click();
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Staff");
+  ws.addRow(["Full Name", "Email", "Role", "Section"]);
+  ws.addRow(["MRS GRACE EZE", "grace@lps.test", "Teacher", ""]);
+  ws.addRow(["Mr Kunle Ade", "kunle@lps.test", "HOD", "College"]);
+  ws.addRow(["Mr Dixon Again", "dixon@lps.test", "Teacher", ""]); // already on the staff list
+  ws.addRow(["No Email", "", "Teacher", ""]);
+  await page.getByLabel("Staff spreadsheet").setInputFiles({
+    name: "staff.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(await wb.xlsx.writeBuffer()),
+  });
+  await expect(page.getByText("Missing or invalid email")).toBeVisible();
+  await page.getByLabel(/Temporary passwords/).check();
+  await page.getByRole("button", { name: "Add 3 staff" }).click();
+  await expect(page.getByText("Added 2 of 3.")).toBeVisible();
+  await expect(page.getByText("Already on the staff list")).toBeVisible();
+  const graceRow = page.getByRole("row", { name: /Mrs Grace Eze/ });
+  const gracePassword = (await graceRow.locator("td").nth(3).innerText()).trim();
+  expect(gracePassword).toMatch(/^\S{12}$/);
+
+  // The new teacher can sign in with the temporary password.
+  const grace = await signIn(browser, "grace@lps.test", gracePassword);
+  await expect(grace.getByText("Mrs Grace Eze").first()).toBeVisible();
+  await grace.context().close();
+
+  // Kunle has no exam work, so he can be deleted.
+  await page.goto("/admin/staff");
+  await expect(page.getByRole("row", { name: /Mr Kunle Ade/ }).getByText("Head of Section")).toBeVisible();
+  await page.getByRole("link", { name: "Mr Kunle Ade" }).click();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Delete Mr Kunle Ade" }).click();
+  await expect(page.getByText("Mr Kunle Ade was deleted.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Mr Kunle Ade" })).toHaveCount(0);
+
+  // Mr Dixon wrote questions and a test, so deleting him is refused.
+  await page.getByRole("link", { name: "Mr Dixon", exact: true }).click();
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: /^Delete Mr Dixon/ }).click();
+  await expect(page.getByText(/can't be deleted/)).toBeVisible();
+});
+
 test("staff can start Google sign-in; non-staff Google accounts are turned away", async ({ page }) => {
   await page.goto("/login");
   const toGoogle = page.waitForRequest((r) => r.url().startsWith("https://accounts.google.com/"));

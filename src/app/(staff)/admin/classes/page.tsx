@@ -5,7 +5,7 @@ import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Textarea } f
 import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { addClasses, addSubject, toggleSubject, updateClass } from "../actions";
+import { addClasses, addSubject, addYearClasses, toggleSubject, updateClass } from "../actions";
 
 export const metadata: Metadata = { title: "Classes & subjects" };
 
@@ -85,6 +85,20 @@ export default async function ClassesPage() {
                 </div>
               </Card>
               <div className="space-y-6">
+                {years.some((y) => !s.classes.some((c) => c.year_id === y.id)) ? (
+                  <Card>
+                    <CardHeader
+                      title="One class per year?"
+                      description={`If ${sec.name} has a single class in each year, create them in one go — named exactly like the year (${years[0]?.name} … ${years[years.length - 1]?.name}), which is what a student spreadsheet's Class column usually says.`}
+                    />
+                    <ActionForm action={addYearClasses} className="px-5 pb-5">
+                      <input type="hidden" name="section_id" value={sec.id} />
+                      <SubmitButton size="sm" variant="secondary">
+                        Create {years.filter((y) => !s.classes.some((c) => c.year_id === y.id)).length} year classes
+                      </SubmitButton>
+                    </ActionForm>
+                  </Card>
+                ) : null}
                 <Card>
                   <CardHeader title="Add classes" />
                   <ActionForm action={addClasses} className="space-y-3 p-5" resetOnSuccess>

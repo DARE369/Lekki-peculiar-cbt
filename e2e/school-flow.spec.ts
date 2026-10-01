@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import ExcelJS from "exceljs";
 
 // Walks the whole school workflow on a fresh database:
 // setup → staff → class → students → questions → approval → lab PC → exam (with an outage) → reports.
@@ -92,6 +93,35 @@ test("HOD sets up a class and students", async ({ browser }) => {
   await page.goto("/admin/students");
   await expect(page.getByText("Charles Okafor")).toBeVisible();
   await shot(page, "02-students");
+});
+
+test("HOD creates year classes and imports students from Excel", async ({ browser }) => {
+  const page = await signIn(browser, "hod@lps.test", hodPassword);
+  await page.goto("/admin/classes");
+  const elementary = page.locator("section", { has: page.getByRole("heading", { name: "Elementary" }) });
+  // Year 4 already has "Year 4 Gold", so only the other five years get a class.
+  await elementary.getByRole("button", { name: "Create 5 year classes" }).click();
+  await expect(elementary.getByText("Year 2 · 0")).toBeVisible();
+  await expect(elementary.getByText("Year 6 · 0")).toBeVisible();
+  await expect(elementary.getByText("No classes")).toHaveCount(0);
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Sheet1");
+  ws.addRow(["Student_id", "Full_name", "Class", "parent_phone", "parent_email"]);
+  ws.addRow(["LPS2026/01/501", "TOLU ADA BANKOLE", "Year 2", 2348000000000, "parent@example.com"]);
+  ws.addRow(["LPS2026/01/502", "KEMI OKON", "Nursery", 2348000000001, ""]);
+  const file = Buffer.from(await wb.xlsx.writeBuffer());
+
+  await page.goto("/admin/students/import");
+  await page.locator('input[type="file"]').setInputFiles({ name: "students.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: file });
+  await expect(page.getByText(/This class isn't set up yet: Nursery \(1\)/)).toBeVisible();
+  await expect(page.getByText("Not imported (not used by the CBT): parent_phone, parent_email.")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Bankole" })).toBeVisible();
+  await page.getByRole("button", { name: "Import 1" }).click();
+  await expect(page.getByText("Imported 1 students")).toBeVisible();
+  await expect(page.getByText("Skipped — class not set up: Nursery (1).")).toBeVisible();
+  await page.goto("/admin/students");
+  await expect(page.getByRole("link", { name: "Tolu Ada Bankole" })).toBeVisible();
 });
 
 test("teacher requests a subject and the HOD approves", async ({ browser }) => {

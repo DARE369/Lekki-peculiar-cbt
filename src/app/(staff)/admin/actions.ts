@@ -250,6 +250,23 @@ export async function addClasses(_: ActionResult, fd: FormData): Promise<ActionR
   return ok(`Added ${names.length} class${names.length === 1 ? "" : "es"}.`);
 }
 
+/** One class per year, named after the year (e.g. "Year 4"), for years in the section that have no classes yet. */
+export async function addYearClasses(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { data: years, error: e1 } = await supabase.from("years").select("id, name").eq("section_id", str(fd, "section_id"));
+  if (e1) return fail(e1);
+  const { data: existing, error: e2 } = await supabase.from("classes").select("year_id").in("year_id", (years ?? []).map((y) => y.id));
+  if (e2) return fail(e2);
+  const taken = new Set((existing ?? []).map((c) => c.year_id));
+  const rows = (years ?? []).filter((y) => !taken.has(y.id)).map((y) => ({ year_id: y.id, name: y.name }));
+  if (rows.length === 0) return ok("Every year already has a class.");
+  const { error } = await supabase.from("classes").upsert(rows, { onConflict: "year_id,name", ignoreDuplicates: true });
+  if (error) return fail(error);
+  revalidatePath("/admin/classes");
+  return ok(`Added ${rows.map((r) => r.name).join(", ")}.`);
+}
+
 export async function updateClass(_: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();

@@ -394,7 +394,7 @@ test("bulk add emails each person an invitation with steps for their role", asyn
     return raw.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
   };
   const teacherMail = mailTo("ngozi@lps.test");
-  expect(teacherMail).toContain("Dear Mrs Ngozi,");
+  expect(teacherMail).toContain("Dear Mrs Ngozi Obi,");
   expect(teacherMail).toContain("a <strong>Teacher</strong>");
   expect(teacherMail).toContain("<strong>My classes</strong>");
   expect(teacherMail).not.toContain("Teaching assignments");

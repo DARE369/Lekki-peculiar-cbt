@@ -27,7 +27,7 @@
           <!-- Body -->
           <tr>
             <td style="padding:32px">
-              <p style="margin:0 0 16px;font-size:16px;line-height:1.6">Dear {{ if .Data.first_name }}{{ .Data.first_name }}{{ else }}Teacher{{ end }},</p>
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.6">Dear {{ if .Data.full_name }}{{ .Data.full_name }}{{ else }}Colleague{{ end }},</p>
               <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#374151">
                 We're pleased to let you know that the <strong>CBT Application</strong> is now live and ready for use.
                 You have been set up as {{ if eq .Data.role "admin" }}<strong>Head of Section</strong>{{ if .Data.sections }} for <strong>{{ .Data.sections }}</strong>{{ end }}{{ else if eq .Data.role "super_admin" }}<strong>Super admin</strong>{{ else }}a <strong>Teacher</strong>{{ end }}.

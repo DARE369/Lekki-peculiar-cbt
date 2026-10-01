@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { UsersRound } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, CardHeader, EmptyState, Field, PageHeader, Select } from "@/components/ui";
+import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { requestAssignments, withdrawAssignment } from "../actions";
+import { saveMySubjects, withdrawAssignment } from "../actions";
+import { SubjectPicker } from "@/app/welcome/subject-picker";
+import { myPicks, pickerSections } from "@/lib/assignments";
 
 export const metadata: Metadata = { title: "My classes" };
 
@@ -25,7 +27,7 @@ export default async function MyClasses() {
   const byClass = new Map<string, string[]>();
   for (const r of approved) byClass.set(r.class_id, [...(byClass.get(r.class_id) ?? []), r.subject_id]);
 
-  const cbtSections = s.sections.filter((x) => x.cbt_enabled);
+  const picks = await myPicks(staff.id, s);
 
   return (
     <div className="space-y-6">
@@ -86,47 +88,15 @@ export default async function MyClasses() {
       ) : null}
 
       <Card>
-        <CardHeader title="Add a subject you teach" description="Pick one subject, then tick every class you teach it to." />
-        <ActionForm action={requestAssignments} className="space-y-5 p-5" resetOnSuccess>
-          <Field label="Subject">
-            <Select name="subject_id" required defaultValue="">
-              <option value="" disabled>
-                Choose a subject…
-              </option>
-              {cbtSections.map((sec) => (
-                <optgroup key={sec.id} label={sec.name}>
-                  {s.subjects
-                    .filter((x) => x.section_id === sec.id && x.active)
-                    .map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </Select>
-          </Field>
-          {cbtSections.map((sec) => {
-            const classes = s.classes.filter((c) => c.active && s.sectionOfClass(c.id)?.id === sec.id);
-            return (
-              <fieldset key={sec.id}>
-                <legend className="mb-2 text-sm font-medium">{sec.name} classes</legend>
-                {classes.length === 0 ? (
-                  <p className="text-sm text-muted">No classes created yet.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                    {classes.map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft">
-                        <input type="checkbox" name="class_id" value={c.id} className="accent-[var(--brand)]" />
-                        {c.name}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </fieldset>
-            );
-          })}
-          <SubmitButton>Send for approval</SubmitButton>
+        <CardHeader
+          title="Subjects and classes you teach"
+          description="Tap every class you teach under each subject — as many subjects and sections as you need. Ticks on approved classes can't be removed here."
+        />
+        <ActionForm action={saveMySubjects} className="p-5">
+          <SubjectPicker sections={pickerSections(s)} initial={picks.pending} locked={picks.approved} />
+          <SubmitButton size="lg" className="mt-5 w-full sm:w-auto">
+            Save my subjects and classes
+          </SubmitButton>
         </ActionForm>
       </Card>
     </div>

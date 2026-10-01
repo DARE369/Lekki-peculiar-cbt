@@ -114,7 +114,7 @@ Bulk add (Staff & permissions → Bulk add staff) and single add can email each 
   | `SMTP_FROM` | `Lekki Peculiar School <peace.denise@peculiarschools.com>` (optional) |
 
   Without them the app works normally and simply doesn't send these emails.
-- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
+- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` and then `supabase/migrations/20261003000100_assessment_classes.sql` in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
 
 ## Maintenance
 

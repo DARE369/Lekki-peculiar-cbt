@@ -55,6 +55,7 @@ export default async function AccountPage(props: PageProps<"/account">) {
       <Card>
         <CardHeader title="Change password" />
         <ActionForm action={changePassword} className="space-y-4 p-5" resetOnSuccess>
+          <input type="email" name="username" value={staff.email} autoComplete="username" readOnly hidden />
           <Field label="New password">
             <Input name="password" type="password" minLength={8} required autoComplete="new-password" />
           </Field>

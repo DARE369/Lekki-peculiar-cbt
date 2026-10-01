@@ -2,7 +2,8 @@ import { Checkbox, Field, Input } from "@/components/ui";
 import type { ClassRow } from "@/lib/types";
 import { isoToLagosLocal } from "@/lib/time";
 
-export function ScheduleFields({ classes, scheduled }: { classes: ClassRow[]; scheduled: Set<string> }) {
+/** `preferred`: the classes the teacher made the test for; pre-ticked when given. */
+export function ScheduleFields({ classes, scheduled, preferred }: { classes: ClassRow[]; scheduled: Set<string>; preferred?: Set<string> }) {
   const tomorrow9 = new Date();
   tomorrow9.setUTCDate(tomorrow9.getUTCDate() + 1);
   tomorrow9.setUTCHours(8, 0, 0, 0); // 09:00 Lagos
@@ -21,8 +22,10 @@ export function ScheduleFields({ classes, scheduled }: { classes: ClassRow[]; sc
                 key={c.id}
                 className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft"
               >
-                <input type="checkbox" name="class_id" value={c.id} className="accent-[var(--brand)]" defaultChecked={!scheduled.has(c.id) && classes.length <= 4} />
+                <input type="checkbox" name="class_id" value={c.id} className="accent-[var(--brand)]" defaultChecked={!scheduled.has(c.id) && (preferred?.size ? preferred.has(c.id) : classes.length <= 4)}
+                />
                 {c.name}
+                {preferred?.has(c.id) && !scheduled.has(c.id) ? <span className="text-xs text-muted">(teacher&apos;s class)</span> : null}
                 {scheduled.has(c.id) ? <span className="text-xs text-muted">(reschedule)</span> : null}
               </label>
             ))}

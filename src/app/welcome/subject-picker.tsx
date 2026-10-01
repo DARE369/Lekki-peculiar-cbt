@@ -4,12 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { cn } from "@/components/ui";
 
-export type PickerSection = {
-  id: string;
-  name: string;
-  subjects: { id: string; name: string }[];
-  classes: { id: string; name: string }[];
-};
+import type { PickerSection } from "@/lib/assignments";
 
 /**
  * Subjects as cards; tap the classes you teach each one to. Approved choices are locked (shown with a tick).

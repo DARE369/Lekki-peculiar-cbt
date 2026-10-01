@@ -105,7 +105,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
             {a.title} <Badge tone={statusTone}>{statusLabel}</Badge>
           </span>
         }
-        description={`${s.subjectById.get(a.subject_id)?.name} · ${s.yearById.get(a.year_id)?.name} · ${TYPE_LABEL[a.type as AssessmentType]} · ${a.question_count} questions · ${a.duration_minutes} minutes`}
+        description={`${s.subjectById.get(a.subject_id)?.name} · ${(a.class_ids ?? []).length ? (a.class_ids as string[]).map((c) => s.className(c)).join(", ") : s.yearById.get(a.year_id)?.name} · ${TYPE_LABEL[a.type as AssessmentType]} · ${a.question_count} questions · ${a.duration_minutes} minutes`}
         actions={
           <>
             {a.status === "approved" ? <LinkButton href={`/reports/assessment/${a.id}`}>Results</LinkButton> : null}

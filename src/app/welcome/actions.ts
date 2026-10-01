@@ -6,6 +6,7 @@ import { requireStaff } from "@/lib/auth";
 import { fail, str, type ActionResult } from "@/lib/actions";
 import { getStructure } from "@/lib/data";
 import { normalisePhone } from "@/lib/phone";
+import { applySubjectPicks } from "@/lib/assignments";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 
 export async function saveAbout(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -36,30 +37,8 @@ export async function savePassword(_: ActionResult, fd: FormData): Promise<Actio
 export async function saveSubjects(_: ActionResult, fd: FormData): Promise<ActionResult> {
   const me = await requireStaff();
   const s = await getStructure();
-  if (!s.currentSessionId) return fail("The school year hasn't been set up yet. Please contact the school office.");
-  const picks = new Set(fd.getAll("pick").map(String));
-  const rows: { subject_id: string; class_id: string }[] = [];
-  for (const p of picks) {
-    const [subjectId, classId] = p.split(":");
-    const subject = s.subjectById.get(subjectId);
-    if (!subject || !s.classById.has(classId) || s.sectionOfClass(classId)?.id !== subject.section_id) continue;
-    rows.push({ subject_id: subjectId, class_id: classId });
-  }
-  const supabase = await createClient();
-  const { data: existing } = await supabase
-    .from("teaching_assignments")
-    .select("id, subject_id, class_id, status")
-    .eq("teacher_id", me.id)
-    .eq("session_id", s.currentSessionId);
-  const withdraw = (existing ?? []).filter((r) => r.status === "requested" && !picks.has(`${r.subject_id}:${r.class_id}`)).map((r) => r.id);
-  if (withdraw.length) await supabase.from("teaching_assignments").delete().in("id", withdraw);
-  if (rows.length) {
-    const { error } = await supabase.from("teaching_assignments").upsert(
-      rows.map((r) => ({ ...r, teacher_id: me.id, session_id: s.currentSessionId, status: "requested" })),
-      { onConflict: "teacher_id,subject_id,class_id,session_id", ignoreDuplicates: true },
-    );
-    if (error) return fail(error);
-  }
+  const err = await applySubjectPicks(me.id, s, fd.getAll("pick").map(String));
+  if (err) return fail(err);
   revalidatePath("/teach/classes");
   redirect(`/welcome?step=${str(fd, "next")}`);
 }

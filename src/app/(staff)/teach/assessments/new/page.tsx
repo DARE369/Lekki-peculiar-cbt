@@ -7,6 +7,8 @@ import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
 import { TYPE_DEFAULTS } from "@/lib/types";
 import { createAssessment } from "../../actions";
+import { TestTarget, type TargetOption } from "./test-target";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "New test or exam" };
 
@@ -14,12 +16,32 @@ export default async function NewAssessment() {
   const staff = await requireStaff();
   const s = await getStructure();
   const subjects = await teachableSubjects(staff, s);
-  const sectionIds = new Set(subjects.map((x) => x.section_id));
+  // What the teacher can set a test for: their approved subject + class pairs; admins also get every class in their sections.
+  const supabase = await createClient();
+  const { data: mine } = await supabase
+    .from("teaching_assignments")
+    .select("subject_id, class_id")
+    .eq("teacher_id", staff.id)
+    .eq("session_id", s.currentSessionId ?? "")
+    .eq("status", "approved");
+  const options: TargetOption[] = subjects.map((sub) => {
+    const adminHere = staff.isSuperAdmin || (staff.isAdmin && staff.sectionIds.includes(sub.section_id));
+    const classIds = new Set(
+      adminHere
+        ? s.classes.filter((c) => c.active && s.sectionOfClass(c.id)?.id === sub.section_id).map((c) => c.id)
+        : (mine ?? []).filter((r) => r.subject_id === sub.id).map((r) => r.class_id as string),
+    );
+    const years = s.years
+      .filter((y) => y.section_id === sub.section_id)
+      .map((y) => ({ yearId: y.id, name: y.name, classes: s.classes.filter((c) => c.year_id === y.id && classIds.has(c.id)).map((c) => ({ id: c.id, name: c.name })) }))
+      .filter((y) => adminHere || y.classes.length > 0);
+    return { subjectId: sub.id, label: `${sub.name} (${s.sectionById.get(sub.section_id)?.name})`, years };
+  }).filter((o) => o.years.length > 0);
   return (
     <div className="max-w-2xl">
       <PageHeader
         icon={FilePlus2} title="New test or exam" back={{ href: "/teach/assessments", label: "Tests & exams" }} />
-      {subjects.length === 0 ? (
+      {options.length === 0 ? (
         <Card>
           <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>} />
         </Card>
@@ -44,34 +66,7 @@ export default async function NewAssessment() {
                 ))}
               </div>
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Subject">
-                <Select name="subject_id" required defaultValue="">
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  {subjects.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name} ({s.sectionById.get(x.section_id)?.name})
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Year group">
-                <Select name="year_id" required defaultValue="">
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  {s.years
-                    .filter((y) => sectionIds.has(y.section_id))
-                    .map((y) => (
-                      <option key={y.id} value={y.id}>
-                        {y.name}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-            </div>
+            <TestTarget options={options} />
             <Field label="Title" hint="Leave blank to use e.g. “Biology Test”.">
               <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />
             </Field>

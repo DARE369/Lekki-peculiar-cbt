@@ -46,6 +46,7 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
   const settings: AssessmentSettings = { ...DEFAULT_SETTINGS, ...(a.settings ?? {}) };
   const yearClasses = s.classes.filter((c) => c.year_id === a.year_id && c.active);
   const scheduled = new Set((windows ?? []).map((w) => w.class_id as string));
+  const preferred = new Set<string>(a.class_ids ?? []);
   const canApprove = can(staff, "exam.approve");
   const [statusLabel, statusTone] = STATUS_LABEL[a.status as AssessmentStatus];
 
@@ -120,7 +121,7 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
               <CardHeader title="Approve and schedule" />
               <ActionForm action={reviewAssessment} className="space-y-5 p-5">
                 <input type="hidden" name="id" value={a.id} />
-                <ScheduleFields classes={yearClasses} scheduled={scheduled} />
+                <ScheduleFields classes={yearClasses} scheduled={scheduled} preferred={preferred} />
                 <Field label="Note to the teacher (required if asking for changes)">
                   <Textarea name="note" rows={2} />
                 </Field>
@@ -165,7 +166,7 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
                 <CardHeader title="Schedule (more) classes" />
                 <ActionForm action={scheduleClasses} className="space-y-5 p-5">
                   <input type="hidden" name="id" value={a.id} />
-                  <ScheduleFields classes={yearClasses} scheduled={scheduled} />
+                  <ScheduleFields classes={yearClasses} scheduled={scheduled} preferred={preferred} />
                   <SubmitButton>Save schedule</SubmitButton>
                 </ActionForm>
               </Card>

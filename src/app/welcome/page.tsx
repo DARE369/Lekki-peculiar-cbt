@@ -8,11 +8,12 @@ import { ThemeSwitcher } from "@/components/theme";
 import { Field, Input, buttonClass, cn } from "@/components/ui";
 import { needsOnboarding, requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
+import { myPicks, pickerSections } from "@/lib/assignments";
 import { daysUntil, deadlineForSection, formatDeadline, getQuestionSettings } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { finishOnboarding, saveAbout, savePassword, saveSubjects } from "./actions";
-import { SubjectPicker, type PickerSection } from "./subject-picker";
+import { SubjectPicker } from "./subject-picker";
 
 export const metadata: Metadata = { title: "Welcome" };
 
@@ -30,9 +31,11 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
   const hasGoogle = Boolean(user?.identities?.some((i) => i.provider === "google"));
 
   const isHod = staff.role === "admin";
-  const steps: Step[] = ["about"];
-  // Kept in the list even after it's done, so the step count doesn't change mid-way.
+  // Password first (so the browser can save it), then the rest. The password step stays in the list
+  // once done, so the step count doesn't change mid-way. Google sign-in has no password to set.
+  const steps: Step[] = [];
   if (!hasGoogle) steps.push("password");
+  steps.push("about");
   steps.push(...(isHod ? (["section"] as Step[]) : (["subjects", "upload"] as Step[])));
   const step: Step = steps.includes(sp.step as Step) ? (sp.step as Step) : steps[0];
   const index = steps.indexOf(step);
@@ -61,10 +64,8 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
         <div className="rounded-3xl border border-border bg-surface p-6 shadow-card sm:p-8">
           {step === "about" ? (
             <>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Welcome, {firstName}!</h1>
-              <p className="mt-2 text-base text-muted">
-                Let&apos;s get you ready in a few short steps. First, check your name and give us a phone number.
-              </p>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{index === 0 ? `Welcome, ${firstName}!` : "About you"}</h1>
+              <p className="mt-2 text-base text-muted">Check your name and give us a phone number.</p>
               <ActionForm action={saveAbout} className="mt-6 space-y-5">
                 <input type="hidden" name="next" value={next} />
                 <Field label="Your full name" hint="This is how your name appears on tests and reports.">
@@ -91,9 +92,11 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
 
           {step === "password" ? (
             <>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Choose your password</h1>
+              <p className="text-base font-semibold text-brand">Welcome, {firstName}!</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Choose your password</h1>
               <p className="mt-2 text-base text-muted">
-                You&apos;ll use it with your school email (<strong className="text-text">{staff.email}</strong>) to sign in next time.
+                You&apos;ll use it with your school email (<strong className="text-text">{staff.email}</strong>) to sign in next time. Your
+                browser may offer to save it — press <strong className="text-text">Save</strong>.
               </p>
               {!staff.needsPassword ? (
                 <Link
@@ -105,6 +108,8 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
               ) : null}
               <ActionForm action={savePassword} className="mt-6 space-y-5">
                 <input type="hidden" name="next" value={next} />
+                {/* Lets the browser's password manager save the password together with the email. */}
+                <input type="email" name="username" value={staff.email} autoComplete="username" readOnly hidden />
                 <Field label="New password" hint="At least 8 characters. Something you'll remember.">
                   <Input name="password" type="password" required minLength={8} className="h-12 text-base" autoComplete="new-password" />
                 </Field>
@@ -137,20 +142,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
   );
 
   async function SubjectsStep({ staffId, next }: { staffId: string; next: string }) {
-    const { data: mine } = await supabase
-      .from("teaching_assignments")
-      .select("subject_id, class_id, status")
-      .eq("teacher_id", staffId)
-      .eq("session_id", s.currentSessionId ?? "");
-    const sections: PickerSection[] = s.sections
-      .filter((x) => x.cbt_enabled)
-      .map((sec) => ({
-        id: sec.id,
-        name: sec.name,
-        subjects: s.subjects.filter((x) => x.active && x.section_id === sec.id).map((x) => ({ id: x.id, name: x.name })),
-        classes: s.classes.filter((c) => c.active && s.sectionOfClass(c.id)?.id === sec.id).map((c) => ({ id: c.id, name: c.name })),
-      }));
-    const key = (r: { subject_id: string; class_id: string }) => `${r.subject_id}:${r.class_id}`;
+    const picks = await myPicks(staffId, s);
     return (
       <>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">What do you teach?</h1>
@@ -161,9 +153,9 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
         <ActionForm action={saveSubjects} className="mt-6">
           <input type="hidden" name="next" value={next} />
           <SubjectPicker
-            sections={sections}
-            initial={(mine ?? []).filter((r) => r.status === "requested").map(key)}
-            locked={(mine ?? []).filter((r) => r.status === "approved").map(key)}
+            sections={pickerSections(s)}
+            initial={picks.pending}
+            locked={picks.approved}
           />
           <SubmitButton size="lg" className="mt-5 w-full">
             Continue

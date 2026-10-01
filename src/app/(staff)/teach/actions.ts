@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
 import { fail, ok, bool, int, str, type ActionResult } from "@/lib/actions";
+import { applySubjectPicks } from "@/lib/assignments";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { dedupeKey, OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
@@ -13,32 +14,15 @@ import { DEFAULT_SETTINGS, TYPE_DEFAULTS, type AssessmentSettings, type Assessme
 // ---------------------------------------------------------------------------
 // Teaching assignments
 // ---------------------------------------------------------------------------
-export async function requestAssignments(_: ActionResult, fd: FormData): Promise<ActionResult> {
+/** Saves the subject/class picker on My classes (several subjects and classes at once). */
+export async function saveMySubjects(_: ActionResult, fd: FormData): Promise<ActionResult> {
   const staff = await requireStaff();
   const s = await getStructure();
-  if (!s.currentSessionId) return fail("No current academic session is set. Ask the super admin.");
-  const subjectId = str(fd, "subject_id");
-  const classIds = fd.getAll("class_id").map(String);
-  const subject = s.subjectById.get(subjectId);
-  if (!subject) return fail("Choose a subject.");
-  if (classIds.length === 0) return fail("Tick at least one class.");
-  const bad = classIds.filter((c) => s.sectionOfClass(c)?.id !== subject.section_id);
-  if (bad.length) return fail(`${subject.name} (${s.sectionById.get(subject.section_id)?.name}) can only be taught to classes in that section.`);
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("teaching_assignments").upsert(
-    classIds.map((class_id) => ({
-      teacher_id: staff.id,
-      subject_id: subjectId,
-      class_id,
-      session_id: s.currentSessionId,
-      status: "requested",
-    })),
-    { onConflict: "teacher_id,subject_id,class_id,session_id", ignoreDuplicates: true },
-  );
-  if (error) return fail(error);
+  const err = await applySubjectPicks(staff.id, s, fd.getAll("pick").map(String));
+  if (err) return fail(err);
   revalidatePath("/teach/classes");
-  return ok("Sent to your Head of Section for approval.");
+  revalidatePath("/dashboard");
+  return ok("Saved. New choices go to your Head of Section for approval — you can upload questions for them straight away.");
 }
 
 export async function withdrawAssignment(fd: FormData) {
@@ -206,6 +190,21 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
   if (!termId) return fail("No current term is set. Ask the super admin.");
 
   const supabase = await createClient();
+  // The classes (arms) it's for: must be in this year group and, for teachers, classes they're approved to teach.
+  const classIds = [...new Set(fd.getAll("class_id").map(String))].filter((c) => s.classById.get(c)?.year_id === yearId);
+  const adminHere = staff.isSuperAdmin || (staff.isAdmin && staff.sectionIds.includes(subject.section_id));
+  if (!adminHere) {
+    const { data: mine } = await supabase
+      .from("teaching_assignments")
+      .select("class_id")
+      .eq("teacher_id", staff.id)
+      .eq("subject_id", subjectId)
+      .eq("session_id", s.currentSessionId ?? "")
+      .eq("status", "approved");
+    const allowed = new Set((mine ?? []).map((r) => r.class_id as string));
+    if (classIds.some((c) => !allowed.has(c))) return fail("You can only set tests for classes you've been approved to teach.");
+  }
+  if (classIds.length === 0) return fail("Tick at least one class the test is for.");
   const { data, error } = await supabase
     .from("assessments")
     .insert({
@@ -217,6 +216,7 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
       question_count: int(fd, "question_count", TYPE_DEFAULTS[type].questions),
       duration_minutes: int(fd, "duration_minutes", TYPE_DEFAULTS[type].minutes),
       settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam" },
+      class_ids: classIds,
       created_by: staff.id,
     })
     .select("id")

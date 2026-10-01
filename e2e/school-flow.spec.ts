@@ -25,7 +25,7 @@ async function signIn(browser: Browser, email: string, password: string) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   // Sign-in lands on /dashboard, which sends first-timers on to /welcome: wait until a page has settled.
-  await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: /^(Welcome,|Good )/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: /^(Welcome,|Good |Choose your password|About you)/ })).toBeVisible();
   if (/\/welcome/.test(page.url())) await quickOnboarding(page, password);
   await expect(page).toHaveURL(/\/dashboard/);
   return page;
@@ -33,17 +33,25 @@ async function signIn(browser: Browser, email: string, password: string) {
 
 /** First sign-in setup, taking the shortest path (the full flow has its own test). */
 async function quickOnboarding(page: Page, password: string) {
-  await page.getByLabel("Your phone number").fill("0803 000 0000");
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL(/step=(password|subjects|section)/);
-  if (page.url().includes("step=password")) {
-    await page.getByLabel("New password").fill(password);
-    await page.getByLabel("Type it again").fill(password);
-    await page.getByRole("button", { name: "Save password and continue" }).click();
-    await page.waitForURL(/step=(subjects|section)/);
+  for (let i = 0; i < 5; i++) {
+    await page.waitForURL(/\/(welcome|dashboard)/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    if (/\/dashboard/.test(page.url())) return;
+    const h1 = (await page.getByRole("heading", { level: 1 }).textContent()) ?? "";
+    if (h1.includes("Choose your password")) {
+      await page.getByLabel("New password").fill(password);
+      await page.getByLabel("Type it again").fill(password);
+      await page.getByRole("button", { name: "Save password and continue" }).click();
+    } else if (await page.getByLabel("Your phone number").isVisible()) {
+      await page.getByLabel("Your phone number").fill("0803 000 0000");
+      await page.getByRole("button", { name: "Continue" }).click();
+    } else if (h1.includes("What do you teach?")) {
+      await page.getByRole("link", { name: /Skip for now/ }).click();
+    } else {
+      await page.getByRole("button", { name: "Go to my dashboard" }).click();
+    }
+    await expect(page.getByRole("heading", { level: 1 })).not.toHaveText(h1);
   }
-  if (page.url().includes("step=subjects")) await page.getByRole("link", { name: /Skip for now/ }).click();
-  await page.getByRole("button", { name: "Go to my dashboard" }).click();
 }
 
 test("first-time setup creates the super admin", async ({ page }) => {
@@ -147,9 +155,9 @@ test("HOD creates year classes and imports students from Excel", async ({ browse
 test("teacher requests a subject and the HOD approves", async ({ browser }) => {
   const teacher = await signIn(browser, "dixon@lps.test", teacherPassword);
   await teacher.goto("/teach/classes");
-  await teacher.getByLabel("Subject").selectOption({ label: "Basic Science" });
-  await teacher.getByLabel("Year 4 Gold").check();
-  await teacher.getByRole("button", { name: "Send for approval" }).click();
+  await teacher.getByRole("button", { name: "Basic Science — Year 4 Gold" }).click();
+  await teacher.getByRole("button", { name: "Save my subjects and classes" }).click();
+  await expect(teacher.getByText(/^Saved\./)).toBeVisible();
   await expect(teacher.getByText("Awaiting approval")).toBeVisible();
 
   const hod = await signIn(browser, "hod@lps.test", hodPassword);
@@ -164,7 +172,7 @@ test("teacher requests a subject and the HOD approves", async ({ browser }) => {
 test("teacher uploads questions, builds a test and submits it", async ({ browser }) => {
   const page = await signIn(browser, "dixon@lps.test", teacherPassword);
   await page.goto("/teach/assessments/new");
-  await page.getByLabel("Subject").selectOption({ label: "Basic Science (Elementary)" });
+  await page.locator(`select[name="subject_id"]`).selectOption({ label: "Basic Science (Elementary)" });
   await page.getByLabel("Year group").selectOption({ label: "Year 4" });
   await page.getByLabel("Title").fill("Basic Science Test 1");
   await page.getByLabel("Number of questions").fill("5");
@@ -426,7 +434,8 @@ test("bulk add emails each person an invitation with steps for their role", asyn
   const ngozi = await ctx.newPage();
   await ngozi.goto(link);
   await expect(ngozi).toHaveURL(/\/welcome$/);
-  await expect(ngozi.getByRole("heading", { name: "Welcome, Ngozi!" })).toBeVisible();
+  await expect(ngozi.getByText("Welcome, Ngozi!")).toBeVisible();
+  await expect(ngozi.getByRole("heading", { name: "Choose your password" })).toBeVisible();
   await ctx.close();
 });
 
@@ -455,12 +464,11 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await ada.getByLabel("Password").fill(temp);
   await ada.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(ada).toHaveURL(/\/welcome/);
-  await expect(ada.getByRole("heading", { name: "Welcome, Ada!" })).toBeVisible();
+  await expect(ada.getByText("Welcome, Ada!")).toBeVisible();
   await expect(ada.getByText("Step 1 of 4")).toBeVisible();
-  await ada.getByLabel("Your phone number").fill("0803 555 1234");
-  await ada.getByRole("button", { name: "Continue" }).click();
-
+  // Password first, with the email in the form so the browser can save the login.
   await expect(ada.getByRole("heading", { name: "Choose your password" })).toBeVisible();
+  await expect(ada.locator('input[autocomplete="username"]')).toHaveValue("ada@lps.test");
   await ada.getByLabel("New password").fill("ada-pass-1");
   await ada.getByLabel("Type it again").fill("ada-pass-2");
   await ada.getByRole("button", { name: "Save password and continue" }).click();
@@ -469,12 +477,17 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await ada.getByLabel("Type it again").fill("ada-pass-1");
   await ada.getByRole("button", { name: "Save password and continue" }).click();
 
+  await expect(ada.getByRole("heading", { name: "About you" })).toBeVisible();
+  await ada.getByLabel("Your phone number").fill("0803 555 1234");
+  await ada.getByRole("button", { name: "Continue" }).click();
+
   await expect(ada.getByRole("heading", { name: "What do you teach?" })).toBeVisible();
   await expect(ada.getByText("Step 3 of 4")).toBeVisible();
   await ada.getByRole("tab", { name: /Elementary/ }).click();
   await ada.getByRole("button", { name: "Mathematics — Year 4 Gold" }).click();
   await ada.getByRole("button", { name: "Mathematics — Year 5" }).click();
-  await expect(ada.getByText("You've chosen 2 classes across 1 subject.")).toBeVisible();
+  await ada.getByRole("button", { name: "English Language — Year 5" }).click();
+  await expect(ada.getByText("You've chosen 3 classes across 2 subjects.")).toBeVisible();
   await shot(ada, "18-onboarding-subjects");
   await ada.getByRole("button", { name: "Continue" }).click();
 
@@ -497,7 +510,7 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await expect(ada.getByText("Added 3 questions.")).toBeVisible();
   await ada.goto("/dashboard");
   await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("Done")).toBeVisible();
-  await expect(ada.getByText("1 of 2 done")).toBeVisible();
+  await expect(ada.getByText("1 of 3 done")).toBeVisible();
   await shot(ada, "19-dashboard-checklist");
 
   // Staff progress shows her phone and where she is.
@@ -526,9 +539,21 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   expect(raw).toContain("Dear Mrs Ada Bello");
   expect(raw).toContain("Year 4 Gold");
   expect(raw).toContain("Year 5");
+  expect(raw).toContain("English Language");
 
   await ada.goto("/dashboard");
   await expect(ada.getByText("Waiting for approval — you can still upload")).toHaveCount(0);
+
+  // New test: only her subjects, only her year groups, and her classes pre-ticked.
+  await ada.goto("/teach/assessments/new");
+  const subjectSelect = ada.locator(`select[name="subject_id"]`);
+  await expect(subjectSelect.locator("option:not([disabled])")).toHaveText(["English Language (Elementary)", "Mathematics (Elementary)"]);
+  await subjectSelect.selectOption({ label: "Mathematics (Elementary)" });
+  await expect(ada.locator(`select[name="year_id"]`).locator("option:not([disabled])")).toHaveText(["Year 4", "Year 5"]);
+  await ada.locator(`select[name="year_id"]`).selectOption({ label: "Year 4" });
+  await expect(ada.getByLabel("Year 4 Gold")).toBeChecked();
+  await ada.getByRole("button", { name: "Create and add questions" }).click();
+  await expect(ada.getByText(/Mathematics · Year 4 Gold/)).toBeVisible();
   await ctx.close();
 });
 

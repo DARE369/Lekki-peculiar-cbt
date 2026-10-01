@@ -35,8 +35,13 @@ createServer((sock) => {
       if (cmd === "EHLO") sock.write("250-mail-sink\r\n250 AUTH PLAIN LOGIN\r\n");
       else if (cmd === "HELO") say("250 mail-sink");
       else if (cmd === "AUTH") say("235 OK");
-      else if (cmd === "DATA") (data = true), say("354 go ahead");
-      else if (cmd === "QUIT") say("221 bye"), sock.end();
+      else if (cmd === "DATA") {
+        data = true;
+        say("354 go ahead");
+      } else if (cmd === "QUIT") {
+        say("221 bye");
+        sock.end();
+      }
       else say("250 OK");
     }
   });

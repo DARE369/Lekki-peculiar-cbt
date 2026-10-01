@@ -24,8 +24,26 @@ async function signIn(browser: Browser, email: string, password: string) {
   await page.getByLabel("School email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Sign-in lands on /dashboard, which sends first-timers on to /welcome: wait until a page has settled.
+  await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: /^(Welcome,|Good )/ })).toBeVisible();
+  if (/\/welcome/.test(page.url())) await quickOnboarding(page, password);
   await expect(page).toHaveURL(/\/dashboard/);
   return page;
+}
+
+/** First sign-in setup, taking the shortest path (the full flow has its own test). */
+async function quickOnboarding(page: Page, password: string) {
+  await page.getByLabel("Your phone number").fill("0803 000 0000");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL(/step=(password|subjects|section)/);
+  if (page.url().includes("step=password")) {
+    await page.getByLabel("New password").fill(password);
+    await page.getByLabel("Type it again").fill(password);
+    await page.getByRole("button", { name: "Save password and continue" }).click();
+    await page.waitForURL(/step=(subjects|section)/);
+  }
+  if (page.url().includes("step=subjects")) await page.getByRole("link", { name: /Skip for now/ }).click();
+  await page.getByRole("button", { name: "Go to my dashboard" }).click();
 }
 
 test("first-time setup creates the super admin", async ({ page }) => {
@@ -407,8 +425,110 @@ test("bulk add emails each person an invitation with steps for their role", asyn
   const ctx = await browser.newContext();
   const ngozi = await ctx.newPage();
   await ngozi.goto(link);
-  await expect(ngozi).toHaveURL(/\/account\?welcome=1$/);
-  await expect(ngozi.getByText("Welcome, Mrs Ngozi Obi!")).toBeVisible();
+  await expect(ngozi).toHaveURL(/\/welcome$/);
+  await expect(ngozi.getByRole("heading", { name: "Welcome, Ngozi!" })).toBeVisible();
+  await ctx.close();
+});
+
+test("a new teacher is guided through setup, uploads while waiting, and is emailed on approval", async ({ browser }) => {
+  // Super admin: a deadline and a small target, then a new teacher with a temporary password.
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/progress");
+  const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+  await owner.getByLabel("Questions per subject").fill("3");
+  await owner.getByLabel("Elementary").fill(due);
+  await owner.getByRole("button", { name: "Save deadlines" }).click();
+  await expect(owner.getByText("Deadlines saved.")).toBeVisible();
+  await owner.goto("/admin/staff");
+  await owner.getByLabel("Full name").fill("Mrs Ada Bello");
+  await owner.getByLabel("School email").fill("ada@lps.test");
+  await owner.getByRole("button", { name: "Add staff member" }).click();
+  const msg = owner.getByText(/Mrs Ada Bello added. Temporary password: (\S+)/);
+  await expect(msg).toBeVisible();
+  const temp = (await msg.textContent())!.match(/Temporary password: (\S+)/)![1];
+
+  // First sign-in goes straight to the setup screens.
+  const ctx = await browser.newContext();
+  const ada = await ctx.newPage();
+  await ada.goto("/login");
+  await ada.getByLabel("School email").fill("ada@lps.test");
+  await ada.getByLabel("Password").fill(temp);
+  await ada.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(ada).toHaveURL(/\/welcome/);
+  await expect(ada.getByRole("heading", { name: "Welcome, Ada!" })).toBeVisible();
+  await expect(ada.getByText("Step 1 of 4")).toBeVisible();
+  await ada.getByLabel("Your phone number").fill("0803 555 1234");
+  await ada.getByRole("button", { name: "Continue" }).click();
+
+  await expect(ada.getByRole("heading", { name: "Choose your password" })).toBeVisible();
+  await ada.getByLabel("New password").fill("ada-pass-1");
+  await ada.getByLabel("Type it again").fill("ada-pass-2");
+  await ada.getByRole("button", { name: "Save password and continue" }).click();
+  await expect(ada.getByText("The two passwords are not the same.")).toBeVisible();
+  await ada.getByLabel("New password").fill("ada-pass-1");
+  await ada.getByLabel("Type it again").fill("ada-pass-1");
+  await ada.getByRole("button", { name: "Save password and continue" }).click();
+
+  await expect(ada.getByRole("heading", { name: "What do you teach?" })).toBeVisible();
+  await expect(ada.getByText("Step 3 of 4")).toBeVisible();
+  await ada.getByRole("tab", { name: /Elementary/ }).click();
+  await ada.getByRole("button", { name: "Mathematics — Year 4 Gold" }).click();
+  await ada.getByRole("button", { name: "Mathematics — Year 5" }).click();
+  await expect(ada.getByText("You've chosen 2 classes across 1 subject.")).toBeVisible();
+  await shot(ada, "18-onboarding-subjects");
+  await ada.getByRole("button", { name: "Continue" }).click();
+
+  await expect(ada.getByRole("heading", { name: "How to upload your questions" })).toBeVisible();
+  await expect(ada.getByText("Aim for 3 questions")).toBeVisible();
+  await ada.getByRole("button", { name: "Go to my dashboard" }).click();
+  await expect(ada).toHaveURL(/\/dashboard/);
+
+  // Dashboard checklist: waiting for approval, but uploading is allowed.
+  const checklist = ada.locator("div", { has: ada.getByRole("heading", { name: "Your question upload" }) }).first();
+  await expect(ada.getByText("You haven't been assigned any classes yet")).toHaveCount(0);
+  await expect(checklist.getByText("Deadline:")).toBeVisible();
+  await expect(checklist.getByText("Waiting for approval — you can still upload").first()).toBeVisible();
+  await checklist.locator("li", { hasText: "Year 4" }).getByRole("link", { name: "Upload" }).click();
+  await expect(ada.getByLabel("Year group")).toHaveValue(/.+/);
+  const text = Array.from({ length: 3 }, (_, i) => `Ada question ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: A`).join("\n\n");
+  await ada.getByPlaceholder(/What is 2 \+ 2/).fill(text);
+  await ada.getByRole("button", { name: "Check pasted questions" }).click();
+  await ada.getByRole("button", { name: "Import 3 questions" }).click();
+  await expect(ada.getByText("Added 3 questions.")).toBeVisible();
+  await ada.goto("/dashboard");
+  await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("Done")).toBeVisible();
+  await expect(ada.getByText("1 of 2 done")).toBeVisible();
+  await shot(ada, "19-dashboard-checklist");
+
+  // Staff progress shows her phone and where she is.
+  await owner.goto("/admin/progress");
+  const row = owner.getByRole("row", { name: /Mrs Ada Bello/ });
+  await expect(row.getByText("08035551234")).toBeVisible();
+  await expect(row.getByText("Uploading questions")).toBeVisible();
+  await expect(row.getByText("awaiting approval").first()).toBeVisible();
+
+  // Head of Section approves; Ada gets one email listing both classes.
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/assignments");
+  await hod.getByRole("button", { name: "Approve ticked" }).click();
+  await expect(hod.getByText("No requests waiting")).toBeVisible();
+  const mailDir = "/var/tmp/sblogs/mail";
+  await expect
+    .poll(() => readdirSync(mailDir).some((f) => /^To: .*ada@lps\.test/mi.test(readFileSync(`${mailDir}/${f}`, "utf8"))), { timeout: 15_000 })
+    .toBe(true);
+  const raw = readdirSync(mailDir)
+    .map((f) => readFileSync(`${mailDir}/${f}`, "utf8"))
+    .filter((m) => /^To: .*ada@lps\.test/mi.test(m))
+    .join("\n")
+    .replace(/=\r?\n/g, "")
+    .replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  expect(raw).toMatch(/Subject: .*approved/i);
+  expect(raw).toContain("Dear Mrs Ada Bello");
+  expect(raw).toContain("Year 4 Gold");
+  expect(raw).toContain("Year 5");
+
+  await ada.goto("/dashboard");
+  await expect(ada.getByText("Waiting for approval — you can still upload")).toHaveCount(0);
   await ctx.close();
 });
 

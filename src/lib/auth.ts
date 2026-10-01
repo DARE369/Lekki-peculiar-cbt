@@ -15,6 +15,10 @@ export interface StaffContext {
   permissions: Set<Permission>;
   isSuperAdmin: boolean;
   isAdmin: boolean;
+  phone: string | null;
+  /** Null until the person finishes the first-time setup at /welcome. */
+  onboardedAt: string | null;
+  needsPassword: boolean;
 }
 
 /** The signed-in staff member for this request, or null. Cached per request. */
@@ -26,7 +30,7 @@ export const getStaff = cache(async (): Promise<StaffContext | null> => {
   if (!user) return null;
 
   const [{ data: staff }, { data: perms }, { data: sections }] = await Promise.all([
-    supabase.from("staff").select("id,email,full_name,role,school_id,active").eq("id", user.id).maybeSingle(),
+    supabase.from("staff").select("id,email,full_name,role,school_id,active,phone,onboarded_at,needs_password").eq("id", user.id).maybeSingle(),
     supabase.from("staff_permissions").select("permission").eq("staff_id", user.id),
     supabase.from("admin_sections").select("section_id").eq("staff_id", user.id),
   ]);
@@ -48,6 +52,9 @@ export const getStaff = cache(async (): Promise<StaffContext | null> => {
     permissions,
     isSuperAdmin,
     isAdmin: isSuperAdmin || staff.role === "admin",
+    phone: staff.phone ?? null,
+    onboardedAt: staff.onboarded_at ?? null,
+    needsPassword: staff.needs_password ?? false,
   };
 });
 
@@ -61,6 +68,11 @@ export async function requireStaff(): Promise<StaffContext> {
     redirect(user ? "/no-access" : "/login");
   }
   return staff;
+}
+
+/** True when the person still has to go through the first-time setup screens. */
+export function needsOnboarding(staff: StaffContext) {
+  return !staff.onboardedAt && !staff.isSuperAdmin;
 }
 
 export async function requireAdmin(): Promise<StaffContext> {

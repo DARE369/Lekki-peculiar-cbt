@@ -28,7 +28,7 @@ export async function setupSuperAdmin(_: ActionResult, fd: FormData): Promise<Ac
 
   const { error: staffError } = await admin
     .from("staff")
-    .insert({ id: created.user.id, school_id: school.id, email, full_name: fullName, role: "super_admin" });
+    .insert({ id: created.user.id, school_id: school.id, email, full_name: fullName, role: "super_admin", onboarded_at: new Date().toISOString(), needs_password: false });
   if (staffError) return fail(staffError);
   await admin.from("audit_log").insert({ actor_id: created.user.id, action: "setup.super_admin", entity: "staff", entity_id: created.user.id });
 

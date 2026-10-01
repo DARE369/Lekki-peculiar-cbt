@@ -4,14 +4,18 @@ import type { Structure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import type { Subject } from "@/lib/types";
 
-/** Subjects this staff member can set questions for: ones they teach, plus their sections if admin. */
-export async function teachableSubjects(staff: StaffContext, s: Structure): Promise<Subject[]> {
+/**
+ * Subjects this staff member works with: ones they teach, plus their sections if admin.
+ * With includeRequested, also subjects still waiting for approval — teachers may add questions
+ * for those straight away (building tests still needs approval).
+ */
+export async function teachableSubjects(staff: StaffContext, s: Structure, opts: { includeRequested?: boolean } = {}): Promise<Subject[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("teaching_assignments")
     .select("subject_id")
     .eq("teacher_id", staff.id)
-    .eq("status", "approved");
+    .in("status", opts.includeRequested ? ["approved", "requested"] : ["approved"]);
   const ids = new Set((data ?? []).map((r) => r.subject_id as string));
   const cbtSectionIds = new Set(s.sections.filter((x) => x.cbt_enabled).map((x) => x.id));
   return s.subjects.filter(

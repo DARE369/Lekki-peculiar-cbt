@@ -22,6 +22,7 @@ import {
   UsersRound,
   X,
   type LucideIcon,
+  ListChecks,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
@@ -37,6 +38,7 @@ const ICONS = {
   exams: CalendarClock,
   students: GraduationCap,
   assignments: Users,
+  progress: ListChecks,
   structure: School,
   terminals: MonitorSmartphone,
   audit: ScrollText,

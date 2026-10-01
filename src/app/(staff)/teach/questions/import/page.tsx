@@ -13,7 +13,7 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
   const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
-  const subjects = await teachableSubjects(staff, s);
+  const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   let subjectId = typeof sp.subject === "string" ? sp.subject : undefined;
   const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
   if (assessmentId) {
@@ -34,7 +34,13 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
           <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>} />
         </Card>
       ) : (
-        <ImportWizard subjects={subjects} years={s.years} defaultSubject={subjectId} assessmentId={assessmentId} />
+        <ImportWizard
+          subjects={subjects}
+          years={s.years}
+          defaultSubject={subjectId}
+          defaultYear={typeof sp.year === "string" ? sp.year : undefined}
+          assessmentId={assessmentId}
+        />
       )}
     </div>
   );

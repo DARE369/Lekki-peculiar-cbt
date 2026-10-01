@@ -2,10 +2,12 @@
 
 import { createHash, randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { requireAdmin, can } from "@/lib/auth";
 import { bool, fail, int, ok, str, type ActionResult } from "@/lib/actions";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { notifyAssessmentReview, notifyAssignmentDecisions } from "@/lib/notify";
 import { lagosLocalToIso } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +24,7 @@ export async function reviewAssessment(_: ActionResult, fd: FormData): Promise<A
     if (!note) return fail("Tell the teacher what to change.");
     const { error } = await supabase.rpc("review_assessment", { p_assessment: id, p_approve: false, p_note: note });
     if (error) return fail(error);
+    after(() => notifyAssessmentReview(id, false, note));
     revalidatePath("/admin/approvals");
     redirect("/admin/approvals");
   }
@@ -32,6 +35,7 @@ export async function reviewAssessment(_: ActionResult, fd: FormData): Promise<A
 
   const { error } = await supabase.rpc("review_assessment", { p_assessment: id, p_approve: true, p_note: note });
   if (error) return fail(error);
+  after(() => notifyAssessmentReview(id, true, note));
   for (const r of rows) {
     const { error: e } = await supabase.rpc("schedule_window", {
       p_assessment: id,
@@ -189,10 +193,15 @@ export async function decideAssignment(fd: FormData) {
   await requireAdmin();
   const supabase = await createClient();
   const ids = fd.getAll("id").map(String);
+  const decided: string[] = [];
   for (const id of ids) {
-    await supabase.rpc("decide_assignment", { p_assignment: id, p_approve: str(fd, "decision") === "approve" });
+    const { error } = await supabase.rpc("decide_assignment", { p_assignment: id, p_approve: str(fd, "decision") === "approve" });
+    if (!error) decided.push(id);
   }
+  // One email per teacher, sent after the page has responded.
+  after(() => notifyAssignmentDecisions(decided));
   revalidatePath("/admin/assignments");
+  revalidatePath("/admin/progress");
 }
 
 export async function assignTeacher(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -203,7 +212,7 @@ export async function assignTeacher(_: ActionResult, fd: FormData): Promise<Acti
   if (!sess) return fail("No current session.");
   const classIds = fd.getAll("class_id").map(String);
   if (!classIds.length) return fail("Tick at least one class.");
-  const { error } = await supabase.from("teaching_assignments").upsert(
+  const { data, error } = await supabase.from("teaching_assignments").upsert(
     classIds.map((c) => ({
       teacher_id: str(fd, "teacher_id"),
       subject_id: str(fd, "subject_id"),
@@ -214,10 +223,11 @@ export async function assignTeacher(_: ActionResult, fd: FormData): Promise<Acti
       decided_at: new Date().toISOString(),
     })),
     { onConflict: "teacher_id,subject_id,class_id,session_id" },
-  );
+  ).select("id");
   if (error) return fail(error);
+  after(() => notifyAssignmentDecisions((data ?? []).map((r) => r.id)));
   revalidatePath("/admin/assignments");
-  return ok("Assigned.");
+  return ok("Assigned. The teacher will get an email.");
 }
 
 export async function removeAssignment(fd: FormData) {

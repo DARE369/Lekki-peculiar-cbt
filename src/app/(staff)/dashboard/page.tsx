@@ -19,7 +19,9 @@ import { Badge, Card, CardHeader, EmptyState, LinkButton, Stat, cn } from "@/com
 import { can, requireStaff } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
+import { getQuestionSettings, getUploadProgress } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
+import { UploadChecklist } from "./upload-checklist";
 import type { AssessmentStatus, AssessmentType } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -40,6 +42,9 @@ export default async function Dashboard() {
   const now = new Date();
   const dayStart = new Date(now.getTime() - 12 * 3600_000).toISOString();
   const weekAhead = new Date(now.getTime() + 7 * 24 * 3600_000).toISOString();
+
+  const [settings, myProgress] = await Promise.all([getQuestionSettings(), getUploadProgress(s, staff.id)]);
+  const showChecklist = !staff.isSuperAdmin && (staff.role === "teacher" || myProgress.length > 0);
 
   const [assignments, mine, windows, pending] = await Promise.all([
     supabase
@@ -145,6 +150,10 @@ export default async function Dashboard() {
         </div>
       </section>
 
+      {showChecklist ? (
+        <UploadChecklist rows={myProgress} s={s} perSubject={settings.perSubject} fallbackDeadline={settings.defaultDeadline} />
+      ) : null}
+
       {/* Quick actions */}
       <section aria-label="Quick actions" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {actions.slice(0, 4).map(({ href, label, hint, icon: Icon, count }) => (
@@ -187,7 +196,7 @@ export default async function Dashboard() {
         />
       </section>
 
-      {!staff.isAdmin && approved.length === 0 ? (
+      {!staff.isAdmin && approved.length === 0 && !showChecklist ? (
         <Card>
           <EmptyState
             icon={UsersRound}

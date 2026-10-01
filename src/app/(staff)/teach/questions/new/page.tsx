@@ -12,7 +12,7 @@ export default async function NewQuestion(props: PageProps<"/teach/questions/new
   const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
-  const subjects = await teachableSubjects(staff, s);
+  const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   const subjectId = typeof sp.subject === "string" ? sp.subject : undefined;
   const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
   const sectionIds = new Set(subjects.map((x) => x.section_id));

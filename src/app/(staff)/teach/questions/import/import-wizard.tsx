@@ -11,16 +11,18 @@ export function ImportWizard({
   subjects,
   years,
   defaultSubject,
+  defaultYear,
   assessmentId,
 }: {
   subjects: Subject[];
   years: Year[];
   defaultSubject?: string;
+  defaultYear?: string;
   assessmentId?: string;
 }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(defaultSubject ?? subjects[0]?.id ?? "");
-  const [yearId, setYearId] = useState("");
+  const [yearId, setYearId] = useState(defaultYear ?? "");
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -96,7 +98,7 @@ export function ImportWizard({
               ))}
             </Select>
           </Field>
-          <Field label="Year group (optional)">
+          <Field label="Year group" hint="Pick the year so these questions count towards your target.">
             <Select value={yearId} onChange={(e) => setYearId(e.target.value)}>
               <option value="">Any year</option>
               {sectionYears.map((y) => (

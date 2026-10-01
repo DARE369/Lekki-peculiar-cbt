@@ -17,7 +17,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
-  const subjects = await teachableSubjects(staff, s);
+  const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   const subjectId = typeof sp.subject === "string" && subjects.some((x) => x.id === sp.subject) ? sp.subject : subjects[0]?.id;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const topic = typeof sp.topic === "string" ? sp.topic : "";
@@ -56,7 +56,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
       {subjects.length === 0 ? (
         <Card>
           <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>}>
-            You can set questions once your Head of Section approves the subjects you teach.
+            Choose the subjects and classes you teach first — you can start adding questions straight away.
           </EmptyState>
         </Card>
       ) : (

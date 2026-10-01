@@ -5,7 +5,7 @@ import { Alert, Badge, Card, CardHeader, Field, Input, PageHeader } from "@/comp
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { PERMISSIONS } from "@/lib/types";
-import { changePassword } from "./actions";
+import { changePassword, updatePhone } from "./actions";
 
 export const metadata: Metadata = { title: "My account" };
 
@@ -44,13 +44,22 @@ export default async function AccountPage(props: PageProps<"/account">) {
         </div>
       </Card>
       <Card>
+        <CardHeader title="Phone number" description="So the school can reach you about questions and exams." />
+        <ActionForm action={updatePhone} className="flex flex-wrap items-end gap-3 p-5">
+          <Field label="Phone" className="min-w-56 flex-1">
+            <Input name="phone" type="tel" inputMode="tel" defaultValue={staff.phone ?? ""} placeholder="0803 123 4567" required />
+          </Field>
+          <SubmitButton variant="secondary">Save</SubmitButton>
+        </ActionForm>
+      </Card>
+      <Card>
         <CardHeader title="Change password" />
         <ActionForm action={changePassword} className="space-y-4 p-5" resetOnSuccess>
           <Field label="New password">
-            <Input name="password" type="password" minLength={10} required autoComplete="new-password" />
+            <Input name="password" type="password" minLength={8} required autoComplete="new-password" />
           </Field>
           <Field label="Confirm new password">
-            <Input name="confirm" type="password" minLength={10} required autoComplete="new-password" />
+            <Input name="confirm" type="password" minLength={8} required autoComplete="new-password" />
           </Field>
           <SubmitButton>Update password</SubmitButton>
         </ActionForm>

@@ -35,6 +35,8 @@ export interface Section {
   cbt_enabled: boolean;
   logo_url: string | null;
   sort: number;
+  /** Overrides the school's question deadline for this section's subjects. */
+  question_deadline: string | null;
 }
 export interface Year {
   id: string;

@@ -17,7 +17,7 @@ export default async function EditQuestion(props: PageProps<"/teach/questions/[i
   const supabase = await createClient();
   const { data: q } = await supabase.from("questions").select("*").eq("id", id).maybeSingle();
   if (!q) notFound();
-  const subjects = await teachableSubjects(staff, s);
+  const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   const allSubjects = subjects.some((x) => x.id === q.subject_id) ? subjects : [...subjects, s.subjectById.get(q.subject_id)!];
   const canEdit = q.owner_id === staff.id || staff.isAdmin;
   return (

@@ -1,9 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ReactNode } from "react";
+import { createContext, startTransition, useActionState, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionResult } from "@/lib/actions";
 import { Alert, buttonClass } from "@/components/ui";
+
+/** Pending state of the surrounding ActionForm (which submits without React's automatic form reset). */
+const ActionPending = createContext(false);
 
 export function SubmitButton({
   children,
@@ -17,14 +20,16 @@ export function SubmitButton({
 }: {
   children: ReactNode;
   pendingText?: string;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "accent" | "soft";
   size?: "sm" | "md" | "lg";
   className?: string;
   confirm?: string;
   name?: string;
   value?: string;
 }) {
-  const { pending } = useFormStatus();
+  const { pending: formPending } = useFormStatus();
+  const actionPending = useContext(ActionPending);
+  const pending = formPending || actionPending;
   return (
     <button
       type="submit"
@@ -41,7 +46,13 @@ export function SubmitButton({
   );
 }
 
-/** A form bound to a server action returning ActionResult; shows the outcome inline. */
+/**
+ * A form bound to a server action returning ActionResult; shows the outcome inline.
+ *
+ * Submits through onSubmit rather than <form action>, because React resets a form's fields
+ * after every action — which wiped what people had typed whenever something failed. Fields are
+ * now kept on error and cleared only on success when resetOnSuccess is set.
+ */
 export function ActionForm({
   action,
   children,
@@ -55,24 +66,35 @@ export function ActionForm({
   resetOnSuccess?: boolean;
   hideSuccess?: boolean;
 }) {
-  const [state, formAction] = useActionState(action, null);
+  const [state, dispatch, pending] = useActionState(action, null);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok && resetOnSuccess) ref.current?.reset();
   }, [state, resetOnSuccess]);
   return (
-    <form ref={ref} action={formAction} className={className}>
-      {children}
-      {state && !state.ok ? (
-        <div className="mt-3">
-          <Alert tone="danger">{state.error}</Alert>
-        </div>
-      ) : null}
-      {state?.ok && state.message && !hideSuccess ? (
-        <div className="mt-3">
-          <Alert tone="success">{state.message}</Alert>
-        </div>
-      ) : null}
+    <form
+      ref={ref}
+      className={className}
+      onSubmit={(e) => {
+        e.preventDefault();
+        // Include the clicked button's name/value (e.g. "decision=approve").
+        const fd = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+        startTransition(() => dispatch(fd));
+      }}
+    >
+      <ActionPending.Provider value={pending}>
+        {children}
+        {state && !state.ok ? (
+          <div className="mt-3">
+            <Alert tone="danger">{state.error}</Alert>
+          </div>
+        ) : null}
+        {state?.ok && state.message && !hideSuccess ? (
+          <div className="mt-3">
+            <Alert tone="success">{state.message}</Alert>
+          </div>
+        ) : null}
+      </ActionPending.Provider>
     </form>
   );
 }

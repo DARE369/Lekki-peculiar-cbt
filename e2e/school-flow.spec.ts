@@ -57,6 +57,14 @@ test("super admin adds a Head of Section and a teacher", async ({ browser }) => 
   const msg2 = page.getByText(/Mr Dixon added. Temporary password: (\S+)/);
   await expect(msg2).toBeVisible();
   teacherPassword = (await msg2.textContent())!.match(/Temporary password: (\S+)/)![1];
+
+  // A failed submission keeps what was typed (React would otherwise reset the form).
+  await page.getByLabel("Full name").fill("Mr Dixon Again");
+  await page.getByLabel("School email").fill("dixon@lps.test");
+  await page.getByRole("button", { name: "Add staff member" }).click();
+  await expect(page.getByText(/already belongs to a staff member/)).toBeVisible();
+  await expect(page.getByLabel("Full name")).toHaveValue("Mr Dixon Again");
+  await expect(page.getByLabel("School email")).toHaveValue("dixon@lps.test");
   await shot(page, "01-staff");
 });
 

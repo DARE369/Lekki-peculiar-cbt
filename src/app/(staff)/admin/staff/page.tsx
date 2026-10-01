@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { UserCog } from "lucide-react";
+import { Mail, UserCog } from "lucide-react";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Table, Td, Th } from "@/components/ui";
@@ -8,7 +8,7 @@ import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { PERMISSIONS, type Permission } from "@/lib/types";
 import { AccessFields } from "./access-fields";
-import { createStaff } from "./actions";
+import { createStaff, sendTestEmail } from "./actions";
 
 export const metadata: Metadata = { title: "Staff & permissions" };
 
@@ -69,6 +69,18 @@ export default async function StaffPage() {
             })}
           </tbody>
         </Table>
+      </Card>
+      <Card>
+        <CardHeader
+          icon={Mail}
+          title="Email delivery"
+          description="Invitations, email sign-in links and password resets use the SMTP settings in Supabase. Send yourself a test to check they work."
+        />
+        <ActionForm action={sendTestEmail} className="p-5">
+          <SubmitButton variant="secondary" pendingText="Sending…">
+            Send me a test email
+          </SubmitButton>
+        </ActionForm>
       </Card>
       <Card>
         <CardHeader title="Add a staff member" />

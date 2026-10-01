@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
   } else if (tokenHash && type) {
     ({ error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type }));
   } else {
-    error = new Error("missing code");
+    // Supabase's default email links (invites, magic links, resets) put the session in the URL fragment
+    // (#access_token=…), which never reaches the server. The browser keeps the fragment across this
+    // redirect, and /auth/confirm finishes sign-in from there.
+    return to(`/auth/confirm?next=${encodeURIComponent(next)}`);
   }
   if (error) return to("/login?error=link");
 

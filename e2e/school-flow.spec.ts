@@ -1,5 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import ExcelJS from "exceljs";
+import { readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
 
 // Walks the whole school workflow on a fresh database:
 // setup → staff → class → students → questions → approval → lab PC → exam (with an outage) → reports.
@@ -376,4 +378,31 @@ test("staff can start Google sign-in; non-staff Google accounts are turned away"
   await page.goto("/auth/callback?error=access_denied&error_description=Signups+not+allowed+for+this+instance");
   await expect(page).toHaveURL(/\/login\?error=not-staff/);
   await expect(page.getByText("That Google account isn't on the staff list.")).toBeVisible();
+});
+
+test("links from Supabase emails (invite, magic link, reset) sign the person in", async ({ page }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  // Same kind of link Supabase emails by default: /auth/v1/verify → redirect with the session in the #fragment.
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email: OWNER.email,
+    options: { redirectTo: "http://localhost:3000/auth/callback?next=/account" },
+  });
+  expect(error).toBeNull();
+  // The local auth server leaves out the /auth/v1 prefix that hosted Supabase includes.
+  const link = data.properties!.action_link.replace(/:54321\/verify/, ":54321/auth/v1/verify");
+  await page.goto(link);
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByText(OWNER.email).first()).toBeVisible();
+
+  // The same link a second time is refused with a clear message.
+  await page.context().clearCookies();
+  await page.goto(link);
+  await expect(page.getByText("This link has expired or was already used.")).toBeVisible();
 });

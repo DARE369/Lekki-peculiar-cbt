@@ -22,18 +22,29 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     pendingAssignments = can(staff, "teachers.manage") ? (t.count ?? 0) : 0;
   }
 
-  const groups: NavGroup[] = [
-    {
-      title: "Teaching",
-      items: [
-        { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-        { href: "/teach/classes", label: "My classes", icon: "classes" },
-        { href: "/teach/questions", label: "Question bank", icon: "questions" },
-        { href: "/teach/assessments", label: "Tests & exams", icon: "tests" },
-        { href: "/reports", label: "Reports", icon: "reports" },
-      ],
-    },
-  ];
+  // The super admin runs the school rather than teaching, so they get no Teaching menu.
+  const groups: NavGroup[] = staff.isSuperAdmin
+    ? [
+        {
+          title: "Overview",
+          items: [
+            { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+            { href: "/reports", label: "Reports", icon: "reports" },
+          ],
+        },
+      ]
+    : [
+        {
+          title: "Teaching",
+          items: [
+            { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+            { href: "/teach/classes", label: "My classes", icon: "classes" },
+            { href: "/teach/questions", label: "Question bank", icon: "questions" },
+            { href: "/teach/assessments", label: "Tests & exams", icon: "tests" },
+            { href: "/reports", label: "Reports", icon: "reports" },
+          ],
+        },
+      ];
   if (staff.isAdmin) {
     const admin: NavGroup = { title: "Administration", items: [] };
     if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/approvals", label: "Approvals", icon: "approvals", badge: pendingApprovals });

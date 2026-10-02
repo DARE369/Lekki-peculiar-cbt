@@ -21,6 +21,7 @@ import {
   Th,
 } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
+import { flagLabel } from "@/lib/readiness";
 import { requireStaff } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
@@ -28,9 +29,12 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
 import {
   addQuestionsToAssessment,
+  beginCorrection,
+  cancelCorrection,
   deleteAssessment,
   duplicateAssessment,
   removeQuestionFromAssessment,
+  submitCorrections,
   submitForApproval,
   updateAssessmentSettings,
   withdrawSubmission,
@@ -56,11 +60,12 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   if (!a) notFound();
 
   const settings: AssessmentSettings = { ...DEFAULT_SETTINGS, ...(a.settings ?? {}) };
-  const editable = (a.status === "draft" || a.status === "changes_requested") && (a.created_by === staff.id || staff.isAdmin);
+  const amending = a.status === "approved" && Boolean(a.amending);
+  const editable = (a.status === "draft" || a.status === "changes_requested" || amending) && (a.created_by === staff.id || staff.isAdmin);
   const topicFilter = typeof sp.topic === "string" ? sp.topic : "";
 
   let selected: Q[] = [];
-  if (a.paper) {
+  if (a.paper && !amending) {
     selected = a.paper.questions as Q[];
   } else {
     const { data } = await supabase
@@ -156,13 +161,52 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
           ) : null}
         </Alert>
       ) : null}
-      {a.status === "approved" ? (
+      {a.status === "approved" && a.flag_status === "open" ? (
+        <Alert tone="warning" title={amending ? "You are correcting this test" : "Approved, but it needs a second look"}>
+          <strong>{flagLabel(a.flag_category)}</strong>
+          {a.flag_note ? ` — ${a.flag_note}` : ""}
+          {amending ? (
+            <span className="mt-1 block">
+              {a.corrections_submitted_at
+                ? "You sent your corrections. Your Head of Section will accept them; until then the approved version stays in use."
+                : "Change the questions below, then press Send corrections. The approved version stays in use until your Head of Section accepts them."}
+            </span>
+          ) : a.created_by === staff.id ? (
+            <form action={beginCorrection} className="mt-2">
+              <input type="hidden" name="id" value={a.id} />
+              <SubmitButton size="sm">Correct this test</SubmitButton>
+            </form>
+          ) : null}
+        </Alert>
+      ) : a.status === "approved" ? (
         <Alert tone="success" title="Approved">
           The questions are locked. {a.review_note ? `Note from reviewer: ${a.review_note}` : ""}
         </Alert>
       ) : null}
+      {typeof sp.error === "string" ? <Alert tone="danger">{sp.error}</Alert> : null}
 
-      {editable ? (
+      {amending ? (
+        <Card>
+          <CardHeader
+            title="Done correcting?"
+            description={enough ? "Send your corrections to your Head of Section." : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} first (you have ${selected.length} of ${a.question_count}).`}
+            actions={
+              <>
+                <ActionForm action={submitCorrections}>
+                  <input type="hidden" name="id" value={a.id} />
+                  <SubmitButton pendingText="Sending…">Send corrections</SubmitButton>
+                </ActionForm>
+                <form action={cancelCorrection}>
+                  <input type="hidden" name="id" value={a.id} />
+                  <SubmitButton variant="ghost" confirm="Stop correcting? The approved version stays exactly as it was.">
+                    Stop correcting
+                  </SubmitButton>
+                </form>
+              </>
+            }
+          />
+        </Card>
+      ) : editable ? (
         <Card>
           <CardHeader
             title="Ready to submit?"
@@ -190,7 +234,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
           <Card>
             <CardHeader
               title={`Questions (${selected.length})`}
-              description={a.paper ? "Frozen copy used for this exam." : "In the order you added them. Students see them shuffled if shuffling is on."}
+              description={amending ? "Your working copy. The approved version stays in use until corrections are accepted." : a.paper ? "Frozen copy used for this exam." : "In the order you added them. Students see them shuffled if shuffling is on."}
               actions={
                 editable ? (
                   <>
@@ -296,10 +340,10 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
 
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Settings" description={editable ? undefined : "Locked while submitted or approved."} />
+            <CardHeader title="Settings" description={amending ? "Settings stay as approved while you correct the questions." : editable ? undefined : "Locked while submitted or approved."} />
             <ActionForm action={updateAssessmentSettings} className="space-y-4 p-5">
               <input type="hidden" name="id" value={a.id} />
-              <fieldset disabled={!editable} className="space-y-4">
+              <fieldset disabled={!editable || amending} className="space-y-4">
                 <Field label="Title">
                   <Input name="title" defaultValue={a.title} required />
                 </Field>

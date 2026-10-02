@@ -2,6 +2,7 @@ import "server-only";
 import { getStructure } from "@/lib/data";
 import { emailLayout, escapeHtml as esc, sendMail } from "@/lib/mail";
 import { deadlineForSection, formatDeadline, getQuestionSettings } from "@/lib/onboarding";
+import { flagLabel } from "@/lib/readiness";
 import { siteOrigin } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -99,5 +100,72 @@ export async function notifyAssessmentReview(assessmentId: string, approved: boo
     );
   } catch (e) {
     console.error("notifyAssessmentReview failed:", e);
+  }
+}
+
+export interface BulkDecision {
+  id: string;
+  action: "approve" | "flag" | "send_back";
+  category?: string;
+  note?: string;
+}
+
+/** One email per teacher covering everything decided in a bulk review: approved, approved with a flag, sent back. Never throws. */
+export async function notifyBulkReview(decisions: BulkDecision[]) {
+  try {
+    if (decisions.length === 0) return;
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("assessments")
+      .select("id, title, subject_id, created_by, staff:created_by(full_name, email)")
+      .in("id", decisions.map((d) => d.id));
+    type Row = { id: string; title: string; subject_id: string; created_by: string; staff: { full_name: string; email: string } | null };
+    const rows = (data ?? []) as unknown as Row[];
+    const s = await getStructure();
+    const site = await siteOrigin();
+    const byTeacher = new Map<string, { who: NonNullable<Row["staff"]>; items: { row: Row; d: BulkDecision }[] }>();
+    for (const row of rows) {
+      const d = decisions.find((x) => x.id === row.id);
+      if (!d || !row.staff?.email) continue;
+      const entry = byTeacher.get(row.created_by) ?? { who: row.staff, items: [] };
+      entry.items.push({ row, d });
+      byTeacher.set(row.created_by, entry);
+    }
+    for (const { who, items } of byTeacher.values()) {
+      const label = (r: Row) => `<strong>${esc(r.title)}</strong> <span style="color:#6b7280">(${esc(s.subjectById.get(r.subject_id)?.name ?? "")})</span>`;
+      const list = (xs: { row: Row; d: BulkDecision }[], extra: (d: BulkDecision) => string) =>
+        `<ul style="margin:8px 0 0;padding-left:20px">${xs.map(({ row, d }) => `<li style="margin:6px 0">${label(row)}${extra(d)}</li>`).join("")}</ul>`;
+      const approved = items.filter((i) => i.d.action === "approve");
+      const flagged = items.filter((i) => i.d.action === "flag");
+      const back = items.filter((i) => i.d.action === "send_back");
+      let body = `<p style="margin:0 0 14px">Dear ${esc(who.full_name)},</p>`;
+      if (approved.length) body += `<p style="margin:0">These tests are <strong>approved</strong>:</p>${list(approved, () => "")}`;
+      if (flagged.length) {
+        body += `<p style="margin:${approved.length ? "18px" : "0"} 0 0">These are <strong>approved, but need a second look</strong>. Please open each one and correct what is mentioned:</p>${list(
+          flagged,
+          (d) => `<br><span style="color:#92400e">${esc(flagLabel(d.category))}${d.note ? ` — ${esc(d.note)}` : ""}</span>`,
+        )}`;
+      }
+      if (back.length) {
+        body += `<p style="margin:${approved.length || flagged.length ? "18px" : "0"} 0 0">These were <strong>sent back</strong> for changes:</p>${list(
+          back,
+          (d) => (d.note ? `<br><span style="color:#b91c1c">${esc(d.note)}</span>` : ""),
+        )}`;
+      }
+      body += `<p style="margin:16px 0 0">Open Peculiar CBT to see them.</p>`;
+      await sendMail(
+        who.email,
+        `${flagged.length || back.length ? "Your tests were reviewed — action needed" : "Your tests are approved"} — Peculiar CBT`,
+        emailLayout({
+          siteUrl: site,
+          badge: flagged.length || back.length ? "Action needed" : "Approved",
+          title: flagged.length || back.length ? "Your tests were reviewed" : "Your tests are approved",
+          body,
+          button: { label: "Open my tests", href: `${site}/dashboard` },
+        }),
+      );
+    }
+  } catch (e) {
+    console.error("notifyBulkReview failed:", e);
   }
 }

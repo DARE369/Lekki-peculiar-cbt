@@ -118,7 +118,7 @@ Before inviting, open **Staff progress** as super admin: the **Before you invite
   | `SMTP_FROM` | `Lekki Peculiar School <peace.denise@peculiarschools.com>` (optional) |
 
   Without them the app works normally and simply doesn't send these emails.
-- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` then `supabase/migrations/20261003000100_assessment_classes.sql` `supabase/migrations/20261004000100_mock_test.sql`, `supabase/migrations/20261005000100_restore_subjects.sql` (brings back every retired subject) and `supabase/migrations/20261006000100_staff_sections.sql` (teachers belong to one section; Heads of Section only see their own section's staff) in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
+- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` then `supabase/migrations/20261003000100_assessment_classes.sql` `supabase/migrations/20261004000100_mock_test.sql`, `supabase/migrations/20261005000100_restore_subjects.sql` (brings back every retired subject) and `supabase/migrations/20261006000100_staff_sections.sql` (teachers belong to one section; Heads of Section only see their own section's staff) `supabase/migrations/20261007000100_bulk_review.sql` (bulk approval, flags and corrections after approval) in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
 
 ## Maintenance
 
@@ -141,3 +141,17 @@ Heads of Section see only the staff of their own section(s), in **My staff** (vi
 ## Pasting questions
 
 **Upload questions → Copy and paste** reads JSON or plain text as you paste it, and tidies the usual damage from copying (curly quotation marks, ```json code fences, chat text around the questions, missing or extra commas, cut-off text). **Copy instructions for the AI** gives teachers a ready-made prompt for ChatGPT whose answer can be pasted straight back.
+
+## Approvals in bulk
+
+**Administration → Approvals** shows every test set for the Head of Section's classes in one place (the super admin sees the whole school). Each test is checked automatically and marked **Ready**, **Has warnings** or **Needs fixing**:
+
+- *Needs fixing* (can't be approved, only sent back): fewer questions than the test needs, a question with no valid answer, an empty question or option.
+- *Warnings* (the reviewer decides): repeated questions, a lopsided answer key, too little or too much time per question, every student getting the same paper, no topics, an exam that shows answers straight after, heavy overlap with other tests.
+- *Class readiness*: whether each class has students, how many have no photo, whether the teacher is approved for it, and exam-day clashes. This never blocks approval.
+
+Group the list **by class, subject, teacher, type or readiness**. Ready tests are pre-selected for approval; for each test choose **Approve**, **Approve, but flag for a second look** (pick a reason, add a note) or **Send back for changes**. **Review and finish** shows a summary first, then applies everything in one go; each teacher gets one email. A test that fails (for example, someone else approved it meanwhile) is reported and the rest still go through.
+
+A **flagged** test is approved and frozen, but the teacher is asked to correct it: they press **Correct this test**, change the questions, and **Send corrections**. The approved version stays in use until the Head of Section presses **Accept the corrections** (or **Close the flag**). Corrections are only possible until a student has started the test; after that, use *Fix answer key* in Reports. Flagged tests can't be set to start automatically.
+
+The super admin's **Dashboard** is the school overview: tests by stage, what needs attention (slow approvals, old flags, teachers past the deadline, classes with no test), each section's progress, exams live or coming up, and a class-by-subject coverage map. The super admin has no Teaching menu.

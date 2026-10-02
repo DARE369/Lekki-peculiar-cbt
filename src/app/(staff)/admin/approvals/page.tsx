@@ -1,96 +1,37 @@
 import type { Metadata } from "next";
 import { ClipboardCheck } from "lucide-react";
-import Link from "next/link";
-import { Badge, Card, CardHeader, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui";
-import { requireAdmin } from "@/lib/auth";
-import { formatDateTime, getStructure } from "@/lib/data";
-import { TYPE_LABEL } from "@/lib/labels";
-import { createClient } from "@/lib/supabase/server";
-import type { AssessmentType } from "@/lib/types";
+import { Alert, PageHeader } from "@/components/ui";
+import { can, requireAdmin } from "@/lib/auth";
+import { getStructure } from "@/lib/data";
+import { loadReviewTests } from "@/lib/review-data";
+import { ReviewBoard } from "./review-board";
 
 export const metadata: Metadata = { title: "Approvals" };
 
-export default async function Approvals() {
-  await requireAdmin();
+export default async function Approvals(props: PageProps<"/admin/approvals">) {
+  const staff = await requireAdmin();
+  const sp = await props.searchParams;
   const s = await getStructure();
-  const supabase = await createClient();
-  const [{ data: pending }, { data: approved }] = await Promise.all([
-    supabase
-      .from("assessments")
-      .select("id, title, type, subject_id, year_id, question_count, duration_minutes, submitted_at, staff:created_by(full_name)")
-      .eq("status", "pending_approval")
-      .order("submitted_at"),
-    supabase
-      .from("assessments")
-      .select("id, title, type, subject_id, year_id, reviewed_at, exam_windows(id)")
-      .eq("status", "approved")
-      .order("reviewed_at", { ascending: false })
-      .limit(100),
-  ]);
-  const unscheduled = (approved ?? []).filter((a) => ((a.exam_windows as unknown[]) ?? []).length === 0);
+  const tests = await loadReviewTests(s);
+
+  const classOrder = s.classes.filter((c) => c.active).map((c) => c.id);
+  const names = {
+    subjects: Object.fromEntries(s.subjects.map((x) => [x.id, x.name])),
+    years: Object.fromEntries(s.years.map((y) => [y.id, y.name])),
+    classes: Object.fromEntries(s.classes.map((c) => [c.id, c.name])),
+    classOrder,
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        icon={ClipboardCheck} title="Approvals" description="Check each test, then approve it and set the date for each class. Nobody can sit a test until you do." />
-      <Card>
-        <CardHeader title={`Waiting for you (${(pending ?? []).length})`} />
-        {(pending ?? []).length === 0 ? (
-          <EmptyState title="All caught up" />
-        ) : (
-          <Table stack>
-            <thead>
-              <tr>
-                <Th>Test</Th>
-                <Th>Teacher</Th>
-                <Th>Year</Th>
-                <Th>Size</Th>
-                <Th>Submitted</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(pending ?? []).map((a) => (
-                <tr key={a.id}>
-                  <Td>
-                    <Link href={`/admin/approvals/${a.id}`} className="font-medium text-brand hover:underline">
-                      {a.title}
-                    </Link>
-                    <span className="block text-xs text-muted">
-                      {s.subjectById.get(a.subject_id)?.name} · {TYPE_LABEL[a.type as AssessmentType]}
-                    </span>
-                  </Td>
-                  <Td label="Teacher">{(a.staff as unknown as { full_name: string } | null)?.full_name}</Td>
-                  <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
-                  <Td label="Size" className="tabular-nums">
-                    {a.question_count} q · {a.duration_minutes} min
-                  </Td>
-                  <Td label="Sent" className="text-xs text-muted">{formatDateTime(a.submitted_at)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Card>
-      {unscheduled.length ? (
-        <Card>
-          <CardHeader title="Approved but not scheduled" description="These need a date before students can sit them." />
-          <ul className="divide-y divide-border">
-            {unscheduled.map((a) => (
-              <li key={a.id}>
-                <Link href={`/admin/approvals/${a.id}`} className="flex items-center justify-between px-5 py-3 text-sm hover:bg-surface-2">
-                  <span>
-                    <span className="font-medium">{a.title}</span>
-                    <span className="block text-xs text-muted">
-                      {s.subjectById.get(a.subject_id)?.name} · {s.yearById.get(a.year_id)?.name}
-                    </span>
-                  </span>
-                  <Badge tone="warning">Needs a date</Badge>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
+        icon={ClipboardCheck}
+        title="Approvals"
+        description="Review every test set for your classes in one place. Each test shows whether the questions are sound and whether the classes are ready to sit it. Approve the good ones together, flag the ones that need a second look, and send back the rest."
+      />
+      {typeof sp.error === "string" ? <Alert tone="danger">{sp.error}</Alert> : null}
+      {sp.settled ? <Alert tone="success">Done.</Alert> : null}
+      <ReviewBoard tests={tests} names={names} canDecide={can(staff, "exam.approve")} />
     </div>
   );
 }

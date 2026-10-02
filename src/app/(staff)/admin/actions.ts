@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, can } from "@/lib/auth";
 import { bool, fail, int, ok, str, type ActionResult } from "@/lib/actions";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
-import { notifyAssessmentReview, notifyAssignmentDecisions } from "@/lib/notify";
+import { notifyAssessmentReview, notifyAssignmentDecisions, notifyBulkReview, type BulkDecision } from "@/lib/notify";
 import { lagosLocalToIso } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +84,44 @@ export async function scheduleClasses(_: ActionResult, fd: FormData): Promise<Ac
   revalidatePath(`/admin/approvals/${id}`);
   revalidatePath("/admin/exams");
   return ok(`Scheduled ${rows.length} class${rows.length === 1 ? "" : "es"}.`);
+}
+
+// ---------------------------------------------------------------------------
+// Bulk review
+// ---------------------------------------------------------------------------
+export type BulkReviewResult = { id: string; ok: boolean; error?: string };
+
+/** Approve, approve-with-a-flag or send back many tests at once. Each test succeeds or fails on its own. */
+export async function bulkReviewAction(items: BulkDecision[]): Promise<{ results: BulkReviewResult[] } | { error: string }> {
+  const staff = await requireAdmin();
+  if (!can(staff, "exam.approve")) return { error: "You need the permission to approve assessments." };
+  if (!Array.isArray(items) || items.length === 0) return { error: "Nothing was chosen." };
+  if (items.length > 200) return { error: "Please review at most 200 tests at a time." };
+  const clean: BulkDecision[] = [];
+  for (const i of items) {
+    if (!i || typeof i.id !== "string" || !["approve", "flag", "send_back"].includes(i.action)) return { error: "That request was not valid." };
+    clean.push({ id: i.id, action: i.action, category: i.category?.slice(0, 40), note: i.note?.trim().slice(0, 1000) });
+  }
+  const { data, error } = await (await createClient()).rpc("bulk_review", { p_items: clean });
+  if (error) return { error: error.message };
+  const results = (data ?? []) as BulkReviewResult[];
+  const done = new Set(results.filter((r) => r.ok).map((r) => r.id));
+  after(() => notifyBulkReview(clean.filter((c) => done.has(c.id))));
+  revalidatePath("/admin/approvals");
+  revalidatePath("/dashboard");
+  return { results };
+}
+
+/** Accept a teacher's corrections to a flagged test, or close the flag without any change. */
+export async function settleFlag(fd: FormData) {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc(str(fd, "decision") === "accept" ? "accept_amendment" : "resolve_flag", { p_assessment: id });
+  revalidatePath("/admin/approvals");
+  revalidatePath("/dashboard");
+  if (error) redirect(`/admin/approvals?error=${encodeURIComponent(error.message)}`);
+  redirect("/admin/approvals?settled=1");
 }
 
 export async function reopenAssessment(_: ActionResult, fd: FormData): Promise<ActionResult> {

@@ -363,3 +363,35 @@ export async function duplicateAssessment(fd: FormData) {
   }
   redirect(`/teach/assessments/${copy.id}`);
 }
+
+// ---------------------------------------------------------------------------
+// Correcting a flagged test after it was approved
+// ---------------------------------------------------------------------------
+/** Start correcting a flagged, approved test. The approved version stays in force until the corrections are accepted. */
+export async function beginCorrection(fd: FormData) {
+  await requireStaff();
+  const id = str(fd, "id");
+  const { error } = await (await createClient()).rpc("begin_amendment", { p_assessment: id });
+  revalidatePath("/dashboard");
+  if (error) redirect(`/teach/assessments/${id}?error=${encodeURIComponent(error.message)}`);
+  redirect(`/teach/assessments/${id}`);
+}
+
+export async function submitCorrections(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireStaff();
+  const id = str(fd, "id");
+  const { error } = await (await createClient()).rpc("submit_amendment", { p_assessment: id });
+  if (error) return fail(error);
+  revalidatePath(`/teach/assessments/${id}`);
+  revalidatePath("/dashboard");
+  redirect("/dashboard?done=corrected");
+}
+
+export async function cancelCorrection(fd: FormData) {
+  await requireStaff();
+  const id = str(fd, "id");
+  await (await createClient()).rpc("cancel_amendment", { p_assessment: id });
+  revalidatePath(`/teach/assessments/${id}`);
+  revalidatePath("/dashboard");
+  redirect(`/teach/assessments/${id}`);
+}

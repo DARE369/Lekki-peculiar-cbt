@@ -230,6 +230,7 @@ test("HOD approves, schedules and creates a lab registration code", async ({ bro
   const page = await signIn(browser, "hod@lps.test", hodPassword);
   await page.goto("/admin/approvals");
   await page.getByRole("link", { name: "Basic Science Test 1" }).click();
+  await page.waitForURL(/\/admin\/approvals\/[0-9a-f-]+$/);
   await page.getByLabel("Year 4 Gold").check();
   const now = new Date(Date.now() + 3600_000 - 5 * 60_000); // Lagos local, 5 min ago
   const later = new Date(now.getTime() + 3 * 3600_000);
@@ -733,6 +734,8 @@ test("each teacher belongs to one section, and Heads of Section only see their o
   const row = owner.getByRole("row", { name: /Mrs Ngozi Obi/ });
   await row.getByRole("combobox").selectOption({ label: "Elementary" });
   await row.getByRole("button", { name: "Save" }).click();
+  // Once saved, she drops out of the "No section yet" list.
+  await expect(owner.getByRole("row", { name: /Mrs Ngozi Obi/ })).toHaveCount(0);
   await owner.goto("/admin/staff");
   await expect(owner.getByRole("row", { name: /Mrs Ngozi Obi/ }).getByText("Elementary", { exact: true })).toBeVisible();
 
@@ -785,14 +788,153 @@ test("the super admin can change a person's role, section and permissions after 
   await expect(owner.getByText("Access updated.")).toBeVisible();
   await owner.getByLabel("Role").selectOption("teacher");
   await owner.locator('select[name="home_section"]').selectOption({ label: "Elementary" });
-  await owner.getByRole("button", { name: "Save", exact: true }).click();
-  // The earlier "Access updated." is still on screen, so wait for the change itself.
-  await expect(async () => {
-    await owner.reload();
-    await expect(owner.getByLabel("Role")).toHaveValue("teacher");
-  }).toPass({ timeout: 10_000 });
+  // The earlier "Access updated." is still on screen, so wait for this save's own response.
+  await Promise.all([
+    owner.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/admin/staff/")),
+    owner.getByRole("button", { name: "Save", exact: true }).click(),
+  ]);
   await owner.goto("/admin/staff");
   const back = owner.getByRole("row", { name: /Mr Dixon/ });
   await expect(back.getByText("Teacher")).toBeVisible();
   await expect(back.getByText("Elementary", { exact: true })).toBeVisible();
+});
+
+test("bulk approval: review by class, approve, flag and send back; teacher corrects; super admin sees the school", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+  // Four submitted tests for Dixon's class (set up directly; the teacher screens are covered elsewhere).
+  const { data: dixon } = await db.from("staff").select("id").eq("email", "dixon@lps.test").single();
+  const { data: elem } = await db.from("sections").select("id").eq("code", "ELEM").single();
+  const { data: subject } = await db.from("subjects").select("id").eq("section_id", elem!.id).eq("name", "Basic Science").single();
+  const { data: year } = await db.from("years").select("id").eq("section_id", elem!.id).eq("level", 4).single();
+  const { data: term } = await db.from("terms").select("id").eq("is_current", true).single();
+  const { data: gold } = await db.from("classes").select("id").eq("name", "Year 4 Gold").single();
+  const opts = [{ key: "A", text: "one" }, { key: "B", text: "two" }, { key: "C", text: "three" }];
+  const make = async (title: string, take: number, minutes: number) => {
+    // Each test gets its own questions, so the "same questions as another test" warning stays out of the way.
+    const { data: qs } = await db
+      .from("questions")
+      .insert(Array.from({ length: 12 }, (_, i) => ({ subject_id: subject!.id, owner_id: dixon!.id, year_id: year!.id, body: `${title} question ${i + 1}?`, options: opts, answer: ["A", "B", "C"][i % 3], topic: "Bulk" })))
+      .select("id");
+    const { data: a } = await db
+      .from("assessments")
+      .insert({ subject_id: subject!.id, year_id: year!.id, term_id: term!.id, title, type: "test", status: "pending_approval", question_count: 5, duration_minutes: minutes, created_by: dixon!.id, submitted_at: new Date().toISOString(), class_ids: [gold!.id] })
+      .select("id")
+      .single();
+    await db.from("assessment_questions").insert(qs!.slice(0, take).map((q, i) => ({ assessment_id: a!.id, question_id: q.id, position: i })));
+    return a!.id as string;
+  };
+  const good = await make("Bulk Good", 12, 8);
+  const warn = await make("Bulk Warn", 12, 2); // two minutes for five questions: rushed
+  const broken = await make("Bulk Broken", 3, 8); // fewer questions than needed
+  const back = await make("Bulk Back", 12, 8);
+
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/approvals");
+  await expect(hod.getByRole("heading", { name: "Approvals" })).toBeVisible();
+  // Grouped by class: the class heading holds all four, and each shows how ready it is.
+  const focusGold = async () => {
+    const value = await hod.locator('select[aria-label="Show one group"] option', { hasText: "Year 4 Gold" }).first().getAttribute("value");
+    await hod.getByLabel("Show one group").selectOption(value!);
+  };
+  await focusGold();
+  const row = (title: string) => hod.locator("li", { has: hod.getByText(title, { exact: true }) });
+  await expect(row("Bulk Good").getByText("Ready", { exact: true })).toBeVisible();
+  await expect(row("Bulk Warn").getByText("Has warnings")).toBeVisible();
+  await expect(row("Bulk Broken").getByText("Needs fixing")).toBeVisible();
+  await row("Bulk Warn").getByText(/1 warning/).click();
+  await expect(row("Bulk Warn").getByText(/seconds per question/)).toBeVisible();
+  await row("Bulk Broken").getByText(/1 problem/).click();
+  await expect(row("Bulk Broken").getByText(/Only 3 questions, but the test needs 5/)).toBeVisible();
+  await shot(hod, "20-bulk-review");
+
+  // Ready tests are chosen for approval already; warnings wait for a decision; broken ones can't be approved.
+  await expect(hod.getByLabel("Decision for Bulk Good")).toHaveValue("approve");
+  await expect(hod.getByLabel("Decision for Bulk Warn")).toHaveValue("none");
+  await expect(hod.getByLabel("Decision for Bulk Broken").locator('option[value="approve"]')).toBeDisabled();
+
+  await hod.getByLabel("Decision for Bulk Warn").selectOption("flag");
+  await hod.getByLabel("Decision for Bulk Back").selectOption("send_back");
+  await hod.getByLabel("Decision for Bulk Broken").selectOption("send_back");
+  // A flag needs a reason and a send-back needs a note: the screen says so instead of submitting.
+  await hod.getByRole("button", { name: "Review and finish" }).click();
+  await expect(hod.getByText("Choose a reason for the flag.")).toBeVisible();
+  await hod.getByLabel("Reason for flagging Bulk Warn").selectOption({ label: "Typing or formatting mistakes" });
+  await hod.getByLabel("Note for Bulk Warn").fill("Fix the typo in question 3");
+  await hod.getByLabel("What to change in Bulk Back").fill("Add some harder questions");
+  await hod.getByLabel("What to change in Bulk Broken").fill("Add at least five questions");
+  await hod.getByRole("button", { name: "Review and finish" }).click();
+  await expect(hod.getByText("Check before you finish")).toBeVisible();
+  await expect(hod.getByText("Approve and flag (1)")).toBeVisible();
+  await expect(hod.getByText("Send back (2)")).toBeVisible();
+  await hod.getByRole("button", { name: /^Confirm: 2 approved, 2 sent back/ }).click();
+  await expect(hod.getByText("4 tests reviewed.")).toBeVisible();
+
+  const status = async (id: string) => (await db.from("assessments").select("status, flag_status, flag_category, paper").eq("id", id).single()).data!;
+  expect((await status(good)).status).toBe("approved");
+  const flagged = await status(warn);
+  expect([flagged.status, flagged.flag_status, flagged.flag_category]).toEqual(["approved", "open", "typos"]);
+  expect(flagged.paper).not.toBeNull();
+  expect((await status(broken)).status).toBe("changes_requested");
+  expect((await status(back)).status).toBe("changes_requested");
+
+  // One email to the teacher covering everything.
+  const mailDir = "/var/tmp/sblogs/mail";
+  let mail = "";
+  await expect(async () => {
+    const found = readdirSync(mailDir)
+      .map((f) => readFileSync(`${mailDir}/${f}`, "utf8"))
+      .find((m) => /^To: .*dixon@lps\.test/im.test(m) && m.includes("reviewed"));
+    expect(found).toBeTruthy();
+    mail = found!.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }).toPass({ timeout: 15_000 });
+  expect(mail).toContain("Bulk Good");
+  expect(mail).toContain("need a second look");
+  expect(mail).toContain("Fix the typo in question 3");
+  expect(mail).toContain("Add at least five questions");
+
+  // The teacher sees it on the dashboard, corrects the test and sends the corrections.
+  const teacher = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await teacher.goto("/dashboard");
+  const card = teacher.locator("li", { has: teacher.getByText("Bulk Warn", { exact: true }) });
+  await expect(card.getByText("Typing or formatting mistakes")).toBeVisible();
+  await expect(card.getByText("Fix the typo in question 3")).toBeVisible();
+  await card.getByRole("button", { name: "Correct this test" }).click();
+  await expect(teacher.getByText("You are correcting this test")).toBeVisible();
+  await expect(teacher.getByText("Questions (12)")).toBeVisible();
+  await teacher.getByRole("button", { name: /^Remove/ }).first().click();
+  await expect(teacher.getByText("Questions (11)")).toBeVisible();
+  // The approved version is untouched until the corrections are accepted.
+  expect((await db.from("assessments").select("paper").eq("id", warn).single()).data!.paper.questions).toHaveLength(12);
+  await teacher.getByRole("button", { name: "Send corrections" }).click();
+  await expect(teacher).toHaveURL(/\/dashboard\?done=corrected/);
+  await expect(teacher.getByText("Your corrections were sent.")).toBeVisible();
+
+  // The Head of Section accepts them: the new questions are frozen and the flag is resolved.
+  await hod.goto("/admin/approvals");
+  await focusGold();
+  const flaggedRow = hod.locator("li", { has: hod.getByText("Bulk Warn", { exact: true }) });
+  await expect(flaggedRow.getByText("The teacher has sent corrections.")).toBeVisible();
+  await flaggedRow.getByRole("button", { name: "Accept the corrections" }).click();
+  await expect(hod.getByText("Done.")).toBeVisible();
+  const done = await status(warn);
+  expect([done.status, done.flag_status]).toEqual(["approved", "resolved"]);
+  expect(done.paper.questions).toHaveLength(11);
+
+  // The super admin has no Teaching menu, and a school-wide dashboard.
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/dashboard");
+  await expect(owner.getByRole("navigation", { name: "Main" }).getByText("Teaching", { exact: true })).toHaveCount(0);
+  await expect(owner.getByRole("link", { name: "New test or exam" })).toHaveCount(0);
+  await expect(owner.getByText("Needs your attention")).toBeVisible();
+  await expect(owner.getByText("Test coverage by class")).toBeVisible();
+  await expect(owner.getByText("Awaiting approval", { exact: true }).first()).toBeVisible();
+  await expect(owner.getByText("Year 4 Gold").first()).toBeVisible();
+  await shot(owner, "21-school-dashboard");
 });

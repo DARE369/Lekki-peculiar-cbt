@@ -47,7 +47,7 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
       <PageHeader
         icon={UserCog}
         title="Staff & permissions"
-        description="Add teachers and Heads of Section, put each teacher in a section, and decide exactly what each admin may do."
+        description="Add staff, put each teacher in a section, and press Edit on anyone to change their role, section or permissions at any time."
         actions={
           <LinkButton href="/admin/staff/import" variant="secondary">
             <Users /> Bulk add staff
@@ -83,12 +83,13 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
               <Th>Role</Th>
               <Th>Section</Th>
               <Th>Permissions</Th>
+              <Th className="w-24" />
             </tr>
           </thead>
           <tbody>
             {staff.length === 0 ? (
               <tr>
-                <Td colSpan={4} className="py-8 text-center text-muted">
+                <Td colSpan={5} className="py-8 text-center text-muted">
                   Nobody here yet.
                 </Td>
               </tr>
@@ -131,6 +132,11 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
                   </Td>
                   <Td label="Can do" className="text-xs text-muted">
                     {m.role === "super_admin" ? "Everything" : (permsBy.get(m.id) ?? []).map((p) => PERMISSIONS[p]).join(" · ") || "—"}
+                  </Td>
+                  <Td className="cell-actions">
+                    <Link href={`/admin/staff/${m.id}`} className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-semibold text-brand hover:border-brand" aria-label={`Edit ${m.full_name}`}>
+                      Edit
+                    </Link>
                   </Td>
                 </tr>
               );

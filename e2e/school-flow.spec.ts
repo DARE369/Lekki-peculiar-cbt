@@ -409,11 +409,11 @@ test("super admin bulk adds staff and deletes one; staff with exam work can't be
   // Kunle has no exam work, so he can be deleted.
   await page.goto("/admin/staff");
   await expect(page.getByRole("row", { name: /Mr Kunle Ade/ }).getByText("Head of Section")).toBeVisible();
-  await page.getByRole("link", { name: "Mr Kunle Ade" }).click();
+  await page.getByRole("link", { name: "Mr Kunle Ade", exact: true }).click();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Delete Mr Kunle Ade" }).click();
   await expect(page.getByText("Mr Kunle Ade was deleted.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Mr Kunle Ade" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Mr Kunle Ade", exact: true })).toHaveCount(0);
 
   // Mr Dixon wrote questions and a test, so deleting him is refused.
   await page.getByRole("link", { name: "Mr Dixon", exact: true }).click();
@@ -751,4 +751,48 @@ test("each teacher belongs to one section, and Heads of Section only see their o
   await hod.goto("/admin/progress");
   await expect(hod.getByText("Mr Collins College")).toHaveCount(0);
   await expect(hod.getByText("Mrs Ada Bello")).toBeVisible();
+});
+
+test("the super admin can change a person's role, section and permissions after adding them", async ({ browser }) => {
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/staff");
+  // Every row has an Edit button.
+  await owner.getByRole("link", { name: "Edit Mr Dixon" }).click();
+  await expect(owner.getByRole("heading", { name: "Mr Dixon" })).toBeVisible();
+
+  // Teacher → Head of Section for Elementary, with permissions.
+  await owner.getByLabel("Role").selectOption("admin");
+  await owner.getByLabel("Elementary").check();
+  await owner.getByRole("checkbox", { name: "Give extra time" }).check();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByText("Access updated.")).toBeVisible();
+  await owner.reload();
+  await expect(owner.getByLabel("Role")).toHaveValue("admin");
+  await expect(owner.getByLabel("Elementary")).toBeChecked();
+  await expect(owner.getByRole("checkbox", { name: "Give extra time" })).toBeChecked();
+
+  // The list reflects it, and he now sees the Administration menu.
+  await owner.goto("/admin/staff");
+  const row = owner.getByRole("row", { name: /Mr Dixon/ });
+  await expect(row.getByText("Head of Section")).toBeVisible();
+  await expect(row.getByText("Give extra time")).toBeVisible();
+
+  // Change a permission, then put him back to a teacher in Elementary.
+  await owner.getByRole("link", { name: "Edit Mr Dixon" }).click();
+  await owner.getByRole("checkbox", { name: "Give extra time" }).uncheck();
+  await owner.getByRole("checkbox", { name: "Start / pause / close exams" }).check();
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(owner.getByText("Access updated.")).toBeVisible();
+  await owner.getByLabel("Role").selectOption("teacher");
+  await owner.locator('select[name="home_section"]').selectOption({ label: "Elementary" });
+  await owner.getByRole("button", { name: "Save", exact: true }).click();
+  // The earlier "Access updated." is still on screen, so wait for the change itself.
+  await expect(async () => {
+    await owner.reload();
+    await expect(owner.getByLabel("Role")).toHaveValue("teacher");
+  }).toPass({ timeout: 10_000 });
+  await owner.goto("/admin/staff");
+  const back = owner.getByRole("row", { name: /Mr Dixon/ });
+  await expect(back.getByText("Teacher")).toBeVisible();
+  await expect(back.getByText("Elementary", { exact: true })).toBeVisible();
 });

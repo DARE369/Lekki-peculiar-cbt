@@ -20,6 +20,7 @@ import {
   Textarea,
   Th,
 } from "@/components/ui";
+import { NextSteps } from "@/components/next-steps";
 import { requireStaff } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
@@ -124,6 +125,18 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
           </>
         }
       />
+      {sp.added ? (
+        <NextSteps
+          title={`Added ${Number(sp.added)} question${Number(sp.added) === 1 ? "" : "s"} to this test.`}
+          steps={[{ href: `/teach/questions/import?assessment=${a.id}`, label: "Add more questions" }]}
+        >
+          {a.status === "draft" || a.status === "rejected"
+            ? enough
+              ? "You have enough questions. Check them below, then press Submit for approval."
+              : `This test needs ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"}. Upload more, or pick some from your question bank below.`
+            : null}
+        </NextSteps>
+      ) : null}
 
       {a.status === "changes_requested" && a.review_note ? (
         <Alert tone="danger" title="Your Head of Section asked for changes">
@@ -251,7 +264,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                 <ActionForm action={addQuestionsToAssessment} hideSuccess>
                   <input type="hidden" name="assessment_id" value={a.id} />
                   <div className="max-h-[480px] overflow-y-auto">
-                    <Table>
+                    <Table stack>
                       <thead className="sticky top-0">
                         <tr>
                           <Th className="w-10" />
@@ -262,11 +275,11 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                       <tbody>
                         {bank.map((q) => (
                           <tr key={q.id}>
-                            <Td>
+                            <Td className="cell-check">
                               <input type="checkbox" name="question_id" value={q.id} className="h-4 w-4 accent-[var(--brand)]" aria-label="Add" />
                             </Td>
                             <Td className="line-clamp-2">{q.body}</Td>
-                            <Td className="text-xs">{q.topic ?? "—"}</Td>
+                            <Td label="Topic" className="text-xs">{q.topic ?? "—"}</Td>
                           </tr>
                         ))}
                       </tbody>

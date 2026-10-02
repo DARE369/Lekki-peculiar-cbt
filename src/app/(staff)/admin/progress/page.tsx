@@ -7,6 +7,8 @@ import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { formatDeadline, getQuestionSettings, getUploadProgress, type ProgressRow } from "@/lib/onboarding";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { staffSectionMap } from "@/lib/sections";
+import { SectionBadges } from "@/components/section-badges";
 import { resendInvite, saveDeadlines } from "./actions";
 import { Readiness } from "./readiness";
 
@@ -34,9 +36,10 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
   const sp = await props.searchParams;
   const s = await getStructure();
   const supabase = await createClient();
-  const [settings, progress, { data: staffRows }] = await Promise.all([
+  const [settings, progress, sectionsOf, { data: staffRows }] = await Promise.all([
     getQuestionSettings(),
     getUploadProgress(s, null),
+    staffSectionMap(),
     supabase.from("staff").select("id, full_name, email, phone, role, active, onboarded_at").eq("active", true).neq("role", "super_admin").order("full_name"),
   ]);
 
@@ -52,17 +55,13 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
   const byTeacher = new Map<string, ProgressRow[]>();
   for (const r of progress) byTeacher.set(r.teacherId, [...(byTeacher.get(r.teacherId) ?? []), r]);
 
-  // Heads of Section see teachers working in their sections, plus teachers who haven't chosen anything yet.
-  // (upload_progress only returns rows for the viewer's sections.)
+  // Row-level security already limits Heads of Section to the staff of their own section(s); this also keeps
+  // anyone with subject choices in their sections visible.
   let people = staffRows ?? [];
   if (!me.isSuperAdmin) {
-    const { data: anyChoice } = await admin
-      .from("teaching_assignments")
-      .select("teacher_id")
-      .eq("session_id", s.currentSessionId ?? "")
-      .in("status", ["requested", "approved"]);
-    const chose = new Set((anyChoice ?? []).map((x) => x.teacher_id as string));
-    people = people.filter((p) => p.id === me.id || byTeacher.has(p.id) || (p.role === "teacher" && !chose.has(p.id)));
+    people = people.filter(
+      (p) => p.id === me.id || byTeacher.has(p.id) || (sectionsOf.get(p.id) ?? []).some((sec) => me.sectionIds.includes(sec)),
+    );
   }
   const rows = people.map((p) => {
     const mine = byTeacher.get(p.id) ?? [];
@@ -83,7 +82,15 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
     return { ...p, mine, signedIn, stage };
   });
   const filter = typeof sp.show === "string" ? sp.show : "all";
-  const shown = rows.filter((r) =>
+  const sectionFilter = typeof sp.section === "string" ? sp.section : "";
+  const href = (show: string, section: string) => {
+    const q = new URLSearchParams();
+    if (show !== "all") q.set("show", show);
+    if (section) q.set("section", section);
+    return q.size ? `/admin/progress?${q}` : "/admin/progress";
+  };
+  const inSection = rows.filter((r) => (!sectionFilter ? true : (sectionsOf.get(r.id) ?? []).includes(sectionFilter)));
+  const shown = inSection.filter((r) =>
     filter === "invited" ? r.stage === "invited" : filter === "behind" ? r.stage !== "done" && r.stage !== "ready" : filter === "done" ? r.stage === "done" || r.stage === "ready" : true,
   );
   const teachers = rows.filter((r) => r.role !== "admin" || r.mine.length);
@@ -130,26 +137,46 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
       </Card>
 
       <Card>
-        <div className="flex flex-wrap gap-2 border-b border-border p-4" role="tablist" aria-label="Show">
-          {FILTERS.map(([key, label]) => (
-            <Link
-              key={key}
-              href={key === "all" ? "/admin/progress" : `/admin/progress?show=${key}`}
-              role="tab"
-              aria-selected={filter === key}
-              className={cn(
-                "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
-                filter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
-              )}
-            >
-              {label}
-            </Link>
-          ))}
+        <div className="space-y-3 border-b border-border p-4">
+          {cbtSections.length > 1 ? (
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Section">
+              {[["", "All sections"], ...cbtSections.map((x) => [x.id, x.name])].map(([key, label]) => (
+                <Link
+                  key={key}
+                  href={href(filter, key)}
+                  role="tab"
+                  aria-selected={sectionFilter === key}
+                  className={cn(
+                    "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                    sectionFilter === key ? "border-accent bg-accent-soft text-text" : "border-border hover:border-accent",
+                  )}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Show">
+            {FILTERS.map(([key, label]) => (
+              <Link
+                key={key}
+                href={href(key, sectionFilter)}
+                role="tab"
+                aria-selected={filter === key}
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                  filter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
+                )}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
         {shown.length === 0 ? (
           <EmptyState title="Nobody here" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Staff member</Th>
@@ -161,19 +188,28 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
             <tbody>
               {shown.map((r) => {
                 const [label, tone] = STAGE[r.stage];
+                const questions = r.mine.reduce((n, p) => n + p.questions, 0);
+                const sent = r.mine.reduce((n, p) => n + p.testsSubmitted, 0);
+                // One line per subject: "Year 1 · 0, Year 2 · 4 …" instead of one line per subject and year.
+                const bySubject = new Map<string, ProgressRow[]>();
+                for (const p of r.mine) bySubject.set(p.subjectId, [...(bySubject.get(p.subjectId) ?? []), p]);
+                const waiting = r.mine.some((p) => !p.approved);
                 return (
                   <tr key={r.id} className="align-top">
                     <Td>
                       <span className="font-medium">{r.full_name}</span>
                       {r.role === "admin" ? <Badge tone="info" className="ml-2">Head of Section</Badge> : null}
-                      <span className="block text-xs text-muted">{r.email}</span>
+                      <span className="mt-1 block">
+                        <SectionBadges ids={sectionsOf.get(r.id) ?? []} s={s} empty="" />
+                      </span>
+                      <span className="block text-xs break-all text-muted">{r.email}</span>
                       {r.phone ? (
                         <a href={`tel:${r.phone}`} className="block text-xs font-medium text-brand hover:underline">
                           {r.phone}
                         </a>
                       ) : null}
                     </Td>
-                    <Td>
+                    <Td label="Status">
                       <Badge tone={tone} dot>
                         {label}
                       </Badge>
@@ -181,35 +217,46 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                         {r.signedIn ? `Last signed in ${new Date(r.signedIn).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Lagos" })}` : "Invitation not used yet"}
                       </span>
                     </Td>
-                    <Td>
+                    <Td label="Subjects">
                       {r.mine.length === 0 ? (
                         <span className="text-sm text-muted">—</span>
                       ) : (
-                        <ul className="space-y-1.5">
-                          {r.mine.map((p) => (
-                            <li key={`${p.subjectId}:${p.yearId}`} className="text-sm">
-                              <span className="font-medium">{s.subjectById.get(p.subjectId)?.name}</span>{" "}
-                              <span className="text-muted">· {s.yearById.get(p.yearId)?.name}</span>{" "}
-                              <span className="font-semibold">
-                                {p.questions} question{p.questions === 1 ? "" : "s"}
-                              </span>
-                              {p.testsSubmitted ? (
-                                <span className="ml-1.5 text-xs font-semibold text-success">· {p.testsSubmitted} test{p.testsSubmitted === 1 ? "" : "s"} sent</span>
-                              ) : p.testsDraft ? (
-                                <span className="ml-1.5 text-xs text-muted">· test in progress</span>
-                              ) : null}
-                              {!p.approved ? (
-                                <Badge tone="warning" className="ml-1.5">
-                                  awaiting approval
-                                </Badge>
-                              ) : null}
-                              {p.deadline && !p.testsSubmitted ? <span className="ml-1.5 text-xs text-muted">due {formatDeadline(p.deadline)}</span> : null}
-                            </li>
-                          ))}
-                        </ul>
+                        <details className="group">
+                          <summary className="cursor-pointer list-none text-sm">
+                            <span className="font-semibold">
+                              {bySubject.size} subject{bySubject.size === 1 ? "" : "s"}
+                            </span>
+                            <span className="text-muted">
+                              {" "}
+                              · {questions} question{questions === 1 ? "" : "s"}
+                              {sent ? ` · ${sent} test${sent === 1 ? "" : "s"} sent` : ""}
+                            </span>
+                            {waiting ? <Badge tone="warning" className="ml-1.5">awaiting approval</Badge> : null}
+                            <span className="ml-1.5 text-xs font-semibold text-brand group-open:hidden">Show</span>
+                            <span className="ml-1.5 hidden text-xs font-semibold text-brand group-open:inline">Hide</span>
+                          </summary>
+                          <ul className="mt-2 space-y-2">
+                            {[...bySubject].map(([subjectId, list]) => (
+                              <li key={subjectId} className="text-sm">
+                                <span className="font-medium">{s.subjectById.get(subjectId)?.name}</span>
+                                <span className="block text-xs text-muted">
+                                  {list
+                                    .map(
+                                      (p) =>
+                                        `${s.yearById.get(p.yearId)?.name} · ${p.questions}${p.testsSubmitted ? " ✓" : ""}${p.approved ? "" : " (waiting)"}`,
+                                    )
+                                    .join("  ·  ")}
+                                </span>
+                                {list.some((p) => p.deadline && !p.testsSubmitted) ? (
+                                  <span className="block text-xs text-muted">due {formatDeadline(list.find((p) => p.deadline)!.deadline!)}</span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
                       )}
                     </Td>
-                    <Td>
+                    <Td className="cell-actions">
                       {r.stage === "invited" ? (
                         <ActionForm action={resendInvite}>
                           <input type="hidden" name="id" value={r.id} />
@@ -217,7 +264,7 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                             Resend invitation
                           </SubmitButton>
                         </ActionForm>
-                      ) : r.mine.some((p) => !p.approved) ? (
+                      ) : waiting ? (
                         <Link href="/admin/assignments" className="text-sm font-semibold text-brand hover:underline">
                           Approve subjects →
                         </Link>

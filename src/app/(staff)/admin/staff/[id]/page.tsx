@@ -39,6 +39,7 @@ export default async function StaffMemberPage(props: PageProps<"/admin/staff/[id
             role={m.role as StaffRole}
             sectionIds={(scopes ?? []).map((x) => x.section_id)}
             permissions={(perms ?? []).map((p) => p.permission as Permission)}
+            homeSection={(m as { home_section_id?: string | null }).home_section_id ?? ""}
           />
           <Checkbox name="active" label="Active (can sign in)" defaultChecked={m.active} />
           <SubmitButton>Save</SubmitButton>

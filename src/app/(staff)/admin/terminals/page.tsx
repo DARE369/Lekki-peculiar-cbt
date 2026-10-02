@@ -48,7 +48,7 @@ export default async function TerminalsPage() {
         {(terminals ?? []).length === 0 ? (
           <EmptyState title="None yet" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Name</Th>
@@ -72,10 +72,10 @@ export default async function TerminalsPage() {
                       t.name
                     )}
                   </Td>
-                  <Td className="text-xs">{formatDateTime(t.registered_at)}</Td>
-                  <Td className="text-xs">{formatDateTime(t.last_seen_at)}</Td>
-                  <Td>{t.active ? <Badge tone="success">Active</Badge> : <Badge tone="danger">Blocked</Badge>}</Td>
-                  <Td className="text-right">
+                  <Td label="Registered" className="text-xs">{formatDateTime(t.registered_at)}</Td>
+                  <Td label="Last seen" className="text-xs">{formatDateTime(t.last_seen_at)}</Td>
+                  <Td label="Status">{t.active ? <Badge tone="success">Active</Badge> : <Badge tone="danger">Blocked</Badge>}</Td>
+                  <Td className="cell-actions text-right max-md:text-left">
                     {manage ? (
                       <form action={updateTerminal}>
                         <input type="hidden" name="id" value={t.id} />

@@ -22,7 +22,8 @@ export async function saveMySubjects(_: ActionResult, fd: FormData): Promise<Act
   if (err) return fail(err);
   revalidatePath("/teach/classes");
   revalidatePath("/dashboard");
-  return ok("Saved. New choices go to your Head of Section for approval — you can upload questions for them straight away.");
+  // Straight on to what to do next, instead of staying on the form.
+  redirect("/dashboard?done=subjects");
 }
 
 export async function withdrawAssignment(fd: FormData) {
@@ -78,7 +79,12 @@ export async function saveQuestion(_: ActionResult, fd: FormData): Promise<Actio
   if (id) {
     const { error } = await supabase.from("questions").update(row).eq("id", id);
     if (error) return fail(error);
+    const { data: current } = await supabase.from("questions").select("subject_id").eq("id", id).maybeSingle();
     const backTo = str(fd, "assessment_id");
+    if (!backTo) {
+      revalidatePath("/teach/questions");
+      redirect(`/teach/questions?subject=${current?.subject_id ?? ""}&updated=1`);
+    }
     if (backTo) {
       revalidatePath(`/teach/assessments/${backTo}`);
       redirect(`/teach/assessments/${backTo}`);
@@ -101,7 +107,7 @@ export async function saveQuestion(_: ActionResult, fd: FormData): Promise<Actio
   }
   revalidatePath("/teach/questions");
   if (bool(fd, "add_another")) return ok("Saved. Add the next one.");
-  redirect(`/teach/questions?subject=${str(fd, "subject_id")}`);
+  redirect(`/teach/questions?subject=${str(fd, "subject_id")}&added=1`);
 }
 
 export async function archiveQuestion(fd: FormData) {
@@ -174,6 +180,7 @@ export async function commitImport(input: {
   const skipped = questions.length - fresh.length;
   return ok(
     `Added ${fresh.length} question${fresh.length === 1 ? "" : "s"}${skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : ""}.`,
+    { added: fresh.length, skipped },
   );
 }
 
@@ -301,7 +308,8 @@ export async function submitForApproval(_: ActionResult, fd: FormData): Promise<
   const { error } = await supabase.rpc("submit_assessment", { p_assessment: id });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);
-  return ok("Submitted. Your Head of Section will review it and set the exam date.");
+  revalidatePath("/dashboard");
+  redirect("/dashboard?done=submitted");
 }
 
 export async function withdrawSubmission(_: ActionResult, fd: FormData): Promise<ActionResult> {

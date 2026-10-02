@@ -21,6 +21,7 @@ import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
 import { getQuestionSettings, getUploadProgress } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
+import { NextSteps } from "@/components/next-steps";
 import { UploadChecklist } from "./upload-checklist";
 import type { AssessmentStatus, AssessmentType } from "@/lib/types";
 
@@ -34,7 +35,8 @@ interface QuickAction {
   count?: number;
 }
 
-export default async function Dashboard() {
+export default async function Dashboard(props: PageProps<"/dashboard">) {
+  const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
   const supabase = await createClient();
@@ -111,6 +113,28 @@ export default async function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {sp.done === "subjects" ? (
+        <NextSteps
+          title="Your subjects and classes are saved."
+          steps={[
+            { href: "/teach/questions/import", label: "Upload my questions", primary: true },
+            { href: "/teach/classes", label: "Change my subjects" },
+          ]}
+        >
+          Your Head of Section has been asked to approve them, and we will email you when they do. You do not have to wait: you can upload questions now.
+        </NextSteps>
+      ) : null}
+      {sp.done === "submitted" ? (
+        <NextSteps
+          title="Your test was sent for approval."
+          steps={[
+            { href: "/teach/assessments/new", label: "Create another test", primary: true },
+            { href: "/teach/assessments", label: "See my tests" },
+          ]}
+        >
+          Your Head of Section will review it and set the exam date. We will email you when it is approved or if changes are needed.
+        </NextSteps>
+      ) : null}
       {/* Welcome banner */}
       <section className="relative overflow-hidden rounded-3xl bg-[linear-gradient(135deg,var(--panel-1),var(--panel-2)_55%,var(--panel-3))] p-7 text-white shadow-float sm:p-9">
         <div className="bg-grid pointer-events-none absolute inset-0 opacity-[0.1]" aria-hidden />

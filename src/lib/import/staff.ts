@@ -6,7 +6,7 @@ export type StaffImportRow = {
   full_name: string;
   email: string;
   role: "teacher" | "admin";
-  sections: string[]; // section names or codes as typed, resolved on the server
+  sections: string[]; // section names or codes as typed, resolved on the server (a teacher has at most one)
   problem?: string;
 };
 
@@ -80,8 +80,9 @@ export function staffTable(cells: string[][]): StaffTable {
     else if (role === "super_admin") problem = "Add super admins one at a time on the Staff page";
     else if (!role) problem = `Unknown role "${get("role")}" — use Teacher or Head of Section`;
     else if (role === "admin" && sections.length === 0) problem = "Heads of Section need a Section (e.g. Elementary)";
+    else if (role !== "admin" && sections.length > 1) problem = "A teacher belongs to one section — Elementary or College";
     seen.add(email);
-    rows.push({ full_name, email, role: role === "admin" ? "admin" : "teacher", sections: role === "admin" ? sections : [], problem });
+    rows.push({ full_name, email, role: role === "admin" ? "admin" : "teacher", sections, problem });
   }
   return { rows };
 }

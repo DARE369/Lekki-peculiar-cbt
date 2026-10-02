@@ -81,7 +81,7 @@ export default async function StudentsPage(props: PageProps<"/admin/students">) 
           <EmptyState title="No students found" />
         ) : (
           <ActionForm action={moveStudents}>
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   {manage ? <Th className="w-10" /> : null}
@@ -95,7 +95,7 @@ export default async function StudentsPage(props: PageProps<"/admin/students">) 
                 {(students ?? []).map((st) => (
                   <tr key={st.id} className={st.active ? "" : "opacity-60"}>
                     {manage ? (
-                      <Td>
+                      <Td className="cell-check">
                         <input type="checkbox" name="student_id" value={st.id} className="h-4 w-4 accent-[var(--brand)]" aria-label={`Select ${fullName(st)}`} />
                       </Td>
                     ) : null}
@@ -106,9 +106,9 @@ export default async function StudentsPage(props: PageProps<"/admin/students">) 
                         {!st.active ? <Badge>Left</Badge> : null}
                       </Link>
                     </Td>
-                    <Td className="font-mono text-xs">{st.admission_no}</Td>
-                    <Td>{s.className(st.class_id)}</Td>
-                    <Td>{st.photo_path ? <Badge tone="success">Yes</Badge> : <Badge tone="warning">Missing</Badge>}</Td>
+                    <Td label="Admission no." className="font-mono text-xs">{st.admission_no}</Td>
+                    <Td label="Class">{s.className(st.class_id)}</Td>
+                    <Td label="Photo">{st.photo_path ? <Badge tone="success">Yes</Badge> : <Badge tone="warning">Missing</Badge>}</Td>
                   </tr>
                 ))}
               </tbody>

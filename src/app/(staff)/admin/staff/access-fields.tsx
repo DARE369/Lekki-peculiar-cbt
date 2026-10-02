@@ -9,11 +9,13 @@ export function AccessFields({
   role: initialRole = "teacher",
   sectionIds = [],
   permissions = [],
+  homeSection = "",
 }: {
   sections: Section[];
   role?: StaffRole;
   sectionIds?: string[];
   permissions?: Permission[];
+  homeSection?: string;
 }) {
   const [role, setRole] = useState<StaffRole>(initialRole);
   const [perms, setPerms] = useState<Set<Permission>>(new Set(permissions));
@@ -34,6 +36,20 @@ export function AccessFields({
           <option value="super_admin">Super admin (full control)</option>
         </Select>
       </Field>
+      {role === "teacher" ? (
+        <Field label="Section" hint="Elementary or College. Their Head of Section will see them, and they will only pick subjects from this section.">
+          <Select name="home_section" defaultValue={homeSection}>
+            <option value="">Not decided yet</option>
+            {sections
+              .filter((s) => s.cbt_enabled)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </Select>
+        </Field>
+      ) : null}
       {role === "admin" ? (
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Sections they manage</legend>

@@ -71,7 +71,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
             Approve a test and give it a date under Approvals.
           </EmptyState>
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Exam</Th>
@@ -94,10 +94,10 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
                         {s.subjectById.get(w.assessments?.subject_id ?? "")?.name} · {TYPE_LABEL[w.assessments?.type ?? "test"]}
                       </span>
                     </Td>
-                    <Td>{s.className(w.class_id)}</Td>
-                    <Td className="text-sm whitespace-nowrap">{formatDateTime(w.starts_at)}</Td>
-                    <Td className="text-sm whitespace-nowrap">{formatDateTime(w.ends_at)}</Td>
-                    <Td>
+                    <Td label="Class">{s.className(w.class_id)}</Td>
+                    <Td label="Opens" className="text-sm whitespace-nowrap">{formatDateTime(w.starts_at)}</Td>
+                    <Td label="Closes" className="text-sm whitespace-nowrap">{formatDateTime(w.ends_at)}</Td>
+                    <Td label="Status">
                       <Badge tone={tone}>{label}</Badge>
                     </Td>
                   </tr>

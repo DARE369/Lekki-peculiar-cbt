@@ -1,7 +1,7 @@
-export type ActionResult = { ok: true; message?: string } | { ok: false; error: string } | null;
+export type ActionResult = { ok: true; message?: string; data?: Record<string, number> } | { ok: false; error: string } | null;
 
-export function ok(message?: string): ActionResult {
-  return { ok: true, message };
+export function ok(message?: string, data?: Record<string, number>): ActionResult {
+  return { ok: true, message, data };
 }
 export function fail(error: unknown): ActionResult {
   if (typeof error === "string") return { ok: false, error };

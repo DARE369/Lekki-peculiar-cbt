@@ -117,7 +117,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
         {rows.length === 0 ? (
           <EmptyState title="No approved tests in this term yet" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Test</Th>
@@ -137,13 +137,13 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
                     </Link>{" "}
                     <Badge>{TYPE_LABEL[a.type]}</Badge>
                   </Td>
-                  <Td>{s.subjectById.get(a.subject_id)?.name}</Td>
-                  <Td>{s.yearById.get(a.year_id)?.name}</Td>
-                  <Td className="tabular-nums">{a.summary.count}</Td>
-                  <Td>
+                  <Td label="Subject">{s.subjectById.get(a.subject_id)?.name}</Td>
+                  <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
+                  <Td label="Sat" className="tabular-nums">{a.summary.count}</Td>
+                  <Td label="Average">
                     <PercentBar value={a.summary.mean} />
                   </Td>
-                  <Td className="tabular-nums">{a.summary.passRate == null ? "—" : `${a.summary.passRate}%`}</Td>
+                  <Td label="Pass rate" className="tabular-nums">{a.summary.passRate == null ? "—" : `${a.summary.passRate}%`}</Td>
                 </tr>
               ))}
             </tbody>

@@ -53,7 +53,7 @@ export default async function ClassPage(props: PageProps<"/teach/classes/[classI
         {(students ?? []).length === 0 ? (
           <EmptyState title="No students in this class yet" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Student</Th>
@@ -70,8 +70,8 @@ export default async function ClassPage(props: PageProps<"/teach/classes/[classI
                       <span className="font-medium">{fullName(st)}</span>
                     </span>
                   </Td>
-                  <Td className="font-mono text-xs">{st.admission_no}</Td>
-                  <Td className="text-right">
+                  <Td label="Admission no." className="font-mono text-xs">{st.admission_no}</Td>
+                  <Td className="cell-actions text-right max-md:text-left">
                     <LinkButton href={`/reports/student/${st.id}`} size="sm" variant="secondary">
                       View
                     </LinkButton>

@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { saveMySubjects, withdrawAssignment } from "../actions";
 import { SubjectPicker } from "@/app/welcome/subject-picker";
 import { myPicks, pickerSections } from "@/lib/assignments";
+import { homeSectionOf } from "@/lib/sections";
 
 export const metadata: Metadata = { title: "My classes" };
 
@@ -28,6 +29,7 @@ export default async function MyClasses() {
   for (const r of approved) byClass.set(r.class_id, [...(byClass.get(r.class_id) ?? []), r.subject_id]);
 
   const picks = await myPicks(staff.id, s);
+  const home = await homeSectionOf(staff.id);
 
   return (
     <div className="space-y-6">
@@ -93,7 +95,7 @@ export default async function MyClasses() {
           description="Tap every class you teach under each subject — as many subjects and sections as you need. Ticks on approved classes can't be removed here."
         />
         <ActionForm action={saveMySubjects} className="p-5">
-          <SubjectPicker sections={pickerSections(s)} initial={picks.pending} locked={picks.approved} />
+          <SubjectPicker sections={pickerSections(s, home)} initial={picks.pending} locked={picks.approved} />
           <SubmitButton size="lg" className="mt-5 w-full sm:w-auto">
             Save my subjects and classes
           </SubmitButton>

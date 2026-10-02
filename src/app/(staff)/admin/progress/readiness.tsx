@@ -3,6 +3,7 @@ import { CheckCircle2, CircleAlert, Rocket } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui";
 import type { Structure } from "@/lib/data";
 import { mailConfigured } from "@/lib/mail";
+import { staffSectionMap } from "@/lib/sections";
 import { createAdminClient } from "@/lib/supabase/server";
 
 type Check = { ok: boolean; label: string; fix: string; href?: string };
@@ -12,6 +13,11 @@ export async function Readiness({ s, schoolDeadline }: { s: Structure; schoolDea
   const sections = s.sections.filter((x) => x.cbt_enabled);
   const { data: heads } = await createAdminClient().from("admin_sections").select("section_id, staff!inner(active)").eq("staff.active", true);
   const headed = new Set((heads ?? []).map((h) => h.section_id as string));
+  const [sectionsOf, { data: teachers }] = await Promise.all([
+    staffSectionMap(),
+    createAdminClient().from("staff").select("id").eq("role", "teacher").eq("active", true),
+  ]);
+  const noSection = (teachers ?? []).filter((t) => !sectionsOf.get(t.id)?.length).length;
   const missing = (has: (id: string) => boolean) => sections.filter((x) => !has(x.id)).map((x) => x.name);
   const noClasses = missing((id) => s.classes.some((c) => c.active && s.sectionOfClass(c.id)?.id === id));
   const noSubjects = missing((id) => s.subjects.some((x) => x.section_id === id));
@@ -34,6 +40,12 @@ export async function Readiness({ s, schoolDeadline }: { s: Structure; schoolDea
       label: "Every section has a Head of Section",
       fix: `Add a Head of Section for ${list(noHead)} first, so someone approves those teachers' subjects (you can also approve them yourself).`,
       href: "/admin/staff",
+    },
+    {
+      ok: noSection === 0,
+      label: "Every teacher is in a section",
+      fix: `${noSection} teacher${noSection === 1 ? " has" : "s have"} no section yet, so no Head of Section can see ${noSection === 1 ? "them" : "them"}. Choose one on the Staff page.`,
+      href: "/admin/staff?section=none",
     },
     { ok: noDeadline.length === 0, label: "Question deadline set", fix: `Set a whole-school date or a date for ${list(noDeadline)} below.` },
     {

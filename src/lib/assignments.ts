@@ -1,5 +1,6 @@
 import "server-only";
 import type { Structure } from "@/lib/data";
+import { homeSectionOf, setHomeSection } from "@/lib/sections";
 import { createClient } from "@/lib/supabase/server";
 
 export type PickerSection = {
@@ -10,9 +11,9 @@ export type PickerSection = {
 };
 
 /** Every CBT section with its active subjects and classes, for the subject/class picker. */
-export function pickerSections(s: Structure): PickerSection[] {
+export function pickerSections(s: Structure, onlySection?: string | null): PickerSection[] {
   return s.sections
-    .filter((x) => x.cbt_enabled)
+    .filter((x) => x.cbt_enabled && (!onlySection || x.id === onlySection))
     .map((sec) => ({
       id: sec.id,
       name: sec.name,
@@ -50,6 +51,15 @@ export async function applySubjectPicks(teacherId: string, s: Structure, picksRa
     if (!subject || !s.classById.has(classId) || s.sectionOfClass(classId)?.id !== subject.section_id) continue;
     rows.push({ subject_id: subjectId, class_id: classId });
   }
+  // A teacher belongs to one section: Elementary or College, never both.
+  const picked = new Set(rows.map((r) => s.subjectById.get(r.subject_id)!.section_id));
+  if (picked.size > 1) return "Choose subjects from one section only. A teacher belongs to either Elementary or College.";
+  const home = await homeSectionOf(teacherId);
+  const [only] = [...picked];
+  if (home && only && only !== home) {
+    const name = s.sectionById.get(home)?.name ?? "your section";
+    return `You belong to ${name}, so please choose subjects and classes from ${name}.`;
+  }
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("teaching_assignments")
@@ -64,6 +74,7 @@ export async function applySubjectPicks(teacherId: string, s: Structure, picksRa
       { onConflict: "teacher_id,subject_id,class_id,session_id", ignoreDuplicates: true },
     );
     if (error) return error.message;
+    if (!home && only) await setHomeSection(teacherId, only);
   }
   return null;
 }

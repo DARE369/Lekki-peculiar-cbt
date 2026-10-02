@@ -180,7 +180,11 @@ test("teacher requests a subject and the HOD approves", async ({ browser }) => {
   await teacher.goto("/teach/classes");
   await teacher.getByRole("button", { name: "Basic Science — Year 4 Gold" }).click();
   await teacher.getByRole("button", { name: "Save my subjects and classes" }).click();
-  await expect(teacher.getByText(/^Saved\./)).toBeVisible();
+  // Saving goes straight to what to do next.
+  await expect(teacher).toHaveURL(/\/dashboard\?done=subjects/);
+  await expect(teacher.getByText("Your subjects and classes are saved.")).toBeVisible();
+  await expect(teacher.getByRole("link", { name: "Upload my questions" })).toBeVisible();
+  await teacher.goto("/teach/classes");
   await expect(teacher.getByText("Awaiting approval")).toBeVisible();
 
   const hod = await signIn(browser, "hod@lps.test", hodPassword);
@@ -205,18 +209,20 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
 
   await page.getByRole("link", { name: "Upload into this test" }).click();
   const text = Array.from({ length: 6 }, (_, i) => `Question number ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: B\nTOPIC: Topic ${i % 2}`).join("\n\n");
-  await page.getByRole("button", { name: "Copy and paste" }).click();
-  await page.getByPlaceholder(/What is 2 \+ 2/).fill(text);
-  await page.getByRole("button", { name: "Check pasted questions" }).click();
+  // Pasting is the default; the text is checked as it arrives (no button to press).
+  await expect(page.getByRole("button", { name: "Copy and paste" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Paste your questions").fill(text);
+  await expect(page.getByText("6 questions found")).toBeVisible();
   await expect(page.getByText("6 ready · 0 need fixing")).toBeVisible();
   await shot(page, "03-import-preview");
   await page.getByRole("button", { name: "Import 6 questions" }).click();
-  await expect(page).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+$/);
+  await expect(page).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+(\?.*)?$/);
   await expect(page.getByText("Questions (6)")).toBeVisible();
 
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Submit for approval" }).click();
-  await expect(page.getByText("Waiting for approval")).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\?done=submitted/);
+  await expect(page.getByText("Your test was sent for approval.")).toBeVisible();
   await shot(page, "04-submitted");
 });
 
@@ -531,9 +537,7 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await checklist.locator("li", { hasText: "Year 4" }).getByRole("link", { name: "Upload questions" }).click();
   await expect(ada.getByLabel("Year group")).toHaveValue(/.+/);
   const text = Array.from({ length: 3 }, (_, i) => `Ada question ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: A`).join("\n\n");
-  await ada.getByRole("button", { name: "Copy and paste" }).click();
-  await ada.getByPlaceholder(/What is 2 \+ 2/).fill(text);
-  await ada.getByRole("button", { name: "Check pasted questions" }).click();
+  await ada.getByLabel("Paste your questions").fill(text);
   await ada.getByRole("button", { name: "Import 3 questions" }).click();
   await expect(ada.getByText("Added 3 questions.")).toBeVisible();
   await ada.goto("/dashboard");
@@ -592,7 +596,7 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
 
   // Upload a Word file: typed letters in question 1, Word's automatic A/B/C list in question 2.
   await ada.getByRole("link", { name: "Upload into this test" }).click();
-  await expect(ada.getByRole("button", { name: "Word document", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await ada.getByRole("button", { name: "Word document", exact: true }).click();
   await ada.getByLabel("Choose a Word document file").setInputFiles({
     name: "maths.docx",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -606,7 +610,7 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await expect(ada.getByText("C. 6 ✓")).toBeVisible();
   await ada.getByRole("button", { name: "Remove question 2" }).click();
   await ada.getByRole("button", { name: "Import 1 question" }).click();
-  await expect(ada).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+$/);
+  await expect(ada).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+(\?.*)?$/);
   await expect(ada.getByText("Questions (1)")).toBeVisible();
   // ...and it can still be edited after saving.
   await ada.getByRole("link", { name: "Edit", exact: true }).click();
@@ -682,4 +686,69 @@ test("forgot password sends a branded email whose link opens the new-password fo
   await expect(page).toHaveURL(/\/account\?reset=1$/);
   await expect(page.getByText("Choose a new password")).toBeVisible();
   await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
+});
+
+test("a teacher pastes JSON copied from ChatGPT, with smart quotes and chatter, and it just works", async ({ browser }) => {
+  const page = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await page.goto("/teach/questions/import");
+  const messy = [
+    "Sure! Here are your questions:",
+    "```json",
+    "[",
+    "  { “question”: “What is 5 × 5?”, “options”: [“A. 20”, “B. 25”, “C. 30”, “D. 35”], “answer”: “B”, “difficulty”: “easy”, },",
+    "  { “question”: “Name the capital of Nigeria.”, “options”: [“Lagos”, “Abuja”, “Kano”], “correctAnswer”: “Abuja” }",
+    "]",
+    "```",
+    "I hope this helps!",
+  ].join("\n");
+  await page.getByLabel("Paste your questions").fill(messy);
+  await expect(page.getByText("Reading as JSON")).toBeVisible();
+  await expect(page.getByText("2 questions found")).toBeVisible();
+  await expect(page.getByText("We tidied up your text:")).toBeVisible();
+  await expect(page.getByText("B. 25 ✓")).toBeVisible();
+  await expect(page.getByText("B. Abuja ✓")).toBeVisible();
+  // The AI instructions button gives a ready-made prompt.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy instructions for the AI" }).click();
+  await expect(page.getByRole("button", { name: /Copied/ })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reply with ONLY a JSON list");
+  await page.getByRole("button", { name: "Import 2 questions" }).click();
+  await expect(page.getByText("Added 2 questions.")).toBeVisible();
+});
+
+test("each teacher belongs to one section, and Heads of Section only see their own section's staff", async ({ browser }) => {
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/staff");
+  // A College teacher, added with the section chosen.
+  await owner.getByLabel("Full name").fill("Mr Collins College");
+  await owner.getByLabel("School email").fill("collins@lps.test");
+  await owner.locator('select[name="home_section"]').selectOption({ label: "College" });
+  await owner.getByLabel("How should they sign in the first time?").selectOption("password");
+  await owner.getByRole("button", { name: "Add staff member" }).click();
+  await expect(owner.getByText(/Mr Collins College added/)).toBeVisible();
+  await expect(owner.getByRole("row", { name: /Mr Collins College/ }).getByText("College", { exact: true })).toBeVisible();
+
+  // Teachers with no section can be placed from the list.
+  await owner.goto("/admin/staff?section=none");
+  const row = owner.getByRole("row", { name: /Mrs Ngozi Obi/ });
+  await row.getByRole("combobox").selectOption({ label: "Elementary" });
+  await row.getByRole("button", { name: "Save" }).click();
+  await owner.goto("/admin/staff");
+  await expect(owner.getByRole("row", { name: /Mrs Ngozi Obi/ }).getByText("Elementary", { exact: true })).toBeVisible();
+
+  // The Elementary Head of Section sees Elementary staff — and nobody from College.
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/team");
+  await expect(hod.getByRole("heading", { name: "My staff" })).toBeVisible();
+  await expect(hod.getByText("Mr Dixon")).toBeVisible();
+  await expect(hod.getByText("Mrs Ngozi Obi")).toBeVisible();
+  await expect(hod.getByText("Mr Collins College")).toHaveCount(0);
+  await expect(hod.getByText("Mr Femi Lawal")).toHaveCount(0);
+  // View only: no edit links, and the staff management page is closed to them.
+  await expect(hod.getByRole("link", { name: "Mr Dixon" })).toHaveCount(0);
+  await hod.goto("/admin/staff");
+  await expect(hod).toHaveURL(/\/dashboard/);
+  await hod.goto("/admin/progress");
+  await expect(hod.getByText("Mr Collins College")).toHaveCount(0);
+  await expect(hod.getByText("Mrs Ada Bello")).toBeVisible();
 });

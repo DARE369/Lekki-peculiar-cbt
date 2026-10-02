@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Braces, ClipboardPaste, FileSpreadsheet, FileText, Keyboard, Sheet, type LucideIcon } from "lucide-react";
+import { Braces, Check, ClipboardCheck, ClipboardPaste, Copy, FileSpreadsheet, FileText, Keyboard, Sheet, Sparkles, type LucideIcon } from "lucide-react";
 import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea, cn } from "@/components/ui";
-import { OPTION_KEYS, parseAiken, parseCsv, parseJson, type ParseResult, type ParsedQuestion } from "@/lib/import/questions";
+import { OPTION_KEYS, looksLikeJson, parseCsv, parseText, type ParseResult, type ParsedQuestion } from "@/lib/import/questions";
 import type { Subject, Year } from "@/lib/types";
 import { commitImport } from "../../actions";
 
 type Format = "word" | "excel" | "paste" | "csv" | "json";
 
 const FORMATS: { id: Format; label: string; icon: LucideIcon; accept?: string; template?: string; how: string[] }[] = [
+  {
+    id: "paste",
+    label: "Copy and paste",
+    icon: ClipboardPaste,
+    how: [
+      "Paste JSON (for example from ChatGPT) or plain text copied from Word, WhatsApp or anywhere.",
+      "We check it as you paste. Nothing is saved until you press Import.",
+    ],
+  },
   {
     id: "word",
     label: "Word document",
@@ -22,7 +31,16 @@ const FORMATS: { id: Format; label: string; icon: LucideIcon; accept?: string; t
       "Type the question, then each option on its own line: A. B. C. D. (Word's automatic lettering works too).",
       "Under the options, add a line ANSWER: with the correct letter, e.g. ANSWER: B",
       "Leave an empty line between questions. Save as .docx.",
+      "Quicker: open the Word file, press Ctrl+A then Ctrl+C, and paste it under Copy and paste.",
     ],
+  },
+  {
+    id: "json",
+    label: "JSON file",
+    icon: Braces,
+    accept: ".json,.txt",
+    template: "/api/templates/questions.json",
+    how: ["A .json (or .txt) file with a list of questions. See the template for the layout.", "Quicker: open the file, copy everything, and paste it under Copy and paste."],
   },
   {
     id: "excel",
@@ -33,12 +51,6 @@ const FORMATS: { id: Format; label: string; icon: LucideIcon; accept?: string; t
     how: ["One question per row: Question, Option A–D (E optional), Answer (the letter), and optional Topic.", "Keep the heading row from the template."],
   },
   {
-    id: "paste",
-    label: "Copy and paste",
-    icon: ClipboardPaste,
-    how: ["Copy your questions from Word, WhatsApp or anywhere and paste them below, written like the example.", "Each question: the question, then A. B. C. D. options, then ANSWER: and the letter."],
-  },
-  {
     id: "csv",
     label: "CSV",
     icon: Sheet,
@@ -46,15 +58,29 @@ const FORMATS: { id: Format; label: string; icon: LucideIcon; accept?: string; t
     template: "/api/templates/questions.csv",
     how: ["Same columns as the Excel template, saved as CSV (Excel: File → Save As → CSV)."],
   },
-  {
-    id: "json",
-    label: "JSON (advanced)",
-    icon: Braces,
-    accept: ".json",
-    template: "/api/templates/questions.json",
-    how: ["For files exported from another system. See the template for the layout."],
-  },
 ];
+
+const JSON_EXAMPLE = `[
+  {
+    "question": "What is the powerhouse of the cell?",
+    "options": ["Nucleus", "Mitochondria", "Ribosome", "Golgi body"],
+    "answer": "B",
+    "topic": "Cells",
+    "difficulty": "easy",
+    "explanation": "Mitochondria produce energy (ATP)."
+  }
+]`;
+const TEXT_EXAMPLE = "What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6\nANSWER: B";
+
+/** The instructions teachers paste into ChatGPT (or any AI) so its answer can be pasted straight back here. */
+function aiPrompt(subject: string, year: string) {
+  return `Write 20 multiple-choice questions for ${subject}${year ? ` (${year})` : ""} for a Nigerian school.
+Reply with ONLY a JSON list. No explanations, no markdown, no extra words. Use exactly this layout:
+
+${JSON_EXAMPLE}
+
+Rules: give 4 options each. "answer" is the letter of the correct option (A, B, C or D). "difficulty" is easy, medium or hard. "topic" and "explanation" are optional.`;
+}
 
 export function ImportWizard({
   subjects,
@@ -72,11 +98,14 @@ export function ImportWizard({
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(defaultSubject ?? subjects[0]?.id ?? "");
   const [yearId, setYearId] = useState(defaultYear ?? "");
-  const [format, setFormat] = useState<Format>("word");
+  const [format, setFormat] = useState<Format>("paste");
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
   const [issues, setIssues] = useState<ParseResult["issues"]>([]);
+  const [notes, setNotes] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
@@ -90,7 +119,12 @@ export function ImportWizard({
     setFileName(name);
     setQuestions(result.questions);
     setIssues(result.issues);
+    setNotes(result.notes ?? []);
     setEditing(null);
+  }
+
+  function scrollToPreview() {
+    setTimeout(() => document.getElementById("import-preview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   }
 
   async function handleFile(file: File) {
@@ -106,13 +140,14 @@ export function ImportWizard({
         show(res.ok ? json : { questions: [], issues: [{ source: "file", message: json.error ?? "Upload failed" }] }, file.name);
       } else if (ext === "docx") {
         const { docxToText } = await import("@/lib/import/docx");
-        show(parseAiken(await docxToText(await file.arrayBuffer())), file.name);
+        show(parseText(await docxToText(await file.arrayBuffer())), file.name);
       } else if (ext === "doc") {
         show({ questions: [], issues: [{ source: "file", message: "This is an old Word file (.doc). Open it in Word and use File → Save As → Word Document (.docx)." }] }, file.name);
       } else {
         const content = await file.text();
-        show(ext === "csv" ? parseCsv(content) : ext === "json" || /^\s*[[{]/.test(content) ? parseJson(content) : parseAiken(content), file.name);
+        show(ext === "csv" ? parseCsv(content) : parseText(content), file.name);
       }
+      scrollToPreview();
     } catch {
       show({ questions: [], issues: [{ source: "file", message: "Could not read this file. Check it is the right type and try again." }] }, file.name);
     } finally {
@@ -120,9 +155,37 @@ export function ImportWizard({
     }
   }
 
-  function handlePaste() {
+  /** Checks the pasted text a moment after the last keystroke or paste, so there is no button to forget. */
+  function onPasteChange(value: string) {
+    setPaste(value);
     setMessage(null);
-    show(/^\s*[[{]/.test(paste) ? parseJson(paste) : parseAiken(paste), "pasted text");
+    if (timer.current) clearTimeout(timer.current);
+    if (!value.trim()) {
+      setQuestions(null);
+      setIssues([]);
+      setNotes([]);
+      return;
+    }
+    timer.current = setTimeout(() => show(parseText(value), "pasted text"), 350);
+  }
+
+  async function copyPrompt() {
+    const text = aiPrompt(subject?.name ?? "my subject", sectionYears.find((y) => y.id === yearId)?.name ?? "");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      setMessage({ tone: "danger", text: "Your browser would not copy that. Select the text in the example and copy it yourself." });
+    }
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      onPasteChange(await navigator.clipboard.readText());
+    } catch {
+      setMessage({ tone: "danger", text: "Your browser needs permission to paste for you. Tap inside the box, then paste (hold your finger down, or Ctrl+V)." });
+    }
   }
 
   function update(i: number, q: ParsedQuestion) {
@@ -149,9 +212,18 @@ export function ImportWizard({
         setQuestions(null);
         setIssues([]);
         setPaste("");
+        setNotes([]);
         setFileName(null);
-        if (assessmentId) router.push(`/teach/assessments/${assessmentId}`);
-        else router.refresh();
+        const added = res.data?.added ?? 0;
+        const skipped = res.data?.skipped ?? 0;
+        // On to the next step: the test being built, or the question bank for this subject.
+        if (added > 0) {
+          router.push(
+            assessmentId
+              ? `/teach/assessments/${assessmentId}?added=${added}`
+              : `/teach/questions?subject=${subjectId}&added=${added}${skipped ? `&skipped=${skipped}` : ""}`,
+          );
+        } else router.refresh();
       } else {
         setMessage({ tone: "danger", text: res && !res.ok ? res.error : "Import failed." });
       }
@@ -187,7 +259,7 @@ export function ImportWizard({
 
       <Card>
         <CardHeader title="2. How are your questions written?" description="Pick one. You'll check every question before anything is saved." />
-        <div className="grid grid-cols-2 gap-2 px-5 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 px-4 sm:grid-cols-3 sm:px-5 lg:grid-cols-6">
           {FORMATS.map((f) => (
             <button
               key={f.id}
@@ -220,7 +292,7 @@ export function ImportWizard({
               ))}
             </ul>
             <pre className="mt-3 overflow-x-auto rounded-lg border border-border bg-surface p-3 font-mono text-xs leading-relaxed">
-              {"What is 2 + 2?\nA. 3\nB. 4\nC. 5\nD. 6\nANSWER: B"}
+              {format === "json" || (format === "paste" && looksLikeJson(paste)) ? JSON_EXAMPLE : TEXT_EXAMPLE}
             </pre>
             {current.template ? (
               <a href={current.template} className="mt-3 inline-block font-semibold text-brand hover:underline">
@@ -229,21 +301,58 @@ export function ImportWizard({
             ) : null}
           </div>
           {format === "paste" ? (
-            <div>
+            <div className="max-lg:order-first">
               <Textarea
                 rows={10}
                 value={paste}
-                onChange={(e) => setPaste(e.target.value)}
-                placeholder={"What is 2 + 2?\nA. 3\nB. 4\nC. 5\nANSWER: B"}
+                onChange={(e) => onPasteChange(e.target.value)}
+                placeholder="Paste your questions here — JSON or plain text"
                 className="font-mono text-xs"
                 aria-label="Paste your questions"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
               />
-              <Button variant="primary" className="mt-2" onClick={handlePaste} disabled={!paste.trim()}>
-                Check pasted questions
-              </Button>
+              <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" aria-live="polite">
+                {paste.trim() ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold">
+                      {looksLikeJson(paste) ? "Reading as JSON" : "Reading as plain text"}
+                    </span>
+                    {questions && fileName === "pasted text" ? (
+                      <span className={issues.length ? "text-warning" : "text-success"}>
+                        <strong>{questions.length}</strong> question{questions.length === 1 ? "" : "s"} found
+                        {issues.length ? ` · ${issues.length} need fixing` : ""}
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="text-muted">Waiting for your questions…</span>
+                )}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" onClick={pasteFromClipboard}>
+                  <ClipboardCheck aria-hidden /> Paste from clipboard
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => onPasteChange(JSON_EXAMPLE)}>
+                  <Sparkles aria-hidden /> Try an example
+                </Button>
+                {paste ? (
+                  <Button variant="ghost" size="sm" onClick={() => onPasteChange("")}>
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+              <div className="mt-4 rounded-xl border border-border p-3 text-sm">
+                <p className="font-semibold">Using ChatGPT or another AI?</p>
+                <p className="mt-1 text-muted">Copy these instructions, paste them into the AI, then paste its answer above.</p>
+                <Button variant="secondary" size="sm" className="mt-2" onClick={copyPrompt}>
+                  {copied ? <Check aria-hidden /> : <Copy aria-hidden />} {copied ? "Copied — now paste it into the AI" : "Copy instructions for the AI"}
+                </Button>
+              </div>
             </div>
           ) : (
-            <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border text-center text-sm text-muted hover:border-brand">
+            <label className="flex min-h-48 cursor-pointer max-lg:order-first flex-col items-center justify-center rounded-xl border-2 border-dashed border-border text-center text-sm text-muted hover:border-brand">
               <input
                 type="file"
                 accept={current.accept}
@@ -266,7 +375,7 @@ export function ImportWizard({
       {message ? <Alert tone={message.tone}>{message.text}</Alert> : null}
 
       {questions ? (
-        <Card>
+        <Card id="import-preview" className="scroll-mt-20">
           <CardHeader
             title={`3. Check and edit — ${fileName}`}
             description={`${questions.length} ready · ${issues.length} need fixing`}
@@ -276,6 +385,17 @@ export function ImportWizard({
               </Button>
             }
           />
+          {notes.length ? (
+            <div className="border-b border-border p-5">
+              <Alert tone="info" title="We tidied up your text:">
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {notes.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </Alert>
+            </div>
+          ) : null}
           {issues.length ? (
             <div className="border-b border-border p-5">
               <Alert tone="warning" title="These couldn't be read and were left out — fix them in your file and upload again:">

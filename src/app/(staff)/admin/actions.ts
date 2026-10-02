@@ -300,6 +300,14 @@ export async function addSubject(_: ActionResult, fd: FormData): Promise<ActionR
   return ok(`${name} added.`);
 }
 
+/** Brings back every retired subject in a section (policies still limit who may change them). */
+export async function restoreSubjects(fd: FormData) {
+  await requireAdmin();
+  const supabase = await createClient();
+  await supabase.from("subjects").update({ active: true }).eq("section_id", str(fd, "section_id")).eq("active", false);
+  revalidatePath("/admin/classes");
+}
+
 export async function toggleSubject(fd: FormData) {
   await requireAdmin();
   const supabase = await createClient();

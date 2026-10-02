@@ -5,7 +5,7 @@ import { Badge, Card, CardHeader, Field, Input, PageHeader, Select, Textarea } f
 import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { addClasses, addSubject, addYearClasses, toggleSubject, updateClass } from "../actions";
+import { addClasses, addSubject, addYearClasses, restoreSubjects, toggleSubject, updateClass } from "../actions";
 
 export const metadata: Metadata = { title: "Classes & subjects" };
 
@@ -44,7 +44,7 @@ export default async function ClassesPage() {
                         <div className="flex flex-1 flex-wrap gap-2">
                           {classes.length === 0 ? <span className="pt-1 text-sm text-muted">No classes</span> : null}
                           {classes.map((c) => (
-                            <details key={c.id} className="relative">
+                            <details key={c.id} className="relative open:max-md:basis-full">
                               <summary className="cursor-pointer list-none">
                                 <Badge tone={c.active ? "brand" : "neutral"} className="text-sm">
                                   {c.name} · {perClass.get(c.id) ?? 0}
@@ -52,7 +52,7 @@ export default async function ClassesPage() {
                                   {!c.active ? " (retired)" : ""}
                                 </Badge>
                               </summary>
-                              <div className="absolute z-10 mt-1 w-72 rounded-xl border border-border bg-surface p-4 shadow-lg">
+                              <div className="absolute z-10 mt-1 w-72 rounded-xl border border-border bg-surface p-4 shadow-lg max-md:static max-md:w-full">
                                 <ActionForm action={updateClass} className="space-y-3">
                                   <input type="hidden" name="id" value={c.id} />
                                   <Field label="Name">
@@ -133,21 +133,57 @@ export default async function ClassesPage() {
                   </ActionForm>
                 </Card>
                 <Card>
-                  <CardHeader title="Subjects" />
-                  <div className="flex flex-wrap gap-2 p-5">
-                    {subjects.map((x) => (
-                      <form key={x.id} action={toggleSubject}>
-                        <input type="hidden" name="id" value={x.id} />
-                        <input type="hidden" name="active" value={String(!x.active)} />
-                        <button title={x.active ? "Click to retire" : "Click to restore"}>
-                          <Badge tone={x.active ? "neutral" : "danger"}>
-                            {x.name}
-                            {!x.active ? " (retired)" : ""}
-                          </Badge>
-                        </button>
+                  <CardHeader title="Subjects" description="Teachers pick from these. Retire one only if it is no longer taught." />
+                  <ul className="divide-y divide-border">
+                    {subjects
+                      .filter((x) => x.active)
+                      .map((x) => (
+                        <li key={x.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                          <span className="min-w-0 text-sm font-medium">{x.name}</span>
+                          <form action={toggleSubject}>
+                            <input type="hidden" name="id" value={x.id} />
+                            <input type="hidden" name="active" value="false" />
+                            <SubmitButton
+                              size="sm"
+                              variant="ghost"
+                              pendingText="…"
+                              confirm={`Retire ${x.name}? Teachers will no longer be able to choose it. You can restore it at any time.`}
+                            >
+                              Retire
+                            </SubmitButton>
+                          </form>
+                        </li>
+                      ))}
+                  </ul>
+                  {subjects.some((x) => !x.active) ? (
+                    <details className="border-t border-border" open>
+                      <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3 text-sm font-semibold text-danger">
+                        Retired subjects ({subjects.filter((x) => !x.active).length})
+                      </summary>
+                      <ul className="divide-y divide-border border-t border-border bg-danger-soft/30">
+                        {subjects
+                          .filter((x) => !x.active)
+                          .map((x) => (
+                            <li key={x.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                              <span className="min-w-0 text-sm text-muted line-through">{x.name}</span>
+                              <form action={toggleSubject}>
+                                <input type="hidden" name="id" value={x.id} />
+                                <input type="hidden" name="active" value="true" />
+                                <SubmitButton size="sm" variant="secondary" pendingText="…">
+                                  Restore
+                                </SubmitButton>
+                              </form>
+                            </li>
+                          ))}
+                      </ul>
+                      <form action={restoreSubjects} className="border-t border-border p-4">
+                        <input type="hidden" name="section_id" value={sec.id} />
+                        <SubmitButton size="sm" variant="primary" pendingText="Restoring…">
+                          Restore all retired subjects
+                        </SubmitButton>
                       </form>
-                    ))}
-                  </div>
+                    </details>
+                  ) : null}
                   <ActionForm action={addSubject} className="flex gap-2 border-t border-border p-5" resetOnSuccess>
                     <input type="hidden" name="section_id" value={sec.id} />
                     <Input name="name" placeholder="New subject" required />

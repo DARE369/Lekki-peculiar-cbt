@@ -56,7 +56,7 @@ export default async function AuditPage(props: PageProps<"/admin/audit">) {
         {(data ?? []).length === 0 ? (
           <EmptyState title="Nothing recorded" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>When</Th>
@@ -69,9 +69,9 @@ export default async function AuditPage(props: PageProps<"/admin/audit">) {
               {(data ?? []).map((r) => (
                 <tr key={r.id}>
                   <Td className="text-xs whitespace-nowrap">{formatDateTime(r.created_at)}</Td>
-                  <Td>{r.actor_id ? (names.get(r.actor_id) ?? "Unknown") : "System"}</Td>
-                  <Td>{LABELS[r.action] ?? r.action}</Td>
-                  <Td className="max-w-md truncate font-mono text-xs text-muted" title={JSON.stringify(r.detail)}>
+                  <Td label="Who">{r.actor_id ? (names.get(r.actor_id) ?? "Unknown") : "System"}</Td>
+                  <Td label="What">{LABELS[r.action] ?? r.action}</Td>
+                  <Td label="Details" className="max-w-md truncate font-mono text-xs text-muted max-md:max-w-none max-md:whitespace-normal" title={JSON.stringify(r.detail)}>
                     {r.detail ? JSON.stringify(r.detail) : ""}
                   </Td>
                 </tr>

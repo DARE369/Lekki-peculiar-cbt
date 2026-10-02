@@ -187,3 +187,67 @@ body {
     color: #000;
   }
 }
+
+/* Tables marked `stack` become one card per row on phones. */
+@media (max-width: 767px) {
+  .stack-table,
+  .stack-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .stack-table thead {
+    display: none;
+  }
+  .stack-table tbody tr {
+    display: block;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .stack-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .stack-table td {
+    display: block;
+    padding: 0.25rem 0 !important;
+    border: 0 !important;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .stack-table td[data-label] {
+    display: flex;
+    gap: 0.75rem;
+    align-items: baseline;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 5.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stack-table td > .cell-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .stack-table tbody tr {
+    position: relative;
+  }
+  .stack-table td.cell-check {
+    position: absolute;
+    top: 0.85rem;
+    right: 1rem;
+    padding: 0 !important;
+  }
+  .stack-table td.cell-check input {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+  .stack-table tr:has(.cell-check) td:nth-child(2) {
+    padding-right: 2.25rem !important;
+  }
+  .stack-table td.cell-actions {
+    padding-top: 0.6rem !important;
+  }
+}

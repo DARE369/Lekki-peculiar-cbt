@@ -99,7 +99,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
       ) : tab === "results" ? (
         <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
           <Card>
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   <Th>Pos.</Th>
@@ -118,7 +118,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
                   const p = percent(t);
                   return (
                     <tr key={t.id}>
-                      <Td className="tabular-nums">{rank.get(t) ? ordinal(rank.get(t)!) : "—"}</Td>
+                      <Td label="Position" className="tabular-nums">{rank.get(t) ? ordinal(rank.get(t)!) : "—"}</Td>
                       <Td>
                         {st ? (
                           <Link href={`/reports/student/${st.id}?term=${a.term_id}`} className="font-medium hover:underline">
@@ -129,18 +129,18 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
                         )}
                         {t.is_makeup ? <Badge tone="info" className="ml-2">Make-up</Badge> : null}
                       </Td>
-                      <Td>{s.className(t.class_id)}</Td>
-                      <Td className="tabular-nums">
+                      <Td label="Class">{s.className(t.class_id)}</Td>
+                      <Td label="Score" className="tabular-nums">
                         {Number(t.score)}/{Number(t.max_score)}
                       </Td>
-                      <Td>
+                      <Td label="Percent">
                         <span className={cn("tabular-nums", p != null && p < passMark ? "font-medium text-danger" : "")}>{p}%</span>
                       </Td>
-                      <Td className="tabular-nums">
+                      <Td label="Answered" className="tabular-nums">
                         {t.answered_count}/{t.total_questions}
                       </Td>
-                      <Td className="text-xs text-muted tabular-nums">{t.submitted_at ? `${minutesBetween(t.started_at, t.submitted_at)} min` : "—"}</Td>
-                      <Td>
+                      <Td label="Time" className="text-xs text-muted tabular-nums">{t.submitted_at ? `${minutesBetween(t.started_at, t.submitted_at)} min` : "—"}</Td>
+                      <Td className="cell-actions">
                         <Link href={`/reports/student/${t.student_id}?term=${a.term_id}#${t.id}`} className="text-xs text-brand hover:underline">
                           Answers
                         </Link>

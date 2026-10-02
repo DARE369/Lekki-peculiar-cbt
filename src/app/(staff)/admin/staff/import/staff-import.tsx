@@ -98,7 +98,7 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
               </div>
             }
           />
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Name</Th>
@@ -111,12 +111,12 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
               {results.map((r) => (
                 <tr key={r.email + r.full_name}>
                   <Td>{r.full_name}</Td>
-                  <Td className="text-xs">{r.email}</Td>
-                  <Td>
+                  <Td label="Email" className="text-xs">{r.email}</Td>
+                  <Td label="Result">
                     <Badge tone={r.status === "added" ? "success" : r.status === "skipped" ? "neutral" : "danger"}>{r.status}</Badge>{" "}
                     <span className="text-xs text-muted">{r.note}</span>
                   </Td>
-                  {withPasswords ? <Td className="font-mono text-sm">{r.password ?? "—"}</Td> : null}
+                  {withPasswords ? <Td label="Password" className="font-mono text-sm">{r.password ?? "—"}</Td> : null}
                 </tr>
               ))}
             </tbody>
@@ -220,7 +220,7 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
             </Button>
           </div>
           <div className="max-h-[480px] overflow-y-auto">
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   <Th>Name</Th>
@@ -236,9 +236,9 @@ export function StaffImport({ sectionNames }: { sectionNames: string[] }) {
                       {r.full_name || "—"}
                       {r.problem ? <span className="block text-xs text-danger">{r.problem}</span> : null}
                     </Td>
-                    <Td className="text-xs">{r.email}</Td>
-                    <Td>{r.role === "admin" ? <Badge tone="info">Head of Section</Badge> : "Teacher"}</Td>
-                    <Td className="text-xs">{r.sections.join(", ") || "—"}</Td>
+                    <Td label="Email" className="text-xs">{r.email}</Td>
+                    <Td label="Role">{r.role === "admin" ? <Badge tone="info">Head of Section</Badge> : "Teacher"}</Td>
+                    <Td label="Section" className="text-xs">{r.sections.join(", ") || "—"}</Td>
                   </tr>
                 ))}
               </tbody>

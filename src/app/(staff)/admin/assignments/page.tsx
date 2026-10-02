@@ -56,7 +56,7 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
           <EmptyState title="No requests waiting" />
         ) : (
           <form action={decideAssignment}>
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   <Th className="w-10" />
@@ -68,12 +68,12 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
               <tbody>
                 {requested.map((r) => (
                   <tr key={r.id}>
-                    <Td>
+                    <Td className="cell-check">
                       <input type="checkbox" name="id" value={r.id} defaultChecked className="h-4 w-4 accent-[var(--brand)]" aria-label="Select" />
                     </Td>
                     <Td className="font-medium">{r.staff?.full_name}</Td>
-                    <Td>{s.subjectById.get(r.subject_id)?.name}</Td>
-                    <Td>{s.className(r.class_id)}</Td>
+                    <Td label="Subject">{s.subjectById.get(r.subject_id)?.name}</Td>
+                    <Td label="Class">{s.className(r.class_id)}</Td>
                   </tr>
                 ))}
               </tbody>

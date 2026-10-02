@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { FileQuestion } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Select, Table, Td, Th } from "@/components/ui";
+import { NextSteps } from "@/components/next-steps";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
@@ -53,6 +54,18 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
           </>
         }
       />
+      {sp.added || sp.updated ? (
+        <NextSteps
+          title={sp.updated ? "Question saved." : `Added ${Number(sp.added) || 1} question${Number(sp.added) === 1 || !Number(sp.added) ? "" : "s"}.`}
+          steps={[
+            { href: `/teach/assessments/new${subjectId ? `?subject=${subjectId}` : ""}`, label: "Create a test with these questions", primary: true },
+            { href: `/teach/questions/import${subjectId ? `?subject=${subjectId}` : ""}`, label: "Add more questions" },
+          ]}
+        >
+          {Number(sp.skipped) ? `${Number(sp.skipped)} duplicate${Number(sp.skipped) === 1 ? " was" : "s were"} left out. ` : ""}
+          They are in the list below. You can open any question to change it.
+        </NextSteps>
+      ) : null}
       {subjects.length === 0 ? (
         <Card>
           <EmptyState title="No subjects yet" action={<LinkButton href="/teach/classes">Add what you teach</LinkButton>}>
@@ -94,7 +107,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
             {(questions ?? []).length === 0 ? (
               <EmptyState title="No questions found" />
             ) : (
-              <Table>
+              <Table stack>
                 <thead>
                   <tr>
                     <Th className="w-1/2">Question</Th>
@@ -118,17 +131,17 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                           </Link>
                           <span className="text-xs text-muted">{opts.length} options</span>
                         </Td>
-                        <Td>
+                        <Td label="Answer">
                           <Badge tone="success">{row.answer}</Badge>{" "}
                           <span className="text-xs text-muted">{correct?.text.slice(0, 30)}</span>
                         </Td>
-                        <Td className="text-xs">
+                        <Td label="Topic" className="text-xs">
                           {row.topic ?? "—"}
                           {row.difficulty ? <span className="block text-muted">{DIFF[row.difficulty]}</span> : null}
                         </Td>
-                        <Td className="text-xs">{row.year_id ? s.yearById.get(row.year_id)?.name : "Any"}</Td>
-                        <Td className="text-xs">{owner?.full_name}</Td>
-                        <Td className="text-right">
+                        <Td label="Year" className="text-xs">{row.year_id ? s.yearById.get(row.year_id)?.name : "Any"}</Td>
+                        <Td label="Added by" className="text-xs">{owner?.full_name}</Td>
+                        <Td className="cell-actions text-right max-md:text-left">
                           {row.owner_id === staff.id || staff.isAdmin ? (
                             <form action={archiveQuestion}>
                               <input type="hidden" name="id" value={row.id} />

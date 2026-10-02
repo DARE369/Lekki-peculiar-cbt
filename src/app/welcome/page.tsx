@@ -9,6 +9,7 @@ import { Field, Input, buttonClass, cn } from "@/components/ui";
 import { needsOnboarding, requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { myPicks, pickerSections } from "@/lib/assignments";
+import { homeSectionOf } from "@/lib/sections";
 import { daysUntil, deadlineForSection, formatDeadline, getQuestionSettings } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
@@ -143,6 +144,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
 
   async function SubjectsStep({ staffId, next }: { staffId: string; next: string }) {
     const picks = await myPicks(staffId, s);
+    const home = await homeSectionOf(staffId);
     return (
       <>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">What do you teach?</h1>
@@ -153,7 +155,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
         <ActionForm action={saveSubjects} className="mt-6">
           <input type="hidden" name="next" value={next} />
           <SubjectPicker
-            sections={pickerSections(s)}
+            sections={pickerSections(s, home)}
             initial={picks.pending}
             locked={picks.approved}
           />

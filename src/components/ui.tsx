@@ -261,13 +261,18 @@ export function EmptyState({
 // ---------------------------------------------------------------------------
 // Tables
 // ---------------------------------------------------------------------------
-export function Table({ className, ...props }: ComponentProps<"table">) {
+/**
+ * A data table. With `stack`, rows turn into cards on phones (give each Td a `label`), so nothing
+ * scrolls sideways; without it the table scrolls inside its card.
+ */
+export function Table({ className, stack = false, ...props }: ComponentProps<"table"> & { stack?: boolean }) {
   return (
-    <div className="overflow-x-auto">
-      <table className={cn("w-full border-separate border-spacing-0 text-left text-sm", className)} {...props} />
+    <div className={stack ? "md:overflow-x-auto" : "overflow-x-auto"}>
+      <table className={cn("w-full border-separate border-spacing-0 text-left text-sm", stack && "stack-table", className)} {...props} />
     </div>
   );
 }
+
 export function Th({ className, ...props }: ComponentProps<"th">) {
   return (
     <th
@@ -279,8 +284,13 @@ export function Th({ className, ...props }: ComponentProps<"th">) {
     />
   );
 }
-export function Td({ className, ...props }: ComponentProps<"td">) {
-  return <td className={cn("border-b border-border px-4 py-3 align-middle first:pl-5 last:pr-5 [tr:last-child_&]:border-b-0", className)} {...props} />;
+/** `label` is the column name shown beside the value when the table is stacked on a phone. */
+export function Td({ className, label, children, ...props }: ComponentProps<"td"> & { label?: string }) {
+  return (
+    <td data-label={label} className={cn("border-b border-border px-4 py-3 align-middle first:pl-5 last:pr-5 [tr:last-child_&]:border-b-0", className)} {...props}>
+      {label ? <div className="cell-body">{children}</div> : children}
+    </td>
+  );
 }
 
 // ---------------------------------------------------------------------------

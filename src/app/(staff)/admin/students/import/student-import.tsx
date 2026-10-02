@@ -141,7 +141,7 @@ export function StudentImport({ classNames }: { classNames: string[] }) {
             {ignored.length ? <p className="text-xs text-muted">Not imported (not used by the CBT): {ignored.join(", ")}.</p> : null}
           </div>
           <div className="max-h-[480px] overflow-y-auto">
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   <Th>Admission no.</Th>
@@ -155,12 +155,12 @@ export function StudentImport({ classNames }: { classNames: string[] }) {
               <tbody>
                 {rows.slice(0, 1000).map((r, i) => (
                   <tr key={i} className={hasClass(r) ? undefined : "opacity-60"}>
-                    <Td className="font-mono text-xs">{r.admission_no || <Badge tone="danger">missing</Badge>}</Td>
-                    <Td>{r.first_name}</Td>
-                    <Td>{r.last_name || <Badge tone="danger">missing</Badge>}</Td>
-                    <Td>{r.other_names}</Td>
-                    <Td>{r.gender}</Td>
-                    <Td>
+                    <Td label="Admission no." className="font-mono text-xs">{r.admission_no || <Badge tone="danger">missing</Badge>}</Td>
+                    <Td label="First name">{r.first_name}</Td>
+                    <Td label="Surname">{r.last_name || <Badge tone="danger">missing</Badge>}</Td>
+                    <Td label="Other names">{r.other_names}</Td>
+                    <Td label="Gender">{r.gender}</Td>
+                    <Td label="Class">
                       {r.class_name}{" "}
                       {hasClass(r) ? null : <Badge tone={skipUnknown ? "neutral" : "warning"}>{skipUnknown ? "skipped" : "no such class"}</Badge>}
                     </Td>

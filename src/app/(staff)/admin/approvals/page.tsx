@@ -38,7 +38,7 @@ export default async function Approvals() {
         {(pending ?? []).length === 0 ? (
           <EmptyState title="All caught up" />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Test</Th>
@@ -59,12 +59,12 @@ export default async function Approvals() {
                       {s.subjectById.get(a.subject_id)?.name} · {TYPE_LABEL[a.type as AssessmentType]}
                     </span>
                   </Td>
-                  <Td>{(a.staff as unknown as { full_name: string } | null)?.full_name}</Td>
-                  <Td>{s.yearById.get(a.year_id)?.name}</Td>
-                  <Td className="tabular-nums">
+                  <Td label="Teacher">{(a.staff as unknown as { full_name: string } | null)?.full_name}</Td>
+                  <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
+                  <Td label="Size" className="tabular-nums">
                     {a.question_count} q · {a.duration_minutes} min
                   </Td>
-                  <Td className="text-xs text-muted">{formatDateTime(a.submitted_at)}</Td>
+                  <Td label="Sent" className="text-xs text-muted">{formatDateTime(a.submitted_at)}</Td>
                 </tr>
               ))}
             </tbody>

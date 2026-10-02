@@ -57,7 +57,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
         {(data ?? []).length === 0 ? (
           <EmptyState title="Nothing here yet" action={<LinkButton href="/teach/assessments/new">Create your first test</LinkButton>} />
         ) : (
-          <Table>
+          <Table stack>
             <thead>
               <tr>
                 <Th>Title</Th>
@@ -82,15 +82,15 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                         {scope === "all" ? ` · ${(a.staff as unknown as { full_name: string } | null)?.full_name}` : ""}
                       </span>
                     </Td>
-                    <Td>{s.subjectById.get(a.subject_id)?.name}</Td>
-                    <Td>{s.yearById.get(a.year_id)?.name}</Td>
-                    <Td className="tabular-nums">
+                    <Td label="Subject">{s.subjectById.get(a.subject_id)?.name}</Td>
+                    <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
+                    <Td label="Questions" className="tabular-nums">
                       {a.question_count} · {a.duration_minutes} min
                     </Td>
-                    <Td>
+                    <Td label="Status">
                       <Badge tone={tone}>{label}</Badge>
                     </Td>
-                    <Td className="text-xs whitespace-nowrap text-muted">{formatDateTime(a.updated_at)}</Td>
+                    <Td label="Updated" className="text-xs whitespace-nowrap text-muted">{formatDateTime(a.updated_at)}</Td>
                   </tr>
                 );
               })}

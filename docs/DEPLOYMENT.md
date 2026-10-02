@@ -118,7 +118,7 @@ Before inviting, open **Staff progress** as super admin: the **Before you invite
   | `SMTP_FROM` | `Lekki Peculiar School <peace.denise@peculiarschools.com>` (optional) |
 
   Without them the app works normally and simply doesn't send these emails.
-- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` then `supabase/migrations/20261003000100_assessment_classes.sql` and `supabase/migrations/20261004000100_mock_test.sql` in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
+- **Database update.** Run `supabase/migrations/20261002000100_onboarding.sql` then `supabase/migrations/20261003000100_assessment_classes.sql` `supabase/migrations/20261004000100_mock_test.sql`, `supabase/migrations/20261005000100_restore_subjects.sql` (brings back every retired subject) and `supabase/migrations/20261006000100_staff_sections.sql` (teachers belong to one section; Heads of Section only see their own section's staff) in the Supabase SQL editor (or `npx supabase db push`) **before** deploying this version.
 
 ## Maintenance
 
@@ -131,3 +131,13 @@ Before inviting, open **Staff progress** as super admin: the **Before you invite
 - **Colours:** the `BRAND` block at the top of `src/app/globals.css` (light and dark values, plus the fixed hero-panel blues and gold).
 - **Name, vision, core values, crest:** `src/lib/brand.ts`. Put the crest image in `public/brand/` and set `logoSrc` (e.g. `/brand/crest.png`); until then a monogram is drawn in the brand colours.
 - **Theme:** every user can switch Light / Dark / System (sidebar, sign-in page, exam screen). “System” follows the device setting live.
+
+## Sections and who can see whom
+
+Every teacher belongs to one section (Elementary or College). Choose it when adding a teacher (single add, or the **Section** column in a bulk file); for teachers already added, use the quick **Choose…** box on **Staff & permissions** (filter: *No section yet*). A teacher who hasn't been placed is placed automatically when they first pick subjects. Teachers can only pick subjects from their own section.
+
+Heads of Section see only the staff of their own section(s), in **My staff** (view only: name, email, phone, status) and **Staff progress**. The super admin sees everyone and is the only one who can change staff details or access.
+
+## Pasting questions
+
+**Upload questions → Copy and paste** reads JSON or plain text as you paste it, and tidies the usual damage from copying (curly quotation marks, ```json code fences, chat text around the questions, missing or extra commas, cut-off text). **Copy instructions for the AI** gives teachers a ready-made prompt for ChatGPT whose answer can be pasted straight back.

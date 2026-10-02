@@ -95,7 +95,7 @@ export default async function StudentReport(props: PageProps<"/reports/student/[
         <>
           <Card>
             <CardHeader title="Summary by subject" description={`Overall average ${overall.mean ?? "—"}% across ${overall.count} tests and exams.`} />
-            <Table>
+            <Table stack>
               <thead>
                 <tr>
                   <Th>Subject</Th>
@@ -111,11 +111,11 @@ export default async function StudentReport(props: PageProps<"/reports/student/[
                   return (
                     <tr key={subjectId}>
                       <Td className="font-medium">{s.subjectById.get(subjectId)?.name}</Td>
-                      <Td className="tabular-nums">{rows.length}</Td>
-                      <Td>
+                      <Td label="Tests" className="tabular-nums">{rows.length}</Td>
+                      <Td label="Average">
                         <PercentBar value={sm.mean} />
                       </Td>
-                      <Td className="text-sm tabular-nums">
+                      <Td label="Results" className="text-sm tabular-nums">
                         {rows.map((r, i) => (
                           <span key={r.id}>
                             {i ? " → " : ""}

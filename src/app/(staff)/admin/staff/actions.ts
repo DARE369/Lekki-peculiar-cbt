@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { requireSuperAdmin, type StaffContext } from "@/lib/auth";
 import { fail, ok, str, type ActionResult } from "@/lib/actions";
 import { findAuthUserId, inviteData, inviteLogin } from "@/lib/invite";
+import { setHomeSection } from "@/lib/sections";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import type { StaffImportRow } from "@/lib/import/staff";
 import { readSheetCells } from "@/lib/import/xlsx";
@@ -24,7 +25,9 @@ function parseAccess(fd: FormData) {
   if (!["super_admin", "admin", "teacher"].includes(role)) return null;
   const sections = fd.getAll("section_id").map(String);
   const permissions = fd.getAll("permission").map(String).filter((p): p is Permission => p in PERMISSIONS);
-  return { role, sections: role === "admin" ? sections : [], permissions: role === "super_admin" ? [] : permissions };
+  // A teacher belongs to one section; Heads of Section are tied to the sections they manage instead.
+  const homeSection = role === "teacher" ? str(fd, "home_section") || null : null;
+  return { role, sections: role === "admin" ? sections : [], permissions: role === "super_admin" ? [] : permissions, homeSection };
 }
 
 
@@ -102,8 +105,10 @@ export async function createStaff(_: ActionResult, fd: FormData): Promise<Action
   }
   if (!userId) return fail("Could not find or create the sign-in account for that email.");
 
-  const saved = await saveStaffRecord(admin, me, { userId, email, fullName, ...access });
+  const { homeSection, ...rest } = access;
+  const saved = await saveStaffRecord(admin, me, { userId, email, fullName, ...rest });
   if (saved) return fail(saved);
+  if (homeSection) await setHomeSection(userId, homeSection);
   await admin.from("audit_log").insert({ actor_id: me.id, action: "staff.created", entity: "staff", entity_id: userId, detail: { email, role: access.role } });
   revalidatePath("/admin/staff");
   if (password) {
@@ -176,7 +181,7 @@ export async function bulkAddStaff(
       results.push({ ...base, status: "skipped", note: "Already on the staff list" });
       continue;
     }
-    const ids = role === "admin" ? (raw.sections ?? []).map((n) => sectionId.get(String(n).trim().toLowerCase())) : [];
+    const ids = (raw.sections ?? []).map((n) => sectionId.get(String(n).trim().toLowerCase()));
     if (ids.some((x) => !x)) {
       results.push({ ...base, status: "failed", note: `Unknown section "${raw.sections.join(", ")}"` });
       continue;
@@ -204,19 +209,21 @@ export async function bulkAddStaff(
       email,
       fullName,
       role,
-      sections: ids as string[],
+      sections: role === "admin" ? (ids as string[]) : [],
       permissions: role === "admin" ? HOD_DEFAULT_PERMISSIONS : [],
     });
     if (saved) {
       results.push({ ...base, status: "failed", note: saved });
       continue;
     }
+    if (role === "teacher" && ids[0]) await setHomeSection(login.userId, ids[0]);
     taken.add(email);
     results.push({
       ...base,
       status: "added",
       note:
         (role === "admin" ? "Head of Section" : "Teacher") +
+        (role === "teacher" && ids[0] ? ` · ${sectionName.get(ids[0])}` : "") +
         (method === "invite" ? (login.reused ? " · already had a sign-in account, no email sent — they can use Forgot password" : " · invitation emailed") : ""),
       password: method === "password" ? password : undefined,
     });
@@ -299,9 +306,27 @@ export async function updateStaffAccess(_: ActionResult, fd: FormData): Promise<
     p_entity_id: id,
     p_detail: { role: access.role, sections: access.sections, permissions: access.permissions, active },
   });
+  await setHomeSection(id, access.role === "teacher" ? access.homeSection : null);
   revalidatePath(`/admin/staff/${id}`);
   revalidatePath("/admin/staff");
   return ok("Access updated.");
+}
+
+/** Quick fix from the staff list: put a teacher in Elementary or College (or clear it). */
+export async function assignSection(fd: FormData) {
+  const me = await requireSuperAdmin();
+  const id = str(fd, "id");
+  const section = str(fd, "section_id") || null;
+  const admin = createAdminClient();
+  const { data: person } = await admin.from("staff").select("role, school_id").eq("id", id).maybeSingle();
+  if (!person || person.school_id !== me.schoolId || person.role !== "teacher") return;
+  if (section) {
+    const { data: sec } = await admin.from("sections").select("id").eq("id", section).eq("school_id", me.schoolId).maybeSingle();
+    if (!sec) return;
+  }
+  await setHomeSection(id, section);
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/progress");
 }
 
 export async function resetStaffPassword(_: ActionResult, fd: FormData): Promise<ActionResult> {

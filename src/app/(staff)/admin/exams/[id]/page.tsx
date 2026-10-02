@@ -216,7 +216,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
 
       <Card>
         <CardHeader title="Students" description="Open a row for actions: unlock another computer, extra time, void." />
-        <Table>
+        <Table stack>
           <thead>
             <tr>
               <Th>Student</Th>
@@ -245,7 +245,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
                       </span>
                     </span>
                   </Td>
-                  <Td>
+                  <Td label="Status">
                     {!t || t.status === "voided" ? (
                       <>
                         <Badge tone={state === "live" ? "warning" : "neutral"}>{t?.status === "voided" ? "Voided" : "Not started"}</Badge>
@@ -266,7 +266,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
                       </>
                     )}
                   </Td>
-                  <Td className="tabular-nums">
+                  <Td label="Progress" className="tabular-nums">
                     {t?.status === "in_progress" ? (
                       <span>
                         {answered.get(t.id) ?? 0}/{t.total_questions}
@@ -285,11 +285,11 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
                       "—"
                     )}
                   </Td>
-                  <Td className="text-xs">
+                  <Td label="Computer" className="text-xs">
                     {t?.terminal_id ? terminalName.get(t.terminal_id) : "—"}
                     {t?.last_sync_at ? <span className="block text-muted">seen {formatTime(t.last_sync_at)}</span> : null}
                   </Td>
-                  <Td>
+                  <Td label="Flags">
                     <span className="flex flex-wrap gap-1">
                       {t?.is_makeup ? <Badge tone="info">Make-up</Badge> : null}
                       {t?.login_method === "name_search" ? <Badge>Name login</Badge> : null}
@@ -298,12 +298,12 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
                       {t?.late_sync ? <Badge tone="warning">Late upload</Badge> : null}
                     </span>
                   </Td>
-                  <Td>
+                  <Td className="cell-actions">
                     <details className="relative">
-                      <summary className="cursor-pointer list-none rounded px-2 py-1 text-muted hover:bg-surface-2" aria-label="Actions">
-                        ⋯
+                      <summary className="cursor-pointer list-none rounded px-2 py-1 text-muted hover:bg-surface-2 max-md:border max-md:border-border max-md:text-center max-md:text-sm max-md:font-semibold" aria-label="Actions">
+                        <span className="md:hidden">Actions</span><span className="max-md:hidden">⋯</span>
                       </summary>
-                      <div className="absolute right-0 z-10 mt-1 w-80 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-lg">
+                      <div className="absolute right-0 z-10 mt-1 w-80 space-y-4 rounded-xl border border-border bg-surface p-4 shadow-lg max-md:static max-md:w-full max-md:shadow-none">
                         {t?.status === "in_progress" && can(staff, "attempt.unlock") ? (
                           <ActionForm action={unlockRelogin} className="space-y-2">
                             <input type="hidden" name="window_id" value={id} />

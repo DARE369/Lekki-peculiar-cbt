@@ -14,7 +14,8 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
   const sp = await props.searchParams;
   const staff = await requireStaff();
   const s = await getStructure();
-  const termId = typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
+  const isAdmin = staff.isAdmin || staff.isSuperAdmin;
+  const termId = isAdmin && typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
   const scope = sp.scope === "all" ? "all" : "mine";
   const supabase = await createClient();
   let query = supabase
@@ -34,16 +35,18 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
         actions={<LinkButton href="/teach/assessments/new">New test or exam</LinkButton>}
       />
       <form className="flex flex-wrap items-end gap-3">
-        <label className="space-y-1">
-          <span className="block text-xs text-muted">Term</span>
-          <Select name="term" defaultValue={termId} className="w-56">
-            {s.terms.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.session_name} · {t.name}
-              </option>
-            ))}
-          </Select>
-        </label>
+        {isAdmin ? (
+          <label className="space-y-1">
+            <span className="block text-xs text-muted">Term</span>
+            <Select name="term" defaultValue={termId} className="w-56">
+              {s.terms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.session_name} · {t.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
         <label className="space-y-1">
           <span className="block text-xs text-muted">Show</span>
           <Select name="scope" defaultValue={scope} className="w-56">

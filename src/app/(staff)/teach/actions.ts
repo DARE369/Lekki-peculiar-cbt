@@ -261,9 +261,10 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
   const type = rawType && rawType in TYPE_DEFAULTS ? rawType : null;
 
   const supabase = await createClient();
+  const topic = str(fd, "topic").trim().slice(0, 200) || null;
   const { data, error } = await supabase
     .from("assessments")
-    .update({ title, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}) })
+    .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}) })
     .eq("id", id)
     .select("id");
   if (error) return fail(error);
@@ -305,6 +306,9 @@ export async function submitForApproval(_: ActionResult, fd: FormData): Promise<
   await requireStaff();
   const id = str(fd, "id");
   const supabase = await createClient();
+  // Topic is required before submission so reviewers and reports have context.
+  const { data: a } = await supabase.from("assessments").select("topic").eq("id", id).maybeSingle();
+  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Open Settings and fill in the Topic field.");
   const { error } = await supabase.rpc("submit_assessment", { p_assessment: id });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);

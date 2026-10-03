@@ -39,6 +39,7 @@ import {
   updateAssessmentSettings,
   withdrawSubmission,
 } from "../../actions";
+import { TopicField } from "./topic-field";
 
 export const metadata: Metadata = { title: "Test" };
 
@@ -347,6 +348,11 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                 <Field label="Title">
                   <Input name="title" defaultValue={a.title} required />
                 </Field>
+                <TopicField
+                  defaultValue={(a as { topic?: string | null }).topic ?? ""}
+                  subjectName={s.subjectById.get(a.subject_id)?.name ?? ""}
+                  editable={editable && !amending}
+                />
                 <Field label="Type">
                   <Select name="type" defaultValue={a.type}>
                     <optgroup label="Live">

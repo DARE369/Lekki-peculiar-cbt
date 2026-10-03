@@ -50,7 +50,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/approvals", label: "Approvals", icon: "approvals", badge: pendingApprovals });
     admin.items.push({ href: "/admin/exams", label: "Exams & live monitor", icon: "exams" });
     admin.items.push({ href: "/admin/students", label: "Students", icon: "students" });
-    admin.items.push({ href: "/admin/assignments", label: "Teaching assignments", icon: "assignments", badge: pendingAssignments });
+    admin.items.push({ href: "/admin/assignments", label: "Class assignments", icon: "assignments", badge: pendingAssignments });
     admin.items.push({ href: "/admin/progress", label: "Staff progress", icon: "progress" });
     if (!staff.isSuperAdmin) admin.items.push({ href: "/admin/team", label: "My staff", icon: "staff" });
     admin.items.push({ href: "/admin/classes", label: "Classes & subjects", icon: "structure" });

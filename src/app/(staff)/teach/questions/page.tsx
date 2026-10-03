@@ -10,6 +10,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { QuestionOption } from "@/lib/types";
 import { archiveQuestion } from "../actions";
 
+// Alias to keep the type without the staff join we removed
+type QuestionRow = { id: string; body: string; options: unknown; answer: string; topic: string | null; difficulty: number | null; year_id: string | null; owner_id: string; created_at: string };
+
 export const metadata: Metadata = { title: "Question bank" };
 
 const DIFF = ["", "Easy", "Medium", "Hard"];
@@ -26,8 +29,9 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   const supabase = await createClient();
   let query = supabase
     .from("questions")
-    .select("id, body, options, answer, topic, difficulty, year_id, owner_id, created_at, staff:owner_id(full_name)")
+    .select("id, body, options, answer, topic, difficulty, year_id, owner_id, created_at")
     .eq("subject_id", subjectId ?? "")
+    .eq("owner_id", staff.id)
     .eq("archived", false)
     .order("created_at", { ascending: false })
     .limit(300);
@@ -35,7 +39,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   if (topic) query = query.eq("topic", topic);
   const { data: questions } = subjectId ? await query : { data: [] };
   const { data: topicRows } = subjectId
-    ? await supabase.from("questions").select("topic").eq("subject_id", subjectId).eq("archived", false).not("topic", "is", null)
+    ? await supabase.from("questions").select("topic").eq("subject_id", subjectId).eq("owner_id", staff.id).eq("archived", false).not("topic", "is", null)
     : { data: [] };
   const topics = [...new Set((topicRows ?? []).map((t) => t.topic as string))].sort();
 
@@ -44,7 +48,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
       <PageHeader
         icon={FileQuestion}
         title="Question bank"
-        description="Questions are shared by all teachers of the same subject, so good questions get reused."
+        description="All the questions you have uploaded or written, organised by subject. Pick from here when building a test."
         actions={
           <>
             <LinkButton href={`/teach/questions/import${subjectId ? `?subject=${subjectId}` : ""}`}>Upload questions</LinkButton>
@@ -114,40 +118,36 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                     <Th>Answer</Th>
                     <Th>Topic</Th>
                     <Th>Year</Th>
-                    <Th>Added by</Th>
                     <Th />
                   </tr>
                 </thead>
                 <tbody>
                   {(questions ?? []).map((row) => {
-                    const opts = row.options as QuestionOption[];
-                    const correct = opts.find((o) => o.key === row.answer);
-                    const owner = row.staff as unknown as { full_name: string } | null;
+                    const r = row as unknown as QuestionRow;
+                    const opts = r.options as QuestionOption[];
+                    const correct = opts.find((o) => o.key === r.answer);
                     return (
-                      <tr key={row.id}>
+                      <tr key={r.id}>
                         <Td>
-                          <Link href={`/teach/questions/${row.id}`} className="line-clamp-2 hover:underline">
-                            {row.body}
+                          <Link href={`/teach/questions/${r.id}`} className="line-clamp-2 hover:underline">
+                            {r.body}
                           </Link>
                           <span className="text-xs text-muted">{opts.length} options</span>
                         </Td>
                         <Td label="Answer">
-                          <Badge tone="success">{row.answer}</Badge>{" "}
+                          <Badge tone="success">{r.answer}</Badge>{" "}
                           <span className="text-xs text-muted">{correct?.text.slice(0, 30)}</span>
                         </Td>
                         <Td label="Topic" className="text-xs">
-                          {row.topic ?? "—"}
-                          {row.difficulty ? <span className="block text-muted">{DIFF[row.difficulty]}</span> : null}
+                          {r.topic ?? "—"}
+                          {r.difficulty ? <span className="block text-muted">{DIFF[r.difficulty]}</span> : null}
                         </Td>
-                        <Td label="Year" className="text-xs">{row.year_id ? s.yearById.get(row.year_id)?.name : "Any"}</Td>
-                        <Td label="Added by" className="text-xs">{owner?.full_name}</Td>
+                        <Td label="Year" className="text-xs">{r.year_id ? s.yearById.get(r.year_id)?.name : "Any"}</Td>
                         <Td className="cell-actions text-right max-md:text-left">
-                          {row.owner_id === staff.id || staff.isAdmin ? (
-                            <form action={archiveQuestion}>
-                              <input type="hidden" name="id" value={row.id} />
-                              <button className="text-xs text-muted hover:text-danger">Archive</button>
-                            </form>
-                          ) : null}
+                          <form action={archiveQuestion}>
+                            <input type="hidden" name="id" value={r.id} />
+                            <button className="text-xs text-muted hover:text-danger">Archive</button>
+                          </form>
                         </Td>
                       </tr>
                     );

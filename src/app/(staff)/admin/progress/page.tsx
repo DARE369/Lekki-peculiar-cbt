@@ -5,7 +5,7 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { Badge, Card, CardHeader, EmptyState, Field, Input, PageHeader, Stat, Table, Td, Th, cn } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
-import { formatDeadline, getQuestionSettings, getUploadProgress, type ProgressRow } from "@/lib/onboarding";
+import { getQuestionSettings, getUploadProgress, type ProgressRow } from "@/lib/onboarding";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { staffSectionMap } from "@/lib/sections";
 import { SectionBadges } from "@/components/section-badges";
@@ -221,42 +221,23 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                       {r.mine.length === 0 ? (
                         <span className="text-sm text-muted">—</span>
                       ) : (
-                        <details className="group">
-                          <summary className="cursor-pointer list-none text-sm">
-                            <span className="font-semibold">
-                              {bySubject.size} subject{bySubject.size === 1 ? "" : "s"}
-                            </span>
-                            <span className="text-muted">
-                              {" "}
-                              · {questions} question{questions === 1 ? "" : "s"}
-                              {sent ? ` · ${sent} test${sent === 1 ? "" : "s"} sent` : ""}
-                            </span>
-                            {waiting ? <Badge tone="warning" className="ml-1.5">awaiting approval</Badge> : null}
-                            <span className="ml-1.5 text-xs font-semibold text-brand group-open:hidden">Show</span>
-                            <span className="ml-1.5 hidden text-xs font-semibold text-brand group-open:inline">Hide</span>
-                          </summary>
-                          <ul className="mt-2 space-y-2">
-                            {[...bySubject].map(([subjectId, list]) => (
-                              <li key={subjectId} className="text-sm">
-                                <span className="font-medium">{s.subjectById.get(subjectId)?.name}</span>
-                                <span className="block text-xs text-muted">
-                                  {list
-                                    .map(
-                                      (p) =>
-                                        `${s.yearById.get(p.yearId)?.name} · ${p.questions}${p.testsSubmitted ? " ✓" : ""}${p.approved ? "" : " (waiting)"}`,
-                                    )
-                                    .join("  ·  ")}
-                                </span>
-                                {list.some((p) => p.deadline && !p.testsSubmitted) ? (
-                                  <span className="block text-xs text-muted">due {formatDeadline(list.find((p) => p.deadline)!.deadline!)}</span>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
+                        <span className="text-sm">
+                          <span className="font-semibold">
+                            {bySubject.size} subject{bySubject.size === 1 ? "" : "s"}
+                          </span>
+                          <span className="text-muted">
+                            {" "}
+                            · {questions} question{questions === 1 ? "" : "s"}
+                            {sent ? ` · ${sent} test${sent === 1 ? "" : "s"} sent` : ""}
+                          </span>
+                          {waiting ? <Badge tone="warning" className="ml-1.5">awaiting approval</Badge> : null}
+                        </span>
                       )}
                     </Td>
-                    <Td className="cell-actions">
+                    <Td className="cell-actions space-y-2">
+                      <Link href={`/admin/progress/${r.id}`} className="block text-sm font-semibold text-brand hover:underline">
+                        See progress →
+                      </Link>
                       {r.stage === "invited" ? (
                         <ActionForm action={resendInvite}>
                           <input type="hidden" name="id" value={r.id} />
@@ -265,7 +246,7 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                           </SubmitButton>
                         </ActionForm>
                       ) : waiting ? (
-                        <Link href="/admin/assignments" className="text-sm font-semibold text-brand hover:underline">
+                        <Link href="/admin/assignments" className="block text-sm font-semibold text-brand hover:underline">
                           Approve subjects →
                         </Link>
                       ) : null}

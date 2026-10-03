@@ -36,7 +36,9 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
       .filter((y) => y.section_id === sub.section_id)
       .map((y) => ({ yearId: y.id, name: y.name, classes: s.classes.filter((c) => c.year_id === y.id && classIds.has(c.id)).map((c) => ({ id: c.id, name: c.name })) }))
       .filter((y) => adminHere || y.classes.length > 0);
-    return { subjectId: sub.id, label: `${sub.name} (${s.sectionById.get(sub.section_id)?.name})`, years };
+    // Teachers only teach in one section so the section suffix is noise for them; admins may span both.
+    const showSection = staff.isAdmin || staff.isSuperAdmin;
+    return { subjectId: sub.id, label: showSection ? `${sub.name} (${s.sectionById.get(sub.section_id)?.name})` : sub.name, years };
   }).filter((o) => o.years.length > 0);
   // Teachers whose choices are still waiting can't build a test yet, but they can upload questions.
   const { count: waiting } = options.length
@@ -77,16 +79,9 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
             <Field label="Title" hint="Leave blank to use e.g. “Biology Test”.">
               <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />
             </Field>
-            <Field label="Term">
-              <Select name="term_id" defaultValue={s.currentTerm?.id}>
-                {s.terms.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.session_name} · {t.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            {!s.currentTerm ? <Alert tone="warning">No current term is set — ask the super admin.</Alert> : null}
+            {/* Term is set by the super admin; teachers always use the current term. */}
+            <input type="hidden" name="term_id" value={s.currentTerm?.id ?? ""} />
+            {!s.currentTerm ? <Alert tone="warning">No current term is set — ask the super admin to set one before creating a test.</Alert> : null}
             <SubmitButton>Create and add questions</SubmitButton>
           </ActionForm>
         </Card>

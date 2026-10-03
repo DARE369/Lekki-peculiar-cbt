@@ -6,7 +6,7 @@ import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
 import { createAssessment } from "../../actions";
-import { TestTarget, type TargetOption } from "./test-target";
+import { TestTarget, type ClassOption } from "./test-target";
 import { TypeFields } from "./type-fields";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,21 +25,34 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
     .eq("teacher_id", staff.id)
     .eq("session_id", s.currentSessionId ?? "")
     .eq("status", "approved");
-  const options: TargetOption[] = subjects.map((sub) => {
+  // Build a class-first options structure: for each class the teacher can create a test in,
+  // list the subjects available for that class.
+  const showSection = staff.isAdmin || staff.isSuperAdmin;
+  const classMap = new Map<string, ClassOption>();
+  for (const sub of subjects) {
     const adminHere = staff.isSuperAdmin || (staff.isAdmin && staff.sectionIds.includes(sub.section_id));
-    const classIds = new Set(
+    const assignedClassIds = new Set(
       adminHere
         ? s.classes.filter((c) => c.active && s.sectionOfClass(c.id)?.id === sub.section_id).map((c) => c.id)
         : (mine ?? []).filter((r) => r.subject_id === sub.id).map((r) => r.class_id as string),
     );
-    const years = s.years
-      .filter((y) => y.section_id === sub.section_id)
-      .map((y) => ({ yearId: y.id, name: y.name, classes: s.classes.filter((c) => c.year_id === y.id && classIds.has(c.id)).map((c) => ({ id: c.id, name: c.name })) }))
-      .filter((y) => adminHere || y.classes.length > 0);
-    // Teachers only teach in one section so the section suffix is noise for them; admins may span both.
-    const showSection = staff.isAdmin || staff.isSuperAdmin;
-    return { subjectId: sub.id, label: showSection ? `${sub.name} (${s.sectionById.get(sub.section_id)?.name})` : sub.name, years };
-  }).filter((o) => o.years.length > 0);
+    const subjectLabel = showSection ? `${sub.name} (${s.sectionById.get(sub.section_id)?.name})` : sub.name;
+    for (const classId of assignedClassIds) {
+      const cls = s.classById.get(classId);
+      if (!cls || !cls.active) continue;
+      const year = s.yearById.get(cls.year_id);
+      if (!year) continue;
+      if (!classMap.has(classId)) {
+        classMap.set(classId, { classId, className: cls.name, yearId: year.id, yearName: year.name, subjects: [] });
+      }
+      classMap.get(classId)!.subjects.push({ subjectId: sub.id, label: subjectLabel });
+    }
+  }
+  const options: ClassOption[] = [...classMap.values()].sort((a, b) => {
+    const al = s.yearById.get(a.yearId)?.level ?? 0;
+    const bl = s.yearById.get(b.yearId)?.level ?? 0;
+    return al - bl || a.className.localeCompare(b.className);
+  });
   // Teachers whose choices are still waiting can't build a test yet, but they can upload questions.
   const { count: waiting } = options.length
     ? { count: 0 }
@@ -73,8 +86,7 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
             <TypeFields />
             <TestTarget
               options={options}
-              defaultSubject={typeof sp.subject === "string" ? sp.subject : undefined}
-              defaultYear={typeof sp.year === "string" ? sp.year : undefined}
+              defaultClass={typeof sp.class === "string" ? sp.class : undefined}
             />
             <Field label="Title" hint="Leave blank to use e.g. “Biology Test”.">
               <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />

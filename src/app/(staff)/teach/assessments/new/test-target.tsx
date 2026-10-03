@@ -1,81 +1,93 @@
 "use client";
 
 import { useState } from "react";
-import { Field, Select } from "@/components/ui";
+import { Field, Select, cn } from "@/components/ui";
 
-export type TargetOption = {
-  subjectId: string;
-  label: string;
-  years: { yearId: string; name: string; classes: { id: string; name: string }[] }[];
+export type ClassOption = {
+  classId: string;
+  className: string;
+  yearId: string;
+  yearName: string;
+  subjects: { subjectId: string; label: string }[];
 };
 
-/** Subject → year group → which of the teacher's classes (arms) the test is for. */
-export function TestTarget({ options, defaultSubject, defaultYear }: { options: TargetOption[]; defaultSubject?: string; defaultYear?: string }) {
+export function TestTarget({ options, defaultClass }: { options: ClassOption[]; defaultClass?: string }) {
+  const [classId, setClassId] = useState(
+    options.some((o) => o.classId === defaultClass) ? defaultClass! : options.length === 1 ? options[0].classId : "",
+  );
+  const cls = options.find((o) => o.classId === classId);
+
   const [subjectId, setSubjectId] = useState(
-    options.some((o) => o.subjectId === defaultSubject) ? defaultSubject! : options.length === 1 ? options[0].subjectId : "",
+    cls?.subjects.length === 1 ? cls.subjects[0].subjectId : "",
   );
-  const subject = options.find((o) => o.subjectId === subjectId);
-  const [yearId, setYearId] = useState(
-    subject?.years.some((y) => y.yearId === defaultYear) ? defaultYear! : subject?.years.length === 1 ? subject.years[0].yearId : "",
-  );
-  const year = subject?.years.find((y) => y.yearId === yearId);
+
+  function handleClassChange(newClassId: string) {
+    const newCls = options.find((o) => o.classId === newClassId);
+    setClassId(newClassId);
+    setSubjectId(newCls?.subjects.length === 1 ? newCls.subjects[0].subjectId : "");
+  }
+
+  // Other classes in the same year that also offer the chosen subject
+  const siblings = cls && subjectId
+    ? options.filter((o) => o.yearId === cls.yearId && o.classId !== cls.classId && o.subjects.some((s) => s.subjectId === subjectId))
+    : [];
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Class">
+          <Select value={classId} onChange={(e) => handleClassChange(e.target.value)} required>
+            <option value="" disabled>Choose…</option>
+            {options.map((o) => (
+              <option key={o.classId} value={o.classId}>
+                {o.className} — {o.yearName}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field label="Subject">
           <Select
             name="subject_id"
             required
             value={subjectId}
-            onChange={(e) => {
-              const next = options.find((o) => o.subjectId === e.target.value);
-              setSubjectId(e.target.value);
-              setYearId(next?.years.length === 1 ? next.years[0].yearId : "");
-            }}
+            onChange={(e) => setSubjectId(e.target.value)}
+            disabled={!cls}
           >
-            <option value="" disabled>
-              Choose…
-            </option>
-            {options.map((o) => (
-              <option key={o.subjectId} value={o.subjectId}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Year group">
-          <Select name="year_id" required value={yearId} onChange={(e) => setYearId(e.target.value)} disabled={!subject}>
-            <option value="" disabled>
-              {subject ? "Choose…" : "Choose a subject first"}
-            </option>
-            {(subject?.years ?? []).map((y) => (
-              <option key={y.yearId} value={y.yearId}>
-                {y.name}
-              </option>
+            <option value="" disabled>{cls ? "Choose…" : "Pick a class first"}</option>
+            {(cls?.subjects ?? []).map((s) => (
+              <option key={s.subjectId} value={s.subjectId}>{s.label}</option>
             ))}
           </Select>
         </Field>
       </div>
-      {year ? (
-        <fieldset key={`${subjectId}:${yearId}`}>
+
+      {/* Hidden year — auto-derived from class */}
+      {cls ? <input type="hidden" name="year_id" value={cls.yearId} /> : null}
+
+      {cls && subjectId ? (
+        <fieldset key={`${classId}:${subjectId}`}>
           <legend className="mb-1 text-sm font-medium">Which classes is it for?</legend>
-          <p className="mb-2 text-xs text-muted">Your Head of Section schedules it for these classes. Untick any that won&apos;t take it.</p>
-          {year.classes.length === 0 ? (
-            <p className="text-sm text-muted">No classes in this year group yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {year.classes.map((c) => (
-                <label
-                  key={c.id}
-                  className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 border-border px-4 text-sm font-semibold has-checked:border-brand has-checked:bg-brand-soft"
-                >
-                  <input type="checkbox" name="class_id" value={c.id} defaultChecked className="size-4 accent-[var(--brand)]" />
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          )}
+          {siblings.length > 0 ? (
+            <p className="mb-2 text-xs text-muted">Untick any that won't take this test.</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <label className={cn(
+              "flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold",
+              "border-border has-checked:border-brand has-checked:bg-brand-soft",
+            )}>
+              <input type="checkbox" name="class_id" value={cls.classId} defaultChecked className="size-4 accent-[var(--brand)]" />
+              {cls.className}
+            </label>
+            {siblings.map((sib) => (
+              <label key={sib.classId} className={cn(
+                "flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold",
+                "border-border has-checked:border-brand has-checked:bg-brand-soft",
+              )}>
+                <input type="checkbox" name="class_id" value={sib.classId} className="size-4 accent-[var(--brand)]" />
+                {sib.className}
+              </label>
+            ))}
+          </div>
         </fieldset>
       ) : null}
     </div>

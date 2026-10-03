@@ -327,11 +327,66 @@ export async function withdrawSubmission(_: ActionResult, fd: FormData): Promise
 }
 
 export async function deleteAssessment(fd: FormData) {
-  await requireStaff();
+  const staff = await requireStaff();
+  const id = str(fd, "id");
   const supabase = await createClient();
-  await supabase.from("assessments").delete().eq("id", str(fd, "id")).eq("status", "draft");
+
+  const { data: a } = await supabase.from("assessments").select("created_by").eq("id", id).maybeSingle();
+  if (!a) return;
+  if (a.created_by !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return;
+
+  // Block if any exam window has already started
+  const { count } = await supabase
+    .from("exam_windows")
+    .select("id", { count: "exact", head: true })
+    .eq("assessment_id", id)
+    .lte("starts_at", new Date().toISOString());
+  if ((count ?? 0) > 0) return; // gone live — silently ignore
+
+  await supabase.from("assessments").delete().eq("id", id);
   revalidatePath("/teach/assessments");
   redirect("/teach/assessments");
+}
+
+export async function updateAssessmentClasses(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const id = str(fd, "id");
+  const s = await getStructure();
+  const supabase = await createClient();
+
+  const { data: a } = await supabase.from("assessments").select("created_by, year_id, subject_id").eq("id", id).maybeSingle();
+  if (!a) return fail("Test not found.");
+
+  const isOwner = a.created_by === staff.id;
+  const isAdmin = staff.isAdmin || staff.isSuperAdmin;
+  if (!isOwner && !isAdmin) return fail("You don't have permission to edit this test.");
+
+  // Block if any exam window has already started
+  const { count } = await supabase
+    .from("exam_windows")
+    .select("id", { count: "exact", head: true })
+    .eq("assessment_id", id)
+    .lte("starts_at", new Date().toISOString());
+  if ((count ?? 0) > 0) return fail("This test has already started — classes can't be changed.");
+
+  const classIds = [...new Set(fd.getAll("class_id").map(String))].filter((c) => s.classById.get(c)?.year_id === a.year_id);
+  if (classIds.length === 0) return fail("Tick at least one class.");
+
+  if (!isAdmin) {
+    const { data: mine } = await supabase
+      .from("teaching_assignments")
+      .select("class_id")
+      .eq("teacher_id", staff.id)
+      .eq("subject_id", a.subject_id)
+      .eq("session_id", s.currentSessionId ?? "")
+      .eq("status", "approved");
+    const allowed = new Set((mine ?? []).map((r) => r.class_id as string));
+    if (classIds.some((c) => !allowed.has(c))) return fail("You can only assign classes you're approved to teach.");
+  }
+
+  await supabase.from("assessments").update({ class_ids: classIds }).eq("id", id);
+  revalidatePath(`/teach/assessments/${id}`);
+  return ok("Classes updated.");
 }
 
 export async function duplicateAssessment(fd: FormData) {

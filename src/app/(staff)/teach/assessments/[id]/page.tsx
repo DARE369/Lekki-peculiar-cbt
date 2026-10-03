@@ -36,6 +36,7 @@ import {
   removeQuestionFromAssessment,
   submitCorrections,
   submitForApproval,
+  updateAssessmentClasses,
   updateAssessmentSettings,
   withdrawSubmission,
 } from "../../actions";
@@ -93,11 +94,26 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
     bank = all.filter((q) => !selectedIds.has(q.id) && (!topicFilter || q.topic === topicFilter));
   }
 
-  const { data: windows } = await supabase
-    .from("exam_windows")
-    .select("id, class_id, starts_at, ends_at, status, auto_start")
-    .eq("assessment_id", id)
-    .order("starts_at");
+  const [{ data: windows }, classesResult, assignedResult] = await Promise.all([
+    supabase.from("exam_windows").select("id, class_id, starts_at, ends_at, status, auto_start").eq("assessment_id", id).order("starts_at"),
+    // All active classes in this year (for the classes editor)
+    Promise.resolve(s.classes.filter((c) => c.active && c.year_id === a.year_id)),
+    // Teacher's approved teaching assignments for this subject (to gate class choices)
+    staff.isAdmin || staff.isSuperAdmin
+      ? Promise.resolve(null)
+      : supabase.from("teaching_assignments").select("class_id").eq("teacher_id", staff.id).eq("subject_id", a.subject_id).eq("session_id", s.currentSessionId ?? "").eq("status", "approved"),
+  ]);
+
+  const allYearClasses = classesResult;
+  const assignedClassIds = new Set<string>(
+    staff.isAdmin || staff.isSuperAdmin
+      ? allYearClasses.map((c) => c.id)
+      : ((assignedResult as { data: { class_id: string }[] | null } | null)?.data ?? []).map((r) => r.class_id),
+  );
+  const editableClasses = allYearClasses.filter((c) => assignedClassIds.has(c.id));
+
+  // A test is "live" once any exam window has started — editing classes and deleting are blocked then.
+  const isLive = (windows ?? []).some((w) => new Date(w.starts_at) <= new Date());
 
   const [statusLabel, statusTone] = STATUS_LABEL[a.status as AssessmentStatus];
   const enough = selected.length >= a.question_count;
@@ -120,10 +136,10 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
               <input type="hidden" name="id" value={a.id} />
               <SubmitButton variant="secondary">Duplicate</SubmitButton>
             </form>
-            {a.status === "draft" && a.created_by === staff.id ? (
+            {!isLive && (a.created_by === staff.id || staff.isAdmin || staff.isSuperAdmin) ? (
               <form action={deleteAssessment}>
                 <input type="hidden" name="id" value={a.id} />
-                <SubmitButton variant="ghost" confirm="Delete this draft? This can't be undone.">
+                <SubmitButton variant="ghost" confirm="Delete this test? This can't be undone.">
                   Delete
                 </SubmitButton>
               </form>
@@ -405,6 +421,43 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                   <Textarea name="instructions" rows={3} defaultValue={settings.instructions} placeholder="Answer all questions. Each question carries equal marks." />
                 </Field>
                 {editable ? <SubmitButton>Save settings</SubmitButton> : null}
+              </fieldset>
+            </ActionForm>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Classes"
+              description={isLive ? "Locked — the test has already started." : "Which classes take this test."}
+            />
+            <ActionForm action={updateAssessmentClasses} className="p-5 space-y-3">
+              <input type="hidden" name="id" value={a.id} />
+              <fieldset disabled={isLive || (!editable && a.status !== "pending_approval" && a.status !== "approved")} className="space-y-2">
+                {editableClasses.length === 0 ? (
+                  <p className="text-sm text-muted">No classes assigned.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {editableClasses.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border-2 border-border px-3 text-sm font-semibold has-checked:border-brand has-checked:bg-brand-soft disabled:cursor-not-allowed"
+                      >
+                        <input
+                          type="checkbox"
+                          name="class_id"
+                          value={c.id}
+                          defaultChecked={(a.class_ids as string[] ?? []).includes(c.id)}
+                          className="size-4 accent-[var(--brand)]"
+                          disabled={isLive}
+                        />
+                        {c.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {!isLive && editableClasses.length > 0 ? (
+                  <SubmitButton size="sm" variant="secondary">Save classes</SubmitButton>
+                ) : null}
               </fieldset>
             </ActionForm>
           </Card>

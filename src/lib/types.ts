@@ -88,7 +88,7 @@ export const DEFAULT_SETTINGS: AssessmentSettings = {
   show_result: "score",
   pass_mark: 50,
   marks_per_question: 1,
-  instructions: "",
+  instructions: "Answer all questions.",
 };
 
 export const TYPE_DEFAULTS: Record<AssessmentType, { questions: number; minutes: number; label: string }> = {

@@ -83,7 +83,7 @@ export function BatchCreate({ options }: { options: ClassOption[] }) {
         </Field>
       </div>
       <Field label="Instructions for students" hint="Shown on the start screen. Applied to all created tests.">
-        <Textarea name="instructions" rows={2} placeholder="Answer all questions. Each question carries equal marks." />
+        <Textarea name="instructions" rows={2} defaultValue="Answer all questions." placeholder="Answer all questions. Each question carries equal marks." />
       </Field>
       <SubmitButton>
         Create {checked.size > 0 ? `${checked.size} test${checked.size === 1 ? "" : "s"}` : "tests"}

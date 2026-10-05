@@ -26,44 +26,30 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   const subjects = await teachableSubjects(staff, s, { includeRequested: true });
   const subjectIdSet = new Set(subjects.map((x) => x.id));
 
-  // Build sidebar navigation: (subject, year) pairs this teacher works with
+  // Build sidebar navigation from this staff member's own teaching assignments.
+  // The question bank is personal (owner_id = staff.id), so the sidebar always
+  // reflects what this specific person teaches — even for admins.
   const navEntries: NavEntry[] = [];
   const seen = new Set<string>();
 
-  if (staff.isAdmin || staff.isSuperAdmin) {
-    for (const sub of subjects) {
-      const sectionClasses = s.classes.filter((c) => c.active && s.sectionOfClass(c.id)?.id === sub.section_id);
-      const yearIds = [...new Set(sectionClasses.map((c) => c.year_id))];
-      for (const yearId of yearIds) {
-        const year = s.yearById.get(yearId);
-        if (!year) continue;
-        const key = `${sub.id}:${yearId}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          navEntries.push({ subjectId: sub.id, subjectName: sub.name, yearId, yearName: year.name, yearLevel: year.level });
-        }
-      }
-    }
-  } else {
-    const { data: assignments } = await supabase
-      .from("teaching_assignments")
-      .select("subject_id, class_id")
-      .eq("teacher_id", staff.id)
-      .eq("session_id", s.currentSessionId ?? "")
-      .in("status", ["approved", "requested"]);
-    for (const asgn of assignments ?? []) {
-      if (!subjectIdSet.has(asgn.subject_id)) continue;
-      const cls = s.classById.get(asgn.class_id);
-      if (!cls) continue;
-      const year = s.yearById.get(cls.year_id);
-      if (!year) continue;
-      const sub = subjects.find((x) => x.id === asgn.subject_id);
-      if (!sub) continue;
-      const key = `${asgn.subject_id}:${cls.year_id}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        navEntries.push({ subjectId: asgn.subject_id, subjectName: sub.name, yearId: cls.year_id, yearName: year.name, yearLevel: year.level });
-      }
+  const { data: assignments } = await supabase
+    .from("teaching_assignments")
+    .select("subject_id, class_id")
+    .eq("teacher_id", staff.id)
+    .eq("session_id", s.currentSessionId ?? "")
+    .in("status", ["approved", "requested"]);
+  for (const asgn of assignments ?? []) {
+    if (!subjectIdSet.has(asgn.subject_id)) continue;
+    const cls = s.classById.get(asgn.class_id);
+    if (!cls) continue;
+    const year = s.yearById.get(cls.year_id);
+    if (!year) continue;
+    const sub = subjects.find((x) => x.id === asgn.subject_id);
+    if (!sub) continue;
+    const key = `${asgn.subject_id}:${cls.year_id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      navEntries.push({ subjectId: asgn.subject_id, subjectName: sub.name, yearId: cls.year_id, yearName: year.name, yearLevel: year.level });
     }
   }
 

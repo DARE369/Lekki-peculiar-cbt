@@ -118,6 +118,23 @@ export async function archiveQuestion(fd: FormData) {
   revalidatePath("/teach/questions");
 }
 
+export async function deleteQuestion(fd: FormData) {
+  const staff = await requireStaff();
+  const supabase = await createClient();
+  const id = str(fd, "id");
+  const { data: q } = await supabase.from("questions").select("owner_id").eq("id", id).maybeSingle();
+  if (!q) return;
+  if (q.owner_id !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return;
+  // Hard-delete if not used in any assessment; otherwise soft-delete (archive)
+  const { count } = await supabase.from("assessment_questions").select("id", { count: "exact", head: true }).eq("question_id", id);
+  if ((count ?? 0) > 0) {
+    await supabase.from("questions").update({ archived: true }).eq("id", id);
+  } else {
+    await supabase.from("questions").delete().eq("id", id);
+  }
+  revalidatePath("/teach/questions");
+}
+
 const importSchema = z.object({
   subjectId: z.string().uuid(),
   yearId: z.string().uuid().nullable(),

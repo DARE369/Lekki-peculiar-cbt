@@ -307,9 +307,16 @@ export async function submitForApproval(_: ActionResult, fd: FormData): Promise<
   await requireStaff();
   const id = str(fd, "id");
   const supabase = await createClient();
+
+  // Save topic from the submit form if provided (avoids requiring a separate "Save settings" click).
+  const topicFromForm = str(fd, "topic").trim().slice(0, 200);
+  if (topicFromForm) {
+    await supabase.from("assessments").update({ topic: topicFromForm }).eq("id", id);
+  }
+
   // Topic is required before submission so reviewers and reports have context.
   const { data: a } = await supabase.from("assessments").select("topic").eq("id", id).maybeSingle();
-  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Open Settings and fill in the Topic field.");
+  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Fill in the Topic field above.");
   const { error } = await supabase.rpc("submit_assessment", { p_assessment: id });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);

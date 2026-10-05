@@ -232,24 +232,25 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         </Card>
       ) : editable ? (
         <Card>
-          <CardHeader
-            title="Ready to submit?"
-            description={
-              enough
-                ? selected.length > a.question_count
-                  ? `You have ${selected.length} questions for a ${a.question_count}-question test. Each student gets a random ${a.question_count} of them — this makes copying harder.`
-                  : `You have exactly ${a.question_count} questions.`
-                : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} (you have ${selected.length} of ${a.question_count}).`
-            }
-            actions={
-              <ActionForm action={submitForApproval}>
-                <input type="hidden" name="id" value={a.id} />
-                <SubmitButton pendingText="Submitting…" confirm="Submit for approval? You won't be able to edit it while it's being reviewed.">
-                  Submit for approval
-                </SubmitButton>
-              </ActionForm>
-            }
-          />
+          <ActionForm action={submitForApproval} className="p-5 space-y-4">
+            <input type="hidden" name="id" value={a.id} />
+            <div>
+              <p className="text-base font-semibold">Ready to submit?</p>
+              <p className="mt-0.5 text-sm text-muted">
+                {enough
+                  ? selected.length > a.question_count
+                    ? `You have ${selected.length} questions for a ${a.question_count}-question test. Each student gets a random ${a.question_count} of them — this makes copying harder.`
+                    : `You have exactly ${a.question_count} questions.`
+                  : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} (you have ${selected.length} of ${a.question_count}).`}
+              </p>
+            </div>
+            <Field label="Topic" hint="The unit or area this test covers. Required before submitting.">
+              <Input name="topic" defaultValue={(a as { topic?: string | null }).topic ?? ""} placeholder="e.g. Organic Chemistry" required />
+            </Field>
+            <SubmitButton pendingText="Submitting…" confirm="Submit for approval? You won't be able to edit it while it's being reviewed.">
+              Submit for approval
+            </SubmitButton>
+          </ActionForm>
         </Card>
       ) : null}
 

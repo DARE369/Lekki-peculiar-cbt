@@ -387,7 +387,7 @@ export async function submitForApproval(_: ActionResult, fd: FormData): Promise<
 
   // Topic is required before submission so reviewers and reports have context.
   const { data: a } = await supabase.from("assessments").select("topic").eq("id", id).maybeSingle();
-  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Fill in the Topic field above.");
+  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Open Settings and fill in the Topic field.");
   const { error } = await supabase.rpc("submit_assessment", { p_assessment: id });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);

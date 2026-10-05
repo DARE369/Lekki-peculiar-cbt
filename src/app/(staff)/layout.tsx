@@ -48,6 +48,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   if (staff.isAdmin) {
     const admin: NavGroup = { title: "Administration", items: [] };
     if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/approvals", label: "Approvals", icon: "approvals", badge: pendingApprovals });
+    admin.items.push({ href: "/teach/assessments?scope=all", label: "Tests & exams", icon: "tests" });
     admin.items.push({ href: "/admin/exams", label: "Exams & live monitor", icon: "exams" });
     admin.items.push({ href: "/admin/students", label: "Students", icon: "students" });
     admin.items.push({ href: "/admin/assignments", label: "Class assignments", icon: "assignments", badge: pendingAssignments });

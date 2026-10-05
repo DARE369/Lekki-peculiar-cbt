@@ -136,7 +136,7 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
                   </Field>
                 ) : null}
                 <Field label="Instructions for students" hint="Shown on the start screen before the first question.">
-                  <Textarea name="instructions" rows={3} placeholder="Answer all questions. Each question carries equal marks." />
+                  <Textarea name="instructions" rows={3} defaultValue="Answer all questions." placeholder="Answer all questions. Each question carries equal marks." />
                 </Field>
                 {/* Term is set by the super admin; teachers always use the current term. */}
                 <input type="hidden" name="term_id" value={s.currentTerm?.id ?? ""} />

@@ -17,14 +17,61 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
   const isAdmin = staff.isAdmin || staff.isSuperAdmin;
   const termId = isAdmin && typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
   const scope = sp.scope === "all" ? "all" : "mine";
+  const teacherFilter = typeof sp.teacher === "string" ? sp.teacher : "";
   const supabase = await createClient();
+
   let query = supabase
     .from("assessments")
-    .select("id, title, type, status, subject_id, year_id, question_count, duration_minutes, updated_at, created_by, staff:created_by(full_name)")
+    .select("id, title, type, status, subject_id, year_id, question_count, duration_minutes, updated_at, created_by, staff:created_by(id, full_name)")
     .order("updated_at", { ascending: false });
+
   if (termId) query = query.eq("term_id", termId);
-  if (scope === "mine") query = query.eq("created_by", staff.id);
+
+  if (scope === "mine") {
+    query = query.eq("created_by", staff.id);
+  } else if (isAdmin) {
+    // Restrict to subjects within the admin's own sections
+    const sectionSubjectIds = [...s.subjectById.values()]
+      .filter((sub) => staff.isSuperAdmin || (staff.sectionIds as string[]).includes(sub.section_id))
+      .map((sub) => sub.id);
+    if (sectionSubjectIds.length > 0) query = query.in("subject_id", sectionSubjectIds);
+  }
+
+  if (teacherFilter) query = query.eq("created_by", teacherFilter);
+
   const { data } = await query;
+  const assessments = data ?? [];
+
+  type Assessment = (typeof assessments)[number];
+  type StaffRef = { id: string; full_name: string } | null;
+
+  const showGrouped = isAdmin && scope === "all";
+
+  // Build unique teacher list for filter dropdown (admin grouped view only)
+  const teacherMap = new Map<string, string>();
+  if (showGrouped) {
+    for (const a of assessments) {
+      const t = a.staff as unknown as StaffRef;
+      if (t) teacherMap.set(t.id, t.full_name);
+    }
+  }
+
+  // Build year → subject → assessments grouping
+  const yearSubjectMap = new Map<string, Map<string, Assessment[]>>();
+  if (showGrouped) {
+    for (const a of assessments) {
+      if (!yearSubjectMap.has(a.year_id)) yearSubjectMap.set(a.year_id, new Map());
+      const subMap = yearSubjectMap.get(a.year_id)!;
+      if (!subMap.has(a.subject_id)) subMap.set(a.subject_id, []);
+      subMap.get(a.subject_id)!.push(a);
+    }
+  }
+
+  const yearEntries = [...yearSubjectMap.entries()].sort((a, b) => {
+    const al = s.yearById.get(a[0])?.level ?? 0;
+    const bl = s.yearById.get(b[0])?.level ?? 0;
+    return al - bl;
+  });
 
   return (
     <div className="space-y-6">
@@ -54,53 +101,148 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
             <option value="all">All I can see (my subjects)</option>
           </Select>
         </label>
+        {showGrouped && teacherMap.size > 0 ? (
+          <label className="space-y-1">
+            <span className="block text-xs text-muted">Teacher</span>
+            <Select name="teacher" defaultValue={teacherFilter} className="w-56">
+              <option value="">All teachers</option>
+              {[...teacherMap.entries()]
+                .sort((a, b) => a[1].localeCompare(b[1]))
+                .map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+            </Select>
+          </label>
+        ) : null}
         <button className="h-10 rounded-lg border border-border px-4 text-sm hover:bg-surface-2">Apply</button>
       </form>
-      <Card>
-        {(data ?? []).length === 0 ? (
-          <EmptyState title="Nothing here yet" action={<LinkButton href="/teach/assessments/new">Create your first test</LinkButton>} />
+
+      {showGrouped ? (
+        assessments.length === 0 ? (
+          <Card>
+            <EmptyState title="No tests found" />
+          </Card>
         ) : (
-          <Table stack>
-            <thead>
-              <tr>
-                <Th>Title</Th>
-                <Th>Subject</Th>
-                <Th>Year</Th>
-                <Th>Questions</Th>
-                <Th>Status</Th>
-                <Th>Updated</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data ?? []).map((a) => {
-                const [label, tone] = STATUS_LABEL[a.status as AssessmentStatus];
-                return (
-                  <tr key={a.id}>
-                    <Td>
-                      <Link href={`/teach/assessments/${a.id}`} className="font-medium hover:underline">
-                        {a.title}
-                      </Link>
-                      <span className="block text-xs text-muted">
-                        {TYPE_LABEL[a.type as AssessmentType]}
-                        {scope === "all" ? ` · ${(a.staff as unknown as { full_name: string } | null)?.full_name}` : ""}
-                      </span>
-                    </Td>
-                    <Td label="Subject">{s.subjectById.get(a.subject_id)?.name}</Td>
-                    <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
-                    <Td label="Questions" className="tabular-nums">
-                      {a.question_count} · {a.duration_minutes} min
-                    </Td>
-                    <Td label="Status">
-                      <Badge tone={tone}>{label}</Badge>
-                    </Td>
-                    <Td label="Updated" className="text-xs whitespace-nowrap text-muted">{formatDateTime(a.updated_at)}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-        )}
-      </Card>
+          <div className="space-y-8">
+            {yearEntries.map(([yearId, subjectMap]) => {
+              const yearName = s.yearById.get(yearId)?.name ?? yearId;
+              const subjectEntries = [...subjectMap.entries()].sort((a, b) => {
+                const an = s.subjectById.get(a[0])?.name ?? "";
+                const bn = s.subjectById.get(b[0])?.name ?? "";
+                return an.localeCompare(bn);
+              });
+              return (
+                <section key={yearId}>
+                  <h2 className="mb-3 text-base font-semibold">{yearName}</h2>
+                  <div className="space-y-3">
+                    {subjectEntries.map(([subjectId, tests]) => {
+                      const subjectName = s.subjectById.get(subjectId)?.name ?? subjectId;
+                      return (
+                        <Card key={subjectId} className="overflow-hidden">
+                          <div className="border-b border-border bg-surface-2 px-4 py-2.5">
+                            <h3 className="text-sm font-semibold">{subjectName}</h3>
+                          </div>
+                          <Table stack>
+                            <thead>
+                              <tr>
+                                <Th>Title</Th>
+                                <Th>Teacher</Th>
+                                <Th>Questions</Th>
+                                <Th>Status</Th>
+                                <Th>Updated</Th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tests.map((a) => {
+                                const [label, tone] = STATUS_LABEL[a.status as AssessmentStatus];
+                                const teacher = a.staff as unknown as StaffRef;
+                                return (
+                                  <tr key={a.id}>
+                                    <Td>
+                                      <Link href={`/teach/assessments/${a.id}`} className="font-medium hover:underline">
+                                        {a.title}
+                                      </Link>
+                                      <span className="block text-xs text-muted">{TYPE_LABEL[a.type as AssessmentType]}</span>
+                                    </Td>
+                                    <Td label="Teacher" className="text-sm">
+                                      {teacher?.full_name ?? "—"}
+                                    </Td>
+                                    <Td label="Questions" className="tabular-nums">
+                                      {a.question_count} · {a.duration_minutes} min
+                                    </Td>
+                                    <Td label="Status">
+                                      <Badge tone={tone}>{label}</Badge>
+                                    </Td>
+                                    <Td label="Updated" className="text-xs whitespace-nowrap text-muted">
+                                      {formatDateTime(a.updated_at)}
+                                    </Td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </Table>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <Card>
+          {assessments.length === 0 ? (
+            <EmptyState title="Nothing here yet" action={<LinkButton href="/teach/assessments/new">Create your first test</LinkButton>} />
+          ) : (
+            <Table stack>
+              <thead>
+                <tr>
+                  <Th>Title</Th>
+                  <Th>Subject</Th>
+                  <Th>Year</Th>
+                  <Th>Questions</Th>
+                  <Th>Status</Th>
+                  <Th>Updated</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {assessments.map((a) => {
+                  const [label, tone] = STATUS_LABEL[a.status as AssessmentStatus];
+                  return (
+                    <tr key={a.id}>
+                      <Td>
+                        <Link href={`/teach/assessments/${a.id}`} className="font-medium hover:underline">
+                          {a.title}
+                        </Link>
+                        <span className="block text-xs text-muted">
+                          {TYPE_LABEL[a.type as AssessmentType]}
+                          {scope === "all"
+                            ? ` · ${(a.staff as unknown as { full_name: string } | null)?.full_name}`
+                            : ""}
+                        </span>
+                      </Td>
+                      <Td label="Subject">{s.subjectById.get(a.subject_id)?.name}</Td>
+                      <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>
+                      <Td label="Questions" className="tabular-nums">
+                        {a.question_count} · {a.duration_minutes} min
+                      </Td>
+                      <Td label="Status">
+                        <Badge tone={tone}>{label}</Badge>
+                      </Td>
+                      <Td label="Updated" className="text-xs whitespace-nowrap text-muted">
+                        {formatDateTime(a.updated_at)}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

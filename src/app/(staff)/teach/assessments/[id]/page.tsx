@@ -241,9 +241,6 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                   : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} (you have ${selected.length} of ${a.question_count}).`}
               </p>
             </div>
-            <Field label="Topic" hint="The unit or area this test covers. Required before submitting.">
-              <Input name="topic" defaultValue={(a as { topic?: string | null }).topic ?? ""} placeholder="e.g. Organic Chemistry" required />
-            </Field>
             <SubmitButton pendingText="Submitting…" confirm="Submit for approval? You won't be able to edit it while it's being reviewed.">
               Submit for approval
             </SubmitButton>

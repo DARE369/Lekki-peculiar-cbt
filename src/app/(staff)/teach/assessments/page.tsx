@@ -161,7 +161,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                                 return (
                                   <tr key={a.id}>
                                     <Td>
-                                      <Link href={`/teach/assessments/${a.id}`} className="font-medium hover:underline">
+                                      <Link href={`/teach/assessments/${a.id}`} className="text-brand font-medium hover:underline">
                                         {a.title}
                                       </Link>
                                       <span className="block text-xs text-muted">{TYPE_LABEL[a.type as AssessmentType]}</span>
@@ -214,7 +214,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                   return (
                     <tr key={a.id}>
                       <Td>
-                        <Link href={`/teach/assessments/${a.id}`} className="font-medium hover:underline">
+                        <Link href={`/teach/assessments/${a.id}`} className="text-brand font-medium hover:underline">
                           {a.title}
                         </Link>
                         <span className="block text-xs text-muted">

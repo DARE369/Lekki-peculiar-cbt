@@ -268,7 +268,7 @@ export function EmptyState({
 export function Table({ className, stack = false, ...props }: ComponentProps<"table"> & { stack?: boolean }) {
   return (
     <div className={stack ? "md:overflow-x-auto" : "overflow-x-auto"}>
-      <table className={cn("w-full border-separate border-spacing-0 text-left text-sm", stack && "stack-table", className)} {...props} />
+      <table className={cn("w-full border-separate border-spacing-0 text-left text-sm [&_tbody_tr:hover]:bg-surface-2/60", stack && "stack-table", className)} {...props} />
     </div>
   );
 }

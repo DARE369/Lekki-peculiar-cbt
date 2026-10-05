@@ -100,7 +100,7 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
               return (
                 <tr key={m.id} className={m.active ? "" : "opacity-60"}>
                   <Td>
-                    <Link href={`/admin/staff/${m.id}`} className="font-medium hover:underline">
+                    <Link href={`/admin/staff/${m.id}`} className="text-brand font-medium hover:underline">
                       {m.full_name}
                     </Link>
                     <span className="block text-xs text-muted">{m.email}</span>

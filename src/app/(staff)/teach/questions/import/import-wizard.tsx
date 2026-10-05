@@ -221,7 +221,7 @@ export function ImportWizard({
           router.push(
             assessmentId
               ? `/teach/assessments/${assessmentId}?added=${added}`
-              : `/teach/questions?subject=${subjectId}&added=${added}${skipped ? `&skipped=${skipped}` : ""}`,
+              : `/teach/assessments/new?subject=${subjectId}${yearId ? `&year=${yearId}` : ""}`,
           );
         } else router.refresh();
       } else {

@@ -10,6 +10,7 @@ import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { dedupeKey, OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
 import { DEFAULT_SETTINGS, TYPE_DEFAULTS, type AssessmentSettings, type AssessmentType } from "@/lib/types";
+import { lagosLocalToIso } from "@/lib/time";
 
 // ---------------------------------------------------------------------------
 // Teaching assignments
@@ -227,7 +228,7 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
       title: str(fd, "title") || `${subject.name} ${TYPE_DEFAULTS[type].label}`,
       question_count: int(fd, "question_count", TYPE_DEFAULTS[type].questions),
       duration_minutes: int(fd, "duration_minutes", TYPE_DEFAULTS[type].minutes),
-      settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam" },
+      settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(str(fd, "instructions") ? { instructions: str(fd, "instructions") } : {}) },
       class_ids: classIds,
       created_by: staff.id,
     })
@@ -453,4 +454,120 @@ export async function cancelCorrection(fd: FormData) {
   revalidatePath(`/teach/assessments/${id}`);
   revalidatePath("/dashboard");
   redirect(`/teach/assessments/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling
+// ---------------------------------------------------------------------------
+export async function scheduleAssessmentWindow(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const id = str(fd, "id");
+  const classId = str(fd, "class_id");
+  const startsLocal = str(fd, "starts_at");
+  const windowHours = int(fd, "window_hours", 2);
+
+  const startsIso = lagosLocalToIso(startsLocal);
+  if (!startsIso) return fail("Enter a valid start date and time.");
+  const endsIso = new Date(new Date(startsIso).getTime() + windowHours * 3_600_000).toISOString();
+
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("assessments").select("created_by, subject_id, class_ids, status").eq("id", id).maybeSingle();
+  if (!a) return fail("Test not found.");
+  if (a.status !== "approved") return fail("Only approved tests can be scheduled.");
+  if (!(a.class_ids as string[] ?? []).includes(classId)) return fail("That class isn't assigned to this test.");
+
+  if (!staff.isAdmin && !staff.isSuperAdmin) {
+    const s = await getStructure();
+    const { data: mine } = await supabase
+      .from("teaching_assignments")
+      .select("class_id")
+      .eq("teacher_id", staff.id)
+      .eq("subject_id", a.subject_id)
+      .eq("session_id", s.currentSessionId ?? "")
+      .eq("status", "approved");
+    const allowed = new Set((mine ?? []).map((r) => r.class_id as string));
+    if (!allowed.has(classId)) return fail("You're not approved to teach this class.");
+  }
+
+  const { error } = await supabase.rpc("schedule_window", {
+    p_assessment: id,
+    p_class: classId,
+    p_starts: startsIso,
+    p_ends: endsIso,
+    p_auto_start: false,
+  });
+  if (error) return fail(error);
+  revalidatePath(`/teach/assessments/${id}`);
+  return ok("Scheduled.");
+}
+
+// ---------------------------------------------------------------------------
+// Batch test creation
+// ---------------------------------------------------------------------------
+export async function createBatchAssessments(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const s = await getStructure();
+  const type = (str(fd, "type") || "test") as AssessmentType;
+  if (!TYPE_DEFAULTS[type]) return fail("Choose a type.");
+  const termId = s.currentTerm?.id;
+  if (!termId) return fail("No current term is set — ask the super admin.");
+  const instructions = str(fd, "instructions");
+
+  const picks = [...new Set(fd.getAll("pick").map(String))];
+  if (picks.length === 0) return fail("Select at least one class and subject.");
+
+  // Group by (subjectId, yearId) → collect classIds
+  const groups = new Map<string, { subjectId: string; yearId: string; classIds: string[] }>();
+  for (const pick of picks) {
+    const [classId, subjectId] = pick.split(":");
+    const cls = s.classById.get(classId);
+    if (!cls) continue;
+    const key = `${subjectId}:${cls.year_id}`;
+    if (!groups.has(key)) groups.set(key, { subjectId, yearId: cls.year_id, classIds: [] });
+    groups.get(key)!.classIds.push(classId);
+  }
+  if (groups.size === 0) return fail("No valid selections.");
+
+  const supabase = await createClient();
+  if (!staff.isAdmin && !staff.isSuperAdmin) {
+    const { data: mine } = await supabase
+      .from("teaching_assignments")
+      .select("class_id, subject_id")
+      .eq("teacher_id", staff.id)
+      .eq("session_id", s.currentSessionId ?? "")
+      .eq("status", "approved");
+    const allowedSet = new Set((mine ?? []).map((r) => `${r.class_id}:${r.subject_id}`));
+    for (const [, g] of groups) {
+      for (const cid of g.classIds) {
+        if (!allowedSet.has(`${cid}:${g.subjectId}`)) return fail("You don't have permission for some of the selected classes.");
+      }
+    }
+  }
+
+  const created: string[] = [];
+  for (const [, g] of groups) {
+    const sub = s.subjectById.get(g.subjectId);
+    if (!sub) continue;
+    const { data } = await supabase
+      .from("assessments")
+      .insert({
+        subject_id: g.subjectId,
+        year_id: g.yearId,
+        term_id: termId,
+        type,
+        title: `${sub.name} ${TYPE_DEFAULTS[type].label}`,
+        question_count: TYPE_DEFAULTS[type].questions,
+        duration_minutes: TYPE_DEFAULTS[type].minutes,
+        settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(instructions ? { instructions } : {}) },
+        class_ids: g.classIds,
+        created_by: staff.id,
+      })
+      .select("id")
+      .single();
+    if (data) created.push(data.id);
+  }
+  if (created.length === 0) return fail("Failed to create tests.");
+  revalidatePath("/teach/assessments");
+  if (created.length === 1) redirect(`/teach/assessments/${created[0]}`);
+  redirect("/teach/assessments");
 }

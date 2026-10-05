@@ -11,15 +11,26 @@ export type ClassOption = {
   subjects: { subjectId: string; label: string }[];
 };
 
-export function TestTarget({ options, defaultClass }: { options: ClassOption[]; defaultClass?: string }) {
+export function TestTarget({
+  options,
+  defaultClass,
+  defaultSubjectId,
+  locked,
+}: {
+  options: ClassOption[];
+  defaultClass?: string;
+  defaultSubjectId?: string;
+  locked?: boolean;
+}) {
   const [classId, setClassId] = useState(
     options.some((o) => o.classId === defaultClass) ? defaultClass! : options.length === 1 ? options[0].classId : "",
   );
   const cls = options.find((o) => o.classId === classId);
 
-  const [subjectId, setSubjectId] = useState(
-    cls?.subjects.length === 1 ? cls.subjects[0].subjectId : "",
-  );
+  const [subjectId, setSubjectId] = useState(() => {
+    if (defaultSubjectId && cls?.subjects.some((s) => s.subjectId === defaultSubjectId)) return defaultSubjectId;
+    return cls?.subjects.length === 1 ? cls.subjects[0].subjectId : "";
+  });
 
   function handleClassChange(newClassId: string) {
     const newCls = options.find((o) => o.classId === newClassId);
@@ -31,6 +42,25 @@ export function TestTarget({ options, defaultClass }: { options: ClassOption[]; 
   const siblings = cls && subjectId
     ? options.filter((o) => o.yearId === cls.yearId && o.classId !== cls.classId && o.subjects.some((s) => s.subjectId === subjectId))
     : [];
+
+  if (locked && cls && subjectId) {
+    const sub = cls.subjects.find((s) => s.subjectId === subjectId);
+    return (
+      <div className="space-y-3">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Class">
+            <p className="flex h-10 items-center rounded-lg border border-border bg-surface-2 px-3 text-sm font-medium">{cls.className} — {cls.yearName}</p>
+          </Field>
+          <Field label="Subject">
+            <p className="flex h-10 items-center rounded-lg border border-border bg-surface-2 px-3 text-sm font-medium">{sub?.label ?? subjectId}</p>
+          </Field>
+        </div>
+        <input type="hidden" name="subject_id" value={subjectId} />
+        <input type="hidden" name="year_id" value={cls.yearId} />
+        <input type="hidden" name="class_id" value={cls.classId} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

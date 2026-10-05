@@ -41,6 +41,7 @@ import {
   withdrawSubmission,
 } from "../../actions";
 import { TopicField } from "./topic-field";
+import { ScheduleForm } from "./schedule-form";
 
 export const metadata: Metadata = { title: "Test" };
 
@@ -114,6 +115,12 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
 
   // A test is "live" once any exam window has started — editing classes and deleting are blocked then.
   const isLive = (windows ?? []).some((w) => new Date(w.starts_at) <= new Date());
+
+  // Classes that still need scheduling (only relevant when approved)
+  const scheduledClassIds = new Set((windows ?? []).map((w) => w.class_id));
+  const unscheduledClassIds = a.status === "approved"
+    ? (a.class_ids as string[] ?? []).filter((c) => !scheduledClassIds.has(c) && assignedClassIds.has(c))
+    : [];
 
   const [statusLabel, statusTone] = STATUS_LABEL[a.status as AssessmentStatus];
   const enough = selected.length >= a.question_count;
@@ -463,7 +470,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
           </Card>
 
           <Card>
-            <CardHeader title="Exam dates" description="Set by your Head of Section." />
+            <CardHeader title="Exam dates" description="Scheduled windows for this test." />
             {(windows ?? []).length === 0 ? (
               <p className="p-5 text-sm text-muted">Not scheduled yet.</p>
             ) : (
@@ -489,6 +496,25 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
               </ul>
             )}
           </Card>
+
+          {unscheduledClassIds.length > 0 ? (
+            <Card>
+              <CardHeader
+                title="Schedule"
+                description="Set the date and time for each unscheduled class."
+              />
+              <div className="p-5 space-y-4">
+                {unscheduledClassIds.map((classId) => (
+                  <ScheduleForm
+                    key={classId}
+                    assessmentId={a.id}
+                    classId={classId}
+                    className={s.className(classId)}
+                  />
+                ))}
+              </div>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>

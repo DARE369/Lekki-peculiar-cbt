@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   BookOpenCheck,
@@ -59,7 +59,48 @@ export interface ShellUser {
 }
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/"));
+  // Strip query string from href before comparing — pathname never includes it.
+  const hrefPath = href.split("?")[0];
+  return pathname === hrefPath || (hrefPath !== "/dashboard" && pathname.startsWith(hrefPath + "/"));
+}
+
+/** Thin progress bar shown during page-to-page navigations. */
+function NavigationProgress() {
+  const pathname = usePathname();
+  const [active, setActive] = useState(false);
+  // Track latest pathname so we don't trigger on same-page clicks.
+  const lastPathname = useRef(pathname);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      const anchor = (e.target as Element).closest("a");
+      if (!anchor || !anchor.href || anchor.target || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      try {
+        const url = new URL(anchor.href);
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname !== lastPathname.current) setActive(true);
+      } catch {
+        // non-parseable href — ignore
+      }
+    }
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, []);
+
+  // Hide once the new page has arrived.
+  useEffect(() => {
+    lastPathname.current = pathname;
+    setActive(false);
+  }, [pathname]);
+
+  return (
+    <div
+      aria-hidden
+      className={`pointer-events-none fixed inset-x-0 top-0 z-[200] h-[3px] transition-opacity duration-300 ${active ? "opacity-100" : "opacity-0"}`}
+    >
+      <div className={`h-full bg-brand origin-left ${active ? "animate-[nav-progress_2s_ease-in-out_infinite]" : ""}`} />
+    </div>
+  );
 }
 
 function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () => void }) {
@@ -152,6 +193,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
+      <NavigationProgress />
       {/* Desktop sidebar */}
       <aside className="no-print sticky top-0 hidden h-screen flex-col border-r border-border bg-surface lg:flex">
         <div className="px-6 pt-6 pb-5">

@@ -251,3 +251,10 @@ body {
     padding-top: 0.6rem !important;
   }
 }
+
+/* Navigation progress bar */
+@keyframes nav-progress {
+  0%   { transform: scaleX(0.05); }
+  50%  { transform: scaleX(0.7); }
+  100% { transform: scaleX(0.9); }
+}

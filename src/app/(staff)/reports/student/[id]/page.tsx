@@ -150,7 +150,7 @@ export default async function StudentReport(props: PageProps<"/reports/student/[
                   <Card key={r.id} id={r.id} className="scroll-mt-6">
                     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                       <div>
-                        <Link href={`/reports/assessment/${a.id}`} className="font-medium hover:underline">
+                        <Link href={`/reports/assessment/${a.id}`} className="text-brand font-medium hover:underline">
                           {a.title}
                         </Link>{" "}
                         <Badge>{TYPE_LABEL[a.type]}</Badge>

@@ -121,7 +121,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
                       <Td label="Position" className="tabular-nums">{rank.get(t) ? ordinal(rank.get(t)!) : "—"}</Td>
                       <Td>
                         {st ? (
-                          <Link href={`/reports/student/${st.id}?term=${a.term_id}`} className="font-medium hover:underline">
+                          <Link href={`/reports/student/${st.id}?term=${a.term_id}`} className="text-brand font-medium hover:underline">
                             {fullName(st)}
                           </Link>
                         ) : (

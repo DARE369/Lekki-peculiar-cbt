@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { FilePlus2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select } from "@/components/ui";
+import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
 import { createAssessment } from "../../actions";
 import { TestTarget, type ClassOption } from "./test-target";
 import { TypeFields } from "./type-fields";
+import { BatchCreate } from "./batch-create";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "New test or exam" };
@@ -53,6 +54,23 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
     const bl = s.yearById.get(b.yearId)?.level ?? 0;
     return al - bl || a.className.localeCompare(b.className);
   });
+
+  // Detect locked mode: coming from upload with subject+year params
+  const spSubject = typeof sp.subject === "string" ? sp.subject : undefined;
+  const spYear = typeof sp.year === "string" ? sp.year : undefined;
+  const locked = Boolean(spSubject && spYear);
+
+  // Resolve defaultClass: explicit param wins; otherwise infer from subject+year
+  let defaultClass = typeof sp.class === "string" ? sp.class : undefined;
+  if (!defaultClass && spSubject && spYear) {
+    defaultClass = options.find(
+      (o) => o.yearId === spYear && o.subjects.some((sub) => sub.subjectId === spSubject),
+    )?.classId;
+  }
+
+  // Batch mode toggle
+  const batch = sp.batch === "1";
+
   // Teachers whose choices are still waiting can't build a test yet, but they can upload questions.
   const { count: waiting } = options.length
     ? { count: 0 }
@@ -63,7 +81,7 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
         .eq("session_id", s.currentSessionId ?? "")
         .eq("status", "requested");
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl space-y-4">
       <PageHeader
         icon={FilePlus2} title="New test or exam" back={{ href: "/teach/assessments", label: "Tests & exams" }} />
       {options.length === 0 ? (
@@ -81,22 +99,53 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
           )}
         </Card>
       ) : (
-        <Card className="p-5">
-          <ActionForm action={createAssessment} className="space-y-5">
-            <TypeFields />
-            <TestTarget
-              options={options}
-              defaultClass={typeof sp.class === "string" ? sp.class : undefined}
-            />
-            <Field label="Title" hint="Leave blank to use e.g. “Biology Test”.">
-              <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />
-            </Field>
-            {/* Term is set by the super admin; teachers always use the current term. */}
-            <input type="hidden" name="term_id" value={s.currentTerm?.id ?? ""} />
-            {!s.currentTerm ? <Alert tone="warning">No current term is set — ask the super admin to set one before creating a test.</Alert> : null}
-            <SubmitButton>Create and add questions</SubmitButton>
-          </ActionForm>
-        </Card>
+        <>
+          {!locked ? (
+            <div className="flex gap-2">
+              <a
+                href="/teach/assessments/new"
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${!batch ? "border-brand bg-brand-soft text-brand" : "border-border"}`}
+              >
+                Single test
+              </a>
+              <a
+                href="/teach/assessments/new?batch=1"
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${batch ? "border-brand bg-brand-soft text-brand" : "border-border"}`}
+              >
+                Batch create
+              </a>
+            </div>
+          ) : null}
+          {batch && !locked ? (
+            <Card className="p-5">
+              <BatchCreate options={options} />
+            </Card>
+          ) : (
+            <Card className="p-5">
+              <ActionForm action={createAssessment} className="space-y-5">
+                <TypeFields />
+                <TestTarget
+                  options={options}
+                  defaultClass={defaultClass}
+                  defaultSubjectId={spSubject}
+                  locked={locked}
+                />
+                {!locked ? (
+                  <Field label="Title" hint={'Leave blank to use e.g. “Biology Test”.'}>
+                    <Input name="title" placeholder="e.g. Biology — First Term Mid-term Test" />
+                  </Field>
+                ) : null}
+                <Field label="Instructions for students" hint="Shown on the start screen before the first question.">
+                  <Textarea name="instructions" rows={3} placeholder="Answer all questions. Each question carries equal marks." />
+                </Field>
+                {/* Term is set by the super admin; teachers always use the current term. */}
+                <input type="hidden" name="term_id" value={s.currentTerm?.id ?? ""} />
+                {!s.currentTerm ? <Alert tone="warning">No current term is set — ask the super admin to set one before creating a test.</Alert> : null}
+                <SubmitButton>Create and add questions</SubmitButton>
+              </ActionForm>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );

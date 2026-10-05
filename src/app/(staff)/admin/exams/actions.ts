@@ -33,3 +33,35 @@ export async function scheduleFromExamsPage(_prev: ActionResult | undefined, fd:
   revalidatePath("/admin/exams");
   return ok("Scheduled.");
 }
+
+/** Schedule the same subject across multiple assessments and classes in one shot. */
+export async function bulkScheduleBySubject(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+  // Each "pair" is encoded as "assessmentId:classId"
+  const pairs = fd.getAll("pair").map(String).filter(Boolean);
+  if (!pairs.length) return fail("Select at least one class.");
+  const starts = lagosLocalToIso(str(fd, "starts_all"));
+  const ends = lagosLocalToIso(str(fd, "ends_all"));
+  if (!starts) return fail("Pick an opening time.");
+  if (!ends) return fail("Pick a closing time.");
+  if (ends <= starts) return fail("Closing time must be after opening time.");
+
+  for (const pair of pairs) {
+    const colonIdx = pair.indexOf(":");
+    if (colonIdx === -1) continue;
+    const assessmentId = pair.slice(0, colonIdx);
+    const classId = pair.slice(colonIdx + 1);
+    const { error } = await supabase.rpc("schedule_window", {
+      p_assessment: assessmentId,
+      p_class: classId,
+      p_starts: starts,
+      p_ends: ends,
+      p_auto_start: false,
+    });
+    if (error) return fail(`Could not schedule for one class: ${error.message}`);
+  }
+  revalidatePath("/admin/exams");
+  revalidatePath("/dashboard");
+  return ok(`Scheduled ${pairs.length} window${pairs.length === 1 ? "" : "s"}.`);
+}

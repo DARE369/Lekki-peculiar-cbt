@@ -83,18 +83,26 @@ export async function SchoolOverview({ s }: { s: Structure }) {
   const assignments = (assignmentsRes.data ?? []) as { teacher_id: string; subject_id: string; class_id: string }[];
   type Cell = "scheduled" | "approved" | "pending" | "none";
   const rank: Record<Cell, number> = { scheduled: 3, approved: 2, pending: 1, none: 0 };
-  const cellFor = (subjectId: string, classId: string): Cell => {
+  const cellFor = (subjectId: string, classId: string): { state: Cell; href: string | null } => {
     let best: Cell = "none";
+    let bestTestId: string | null = null;
+    let bestWindowId: string | null = null;
     for (const t of tests) {
       if (t.subjectId !== subjectId || !t.classIds.includes(classId)) continue;
-      const c: Cell = t.status === "approved" ? (t.windows.some((w) => w.classId === classId) ? "scheduled" : "approved") : t.status === "pending_approval" ? "pending" : "none";
-      if (rank[c] > rank[best]) best = c;
+      const w = windows.find((x) => x.assessment_id === t.id && x.class_id === classId);
+      const c: Cell = t.status === "approved" ? (w ? "scheduled" : "approved") : t.status === "pending_approval" ? "pending" : "none";
+      if (rank[c] > rank[best]) { best = c; bestTestId = t.id; bestWindowId = w?.id ?? null; }
     }
-    return best;
+    const href =
+      best === "scheduled" ? `/admin/exams/${bestWindowId}` :
+      best === "approved" ? `/admin/exams?view=drafts` :
+      best === "pending" ? `/admin/approvals` :
+      null;
+    return { state: best, href };
   };
   const pairs = new Map<string, { classId: string; subjectId: string }>();
   for (const a of assignments) pairs.set(`${a.class_id}:${a.subject_id}`, { classId: a.class_id, subjectId: a.subject_id });
-  const cells = [...pairs.values()].map((p) => ({ ...p, state: cellFor(p.subjectId, p.classId) }));
+  const cells = [...pairs.values()].map((p) => ({ ...p, ...cellFor(p.subjectId, p.classId) }));
   const gaps = cells.filter((c) => c.state === "none").length;
   const classesWithAssignments = [...new Set(cells.map((c) => c.classId))].sort(
     (a, b) => (s.yearById.get(s.classById.get(a)?.year_id ?? "")?.level ?? 0) - (s.yearById.get(s.classById.get(b)?.year_id ?? "")?.level ?? 0) || s.className(a).localeCompare(s.className(b)),
@@ -116,7 +124,7 @@ export async function SchoolOverview({ s }: { s: Structure }) {
   for (const d of sectionData.filter((x) => x.behind > 0)) attention.push({ text: `${d.behind} ${d.sec.name} teacher${d.behind === 1 ? " is" : "s are"} past the deadline and not finished`, href: "/admin/progress", tone: "danger" });
   if (gaps) attention.push({ text: `${gaps} class-and-subject pair${gaps === 1 ? " has" : "s have"} no test yet`, href: "/admin/approvals", tone: "warning" });
   const unscheduled = approved.filter((t) => t.windows.length === 0);
-  if (unscheduled.length) attention.push({ text: `${unscheduled.length} approved test${unscheduled.length === 1 ? " has" : "s have"} no exam date`, href: "/admin/approvals", tone: "warning" });
+  if (unscheduled.length) attention.push({ text: `${unscheduled.length} approved test${unscheduled.length === 1 ? " has" : "s have"} no exam date`, href: "/admin/exams?view=drafts", tone: "warning" });
   if (neverSignedIn.length) attention.push({ text: `${neverSignedIn.length} staff haven't signed in yet`, href: "/admin/progress?show=invited", tone: "warning" });
   const noSection = teachers.filter((t) => !(sectionsOf.get(t.id)?.length)).length;
   if (noSection) attention.push({ text: `${noSection} teacher${noSection === 1 ? " is" : "s are"} not in a section yet`, href: "/admin/staff?section=none", tone: "warning" });
@@ -243,11 +251,17 @@ export async function SchoolOverview({ s }: { s: Structure }) {
                   {cells
                     .filter((c) => c.classId === classId)
                     .sort((a, b) => (s.subjectById.get(a.subjectId)?.name ?? "").localeCompare(s.subjectById.get(b.subjectId)?.name ?? ""))
-                    .map((c) => (
-                      <span key={c.subjectId} className={cn("rounded-lg border px-2.5 py-1 text-xs font-medium", CELL[c.state])}>
-                        {s.subjectById.get(c.subjectId)?.name}
-                      </span>
-                    ))}
+                    .map((c) =>
+                      c.href ? (
+                        <Link key={c.subjectId} href={c.href} className={cn("rounded-lg border px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80", CELL[c.state])}>
+                          {s.subjectById.get(c.subjectId)?.name}
+                        </Link>
+                      ) : (
+                        <span key={c.subjectId} className={cn("rounded-lg border px-2.5 py-1 text-xs font-medium", CELL[c.state])}>
+                          {s.subjectById.get(c.subjectId)?.name}
+                        </span>
+                      ),
+                    )}
                 </div>
               </li>
             ))}

@@ -118,6 +118,23 @@ export async function archiveQuestion(fd: FormData) {
   revalidatePath("/teach/questions");
 }
 
+export async function deleteQuestion(fd: FormData) {
+  const staff = await requireStaff();
+  const supabase = await createClient();
+  const id = str(fd, "id");
+  const { data: q } = await supabase.from("questions").select("owner_id").eq("id", id).maybeSingle();
+  if (!q) return;
+  if (q.owner_id !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return;
+  // Hard-delete if not used in any assessment; otherwise soft-delete (archive)
+  const { count } = await supabase.from("assessment_questions").select("id", { count: "exact", head: true }).eq("question_id", id);
+  if ((count ?? 0) > 0) {
+    await supabase.from("questions").update({ archived: true }).eq("id", id);
+  } else {
+    await supabase.from("questions").delete().eq("id", id);
+  }
+  revalidatePath("/teach/questions");
+}
+
 const importSchema = z.object({
   subjectId: z.string().uuid(),
   yearId: z.string().uuid().nullable(),
@@ -293,6 +310,60 @@ export async function addQuestionsToAssessment(_: ActionResult, fd: FormData): P
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);
   return ok(`Added ${ids.length} question${ids.length === 1 ? "" : "s"}.`);
+}
+
+export async function addAllBankQuestions(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const id = str(fd, "assessment_id");
+  const topicFilter = str(fd, "topic");
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("assessments").select("subject_id, year_id, created_by, status, amending").eq("id", id).maybeSingle();
+  if (!a) return fail("Test not found.");
+  if (a.created_by !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return fail("Not authorised.");
+  const editable = ["draft", "changes_requested"].includes(a.status) || (a.status === "approved" && Boolean(a.amending));
+  if (!editable) return fail("This test can't be edited right now.");
+  const { data: existing } = await supabase.from("assessment_questions").select("question_id").eq("assessment_id", id);
+  const existingIds = new Set((existing ?? []).map((r) => r.question_id as string));
+  let qQuery = supabase.from("questions").select("id").eq("subject_id", a.subject_id).eq("archived", false).or(`year_id.eq.${a.year_id},year_id.is.null`);
+  if (topicFilter) qQuery = qQuery.eq("topic", topicFilter);
+  const { data: bank } = await qQuery;
+  const toAdd = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
+  if (toAdd.length === 0) return ok("All matching questions are already in this test.");
+  const { count } = await supabase.from("assessment_questions").select("question_id", { count: "exact", head: true }).eq("assessment_id", id);
+  const { error } = await supabase.from("assessment_questions").upsert(
+    toAdd.map((q, i) => ({ assessment_id: id, question_id: q.id, position: (count ?? 0) + i + 1 })),
+    { onConflict: "assessment_id,question_id", ignoreDuplicates: true },
+  );
+  if (error) return fail(error);
+  revalidatePath(`/teach/assessments/${id}`);
+  return ok(`Added ${toAdd.length} question${toAdd.length === 1 ? "" : "s"}.`);
+}
+
+export async function autoFillAssessment(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const id = str(fd, "assessment_id");
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("assessments").select("subject_id, year_id, question_count, created_by, status").eq("id", id).maybeSingle();
+  if (!a) return fail("Test not found.");
+  if (a.created_by !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return fail("Not authorised.");
+  if (!["draft", "changes_requested"].includes(a.status)) return fail("This test can't be edited right now.");
+  const { count: current } = await supabase.from("assessment_questions").select("id", { count: "exact", head: true }).eq("assessment_id", id);
+  const needed = (a.question_count as number) - (current ?? 0);
+  if (needed <= 0) return ok(`Already has ${current} questions — enough for this test.`);
+  const { data: existing } = await supabase.from("assessment_questions").select("question_id").eq("assessment_id", id);
+  const existingIds = new Set((existing ?? []).map((r) => r.question_id as string));
+  const { data: bank } = await supabase.from("questions").select("id").eq("subject_id", a.subject_id).eq("archived", false).or(`year_id.eq.${a.year_id},year_id.is.null`);
+  const available = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
+  if (available.length === 0) return fail("No more questions in the bank for this subject.");
+  const shuffled = available.sort(() => Math.random() - 0.5).slice(0, needed);
+  const basePos = (current ?? 0) + 1;
+  const { error } = await supabase.from("assessment_questions").upsert(
+    shuffled.map((q, i) => ({ assessment_id: id, question_id: q.id, position: basePos + i })),
+    { onConflict: "assessment_id,question_id", ignoreDuplicates: true },
+  );
+  if (error) return fail(error);
+  revalidatePath(`/teach/assessments/${id}`);
+  return ok(`Picked ${shuffled.length} question${shuffled.length === 1 ? "" : "s"} at random${available.length < needed ? " — that's all that was available" : ""}.`);
 }
 
 export async function removeQuestionFromAssessment(fd: FormData) {

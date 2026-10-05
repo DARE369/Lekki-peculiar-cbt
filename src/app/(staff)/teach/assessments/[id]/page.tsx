@@ -15,10 +15,7 @@ import {
   LinkButton,
   PageHeader,
   Select,
-  Table,
-  Td,
   Textarea,
-  Th,
 } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
 import { flagLabel } from "@/lib/readiness";
@@ -28,7 +25,6 @@ import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/label
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
 import {
-  addQuestionsToAssessment,
   beginCorrection,
   cancelCorrection,
   deleteAssessment,
@@ -42,6 +38,7 @@ import {
 } from "../../actions";
 import { TopicField } from "./topic-field";
 import { ScheduleForm } from "./schedule-form";
+import { QuestionPicker } from "./question-picker";
 
 export const metadata: Metadata = { title: "Test" };
 
@@ -330,34 +327,11 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
               {bank.length === 0 ? (
                 <EmptyState title="Nothing else in the bank" />
               ) : (
-                <ActionForm action={addQuestionsToAssessment} hideSuccess>
-                  <input type="hidden" name="assessment_id" value={a.id} />
-                  <div className="max-h-[480px] overflow-y-auto">
-                    <Table stack>
-                      <thead className="sticky top-0">
-                        <tr>
-                          <Th className="w-10" />
-                          <Th>Question</Th>
-                          <Th>Topic</Th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bank.map((q) => (
-                          <tr key={q.id}>
-                            <Td className="cell-check">
-                              <input type="checkbox" name="question_id" value={q.id} className="h-4 w-4 accent-[var(--brand)]" aria-label="Add" />
-                            </Td>
-                            <Td className="line-clamp-2">{q.body}</Td>
-                            <Td label="Topic" className="text-xs">{q.topic ?? "—"}</Td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  </div>
-                  <div className="border-t border-border p-4">
-                    <SubmitButton size="sm">Add ticked questions</SubmitButton>
-                  </div>
-                </ActionForm>
+                <QuestionPicker
+                  assessmentId={a.id}
+                  bank={bank}
+                  needed={Math.max(0, a.question_count - selected.length)}
+                />
               )}
             </Card>
           ) : null}

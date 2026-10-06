@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { CalendarClock } from "lucide-react";
 import Link from "next/link";
-import { Badge, Card, EmptyState, PageHeader, Table, Td, Th, cn } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, cn } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { requireAdmin } from "@/lib/auth";
-import { formatDateTime, getStructure } from "@/lib/data";
-import { TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
+import { getStructure } from "@/lib/data";
+import { TYPE_LABEL } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { bulkScheduleBySubject, scheduleFromExamsPage } from "./actions";
+import { ExamBulkTable } from "./exam-bulk-table";
 
 export const metadata: Metadata = { title: "Exams & live monitor" };
 
@@ -205,6 +206,10 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
     past: "No past exams",
   };
 
+  // Build plain lookup objects for the client component (functions can't cross the server/client boundary)
+  const classNames: Record<string, string> = Object.fromEntries(s.classes.map((c) => [c.id, c.name]));
+  const subjectNames: Record<string, string> = Object.fromEntries([...s.subjectById.entries()].map(([id, sub]) => [id, sub.name]));
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -220,40 +225,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
             {view === "today" ? "Check Upcoming for scheduled exams, or Needs a date for approved tests without a schedule." : null}
           </EmptyState>
         ) : (
-          <Table stack>
-            <thead>
-              <tr>
-                <Th>Exam</Th>
-                <Th>Class</Th>
-                <Th>Opens</Th>
-                <Th>Closes</Th>
-                <Th>Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((w) => {
-                const [label, tone] = WINDOW_LABEL[windowState(w)];
-                return (
-                  <tr key={w.id} className="hover:bg-surface-2">
-                    <Td>
-                      <Link href={`/admin/exams/${w.id}`} className="font-medium text-brand hover:underline">
-                        {w.assessments?.title}
-                      </Link>
-                      <span className="block text-xs text-muted">
-                        {s.subjectById.get(w.assessments?.subject_id ?? "")?.name} · {TYPE_LABEL[w.assessments?.type ?? "test"]}
-                      </span>
-                    </Td>
-                    <Td label="Class">{s.className(w.class_id)}</Td>
-                    <Td label="Opens" className="text-sm whitespace-nowrap">{formatDateTime(w.starts_at)}</Td>
-                    <Td label="Closes" className="text-sm whitespace-nowrap">{formatDateTime(w.ends_at)}</Td>
-                    <Td label="Status">
-                      <Badge tone={tone}>{label}</Badge>
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
+          <ExamBulkTable rows={rows} classNames={classNames} subjectNames={subjectNames} />
         )}
       </Card>
     </div>

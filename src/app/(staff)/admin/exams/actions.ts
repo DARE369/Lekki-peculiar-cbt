@@ -65,3 +65,26 @@ export async function bulkScheduleBySubject(_prev: ActionResult | undefined, fd:
   revalidatePath("/dashboard");
   return ok(`Scheduled ${pairs.length} window${pairs.length === 1 ? "" : "s"}.`);
 }
+
+/** Start (or pause/resume/close) multiple exam windows at once. */
+export async function bulkWindowAction(windowIds: string[], action: string): Promise<ActionResult> {
+  if (!windowIds.length || windowIds.length > 100) return fail("Invalid request.");
+  await requireAdmin();
+  const supabase = await createClient();
+  let started = 0;
+  const errors: string[] = [];
+  for (const id of windowIds) {
+    const { error } = await supabase.rpc("window_action", { p_window: id, p_action: action, p_ends_at: null });
+    if (error) errors.push(error.message);
+    else started++;
+  }
+  revalidatePath("/admin/exams");
+  if (started === 0) return fail(errors[0] ?? "Could not start any exams.");
+  const msg: Record<string, string> = {
+    start: `Started ${started} exam${started === 1 ? "" : "s"}.`,
+    pause: `Paused ${started} exam${started === 1 ? "" : "s"}.`,
+    resume: `Resumed ${started} exam${started === 1 ? "" : "s"}.`,
+    close: `Closed ${started} exam${started === 1 ? "" : "s"}.`,
+  };
+  return ok(msg[action] ?? `Done (${started}).`, { started, failed: errors.length });
+}

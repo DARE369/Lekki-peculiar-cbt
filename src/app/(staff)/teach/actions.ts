@@ -7,6 +7,7 @@ import { requireStaff } from "@/lib/auth";
 import { fail, ok, bool, int, str, type ActionResult } from "@/lib/actions";
 import { applySubjectPicks } from "@/lib/assignments";
 import { getStructure } from "@/lib/data";
+import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import { dedupeKey, OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
 import { DEFAULT_SETTINGS, TYPE_DEFAULTS, type AssessmentSettings, type AssessmentType } from "@/lib/types";
@@ -125,14 +126,134 @@ export async function deleteQuestion(fd: FormData) {
   const { data: q } = await supabase.from("questions").select("owner_id").eq("id", id).maybeSingle();
   if (!q) return;
   if (q.owner_id !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return;
-  // Hard-delete if not used in any assessment; otherwise soft-delete (archive)
-  const { count } = await supabase.from("assessment_questions").select("id", { count: "exact", head: true }).eq("question_id", id);
-  if ((count ?? 0) > 0) {
+
+  // Block if linked to any live or scheduled exam window.
+  const { data: links } = await supabase.from("assessment_questions").select("assessment_id").eq("question_id", id);
+  const aIds = (links ?? []).map((l) => l.assessment_id as string);
+  if (aIds.length) {
+    const { data: wins } = await supabase
+      .from("exam_windows")
+      .select("status, starts_at, ends_at, auto_start")
+      .in("assessment_id", aIds);
+    type WC = { status: string; starts_at: string; ends_at: string; auto_start: boolean };
+    const active = ((wins ?? []) as unknown as WC[]).some((w) =>
+      ["live", "paused", "awaiting_start", "scheduled"].includes(windowState(w)),
+    );
+    if (active) return; // silently refuse; the bulk-delete UI explains why
+  }
+
+  if (aIds.length > 0) {
     await supabase.from("questions").update({ archived: true }).eq("id", id);
   } else {
     await supabase.from("questions").delete().eq("id", id);
   }
   revalidatePath("/teach/questions");
+}
+
+type BulkPreview = {
+  safe: { id: string; body: string; willHardDelete: boolean }[];
+  blocked: { id: string; body: string; reason: string; testTitle: string }[];
+};
+
+/** Returns which questions can be safely deleted vs which are blocked by active/upcoming exams. */
+export async function previewBulkDelete(ids: string[]): Promise<BulkPreview> {
+  if (!ids.length || ids.length > 200) return { safe: [], blocked: [] };
+  const staff = await requireStaff();
+  const supabase = await createClient();
+
+  const { data: qs } = await supabase
+    .from("questions")
+    .select("id, body, owner_id")
+    .in("id", ids)
+    .eq("archived", false);
+
+  const owned = (qs ?? []).filter(
+    (q) => (q.owner_id as string) === staff.id || staff.isAdmin || staff.isSuperAdmin,
+  );
+  const ownedIds = owned.map((q) => q.id as string);
+  if (!ownedIds.length) return { safe: [], blocked: [] };
+
+  const { data: links } = await supabase
+    .from("assessment_questions")
+    .select("question_id, assessment_id")
+    .in("question_id", ownedIds);
+
+  const assessmentIds = [...new Set((links ?? []).map((l) => l.assessment_id as string))];
+
+  type WC = { assessment_id: string; status: string; starts_at: string; ends_at: string; auto_start: boolean };
+  const [assRes, winRes] = assessmentIds.length
+    ? await Promise.all([
+        supabase.from("assessments").select("id, title").in("id", assessmentIds),
+        supabase.from("exam_windows").select("assessment_id, status, starts_at, ends_at, auto_start").in("assessment_id", assessmentIds),
+      ])
+    : [{ data: [] as { id: string; title: string }[] }, { data: [] as WC[] }];
+
+  const titleOf = new Map((assRes.data ?? []).map((a) => [a.id as string, a.title as string]));
+
+  const unsafeAssessments = new Map<string, string>();
+  for (const w of (winRes.data ?? []) as unknown as WC[]) {
+    const state = windowState(w);
+    if (["live", "paused"].includes(state)) {
+      unsafeAssessments.set(w.assessment_id, "this question is in a test that is currently live");
+    } else if (state === "awaiting_start" && !unsafeAssessments.has(w.assessment_id)) {
+      unsafeAssessments.set(w.assessment_id, "this question is in a test that is about to start");
+    } else if (state === "scheduled" && !unsafeAssessments.has(w.assessment_id)) {
+      unsafeAssessments.set(w.assessment_id, "this question is in a scheduled upcoming exam");
+    }
+  }
+
+  const linksByQ = new Map<string, string[]>();
+  for (const l of links ?? []) {
+    const qid = l.question_id as string;
+    if (!linksByQ.has(qid)) linksByQ.set(qid, []);
+    linksByQ.get(qid)!.push(l.assessment_id as string);
+  }
+
+  const safe: BulkPreview["safe"] = [];
+  const blocked: BulkPreview["blocked"] = [];
+  for (const q of owned) {
+    const qAids = linksByQ.get(q.id as string) ?? [];
+    const blockerAid = qAids.find((aid) => unsafeAssessments.has(aid));
+    if (blockerAid) {
+      blocked.push({
+        id: q.id as string,
+        body: q.body as string,
+        reason: unsafeAssessments.get(blockerAid)!,
+        testTitle: titleOf.get(blockerAid) ?? "a test",
+      });
+    } else {
+      safe.push({ id: q.id as string, body: q.body as string, willHardDelete: qAids.length === 0 });
+    }
+  }
+  return { safe, blocked };
+}
+
+/** Permanently delete (or archive) the given questions after re-checking safety. */
+export async function confirmBulkDelete(ids: string[]): Promise<ActionResult> {
+  if (!ids.length || ids.length > 200) return fail("Invalid request.");
+  const preview = await previewBulkDelete(ids);
+  if (preview.safe.length === 0 && preview.blocked.length === 0) return fail("Questions not found or you don't have permission.");
+  if (preview.safe.length === 0)
+    return fail(`None of the ${preview.blocked.length} question${preview.blocked.length === 1 ? "" : "s"} can be deleted — all are linked to active or upcoming exams.`);
+
+  const supabase = await createClient();
+  let deleted = 0;
+  for (const q of preview.safe) {
+    if (q.willHardDelete) {
+      const { error } = await supabase.from("questions").delete().eq("id", q.id);
+      if (!error) deleted++;
+    } else {
+      const { error } = await supabase.from("questions").update({ archived: true }).eq("id", q.id);
+      if (!error) deleted++;
+    }
+  }
+
+  revalidatePath("/teach/questions");
+  const skipped = preview.blocked.length;
+  return ok(
+    `${deleted} question${deleted === 1 ? "" : "s"} deleted${skipped ? ` · ${skipped} skipped (linked to active exams)` : ""}.`,
+    { deleted, blocked: skipped },
+  );
 }
 
 const importSchema = z.object({

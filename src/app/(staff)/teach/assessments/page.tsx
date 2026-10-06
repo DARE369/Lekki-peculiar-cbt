@@ -42,6 +42,23 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
   const { data } = await query;
   const assessments = data ?? [];
 
+  // Fetch earliest exam window for each assessment so teachers can see when their exam is scheduled.
+  const assessmentIds = assessments.map((a) => a.id);
+  const { data: windowData } = assessmentIds.length
+    ? await supabase.from("exam_windows").select("assessment_id, starts_at, class_id").in("assessment_id", assessmentIds).order("starts_at")
+    : { data: [] };
+  // Map assessmentId → earliest window start (and class count)
+  type WinInfo = { startsAt: string; classCount: number };
+  const windowMap = new Map<string, WinInfo>();
+  for (const w of windowData ?? []) {
+    const existing = windowMap.get(w.assessment_id);
+    if (!existing || w.starts_at < existing.startsAt) {
+      windowMap.set(w.assessment_id, { startsAt: w.starts_at, classCount: (existing?.classCount ?? 0) + 1 });
+    } else {
+      existing.classCount += 1;
+    }
+  }
+
   type Assessment = (typeof assessments)[number];
   type StaffRef = { id: string; full_name: string } | null;
 
@@ -151,6 +168,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                                 <Th>Teacher</Th>
                                 <Th>Questions</Th>
                                 <Th>Status</Th>
+                                <Th>Scheduled</Th>
                                 <Th>Updated</Th>
                               </tr>
                             </thead>
@@ -158,6 +176,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                               {tests.map((a) => {
                                 const [label, tone] = STATUS_LABEL[a.status as AssessmentStatus];
                                 const teacher = a.staff as unknown as StaffRef;
+                                const win = windowMap.get(a.id);
                                 return (
                                   <tr key={a.id}>
                                     <Td>
@@ -174,6 +193,9 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                                     </Td>
                                     <Td label="Status">
                                       <Badge tone={tone}>{label}</Badge>
+                                    </Td>
+                                    <Td label="Scheduled" className="text-xs whitespace-nowrap text-muted">
+                                      {win ? formatDateTime(win.startsAt) : a.status === "approved" ? <span className="text-warning">No date set</span> : "—"}
                                     </Td>
                                     <Td label="Updated" className="text-xs whitespace-nowrap text-muted">
                                       {formatDateTime(a.updated_at)}
@@ -205,12 +227,14 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                   <Th>Year</Th>
                   <Th>Questions</Th>
                   <Th>Status</Th>
+                  <Th>Scheduled</Th>
                   <Th>Updated</Th>
                 </tr>
               </thead>
               <tbody>
                 {assessments.map((a) => {
                   const [label, tone] = STATUS_LABEL[a.status as AssessmentStatus];
+                  const win = windowMap.get(a.id);
                   return (
                     <tr key={a.id}>
                       <Td>
@@ -231,6 +255,9 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                       </Td>
                       <Td label="Status">
                         <Badge tone={tone}>{label}</Badge>
+                      </Td>
+                      <Td label="Scheduled" className="text-xs whitespace-nowrap text-muted">
+                        {win ? formatDateTime(win.startsAt) : a.status === "approved" ? <span className="text-warning">No date set</span> : "—"}
                       </Td>
                       <Td label="Updated" className="text-xs whitespace-nowrap text-muted">
                         {formatDateTime(a.updated_at)}

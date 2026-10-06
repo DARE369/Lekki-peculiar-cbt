@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
 import { FileQuestion } from "lucide-react";
 import Link from "next/link";
-import { Badge, Card, EmptyState, Input, LinkButton, PageHeader, Select, Table, Td, Th, cn } from "@/components/ui";
+import { Card, EmptyState, Input, LinkButton, PageHeader, Select, cn } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
 import { requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
-import type { QuestionOption } from "@/lib/types";
-import { deleteQuestion } from "../actions";
+import { QuestionBulkTable } from "./bulk-delete";
 
 type QuestionRow = { id: string; body: string; options: unknown; answer: string; topic: string | null; difficulty: number | null; year_id: string | null; owner_id: string; created_at: string };
 
 export const metadata: Metadata = { title: "Question bank" };
-
-const DIFF = ["", "Easy", "Medium", "Hard"];
 
 type NavEntry = { subjectId: string; subjectName: string; yearId: string; yearName: string; yearLevel: number };
 
@@ -239,48 +236,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                         }
                       />
                     ) : (
-                      <Table stack>
-                        <thead>
-                          <tr>
-                            <Th className="w-1/2">Question</Th>
-                            <Th>Answer</Th>
-                            <Th>Topic</Th>
-                            <Th />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {questions.map((r) => {
-                            const opts = r.options as QuestionOption[];
-                            const correct = opts.find((o) => o.key === r.answer);
-                            return (
-                              <tr key={r.id}>
-                                <Td>
-                                  <Link href={`/teach/questions/${r.id}`} className="line-clamp-2 hover:underline">
-                                    {r.body}
-                                  </Link>
-                                  <span className="text-xs text-muted">{opts.length} options</span>
-                                </Td>
-                                <Td label="Answer">
-                                  <Badge tone="success">{r.answer}</Badge>{" "}
-                                  <span className="text-xs text-muted">{correct?.text.slice(0, 30)}</span>
-                                </Td>
-                                <Td label="Topic" className="text-xs">
-                                  {r.topic ?? "—"}
-                                  {r.difficulty ? <span className="block text-muted">{DIFF[r.difficulty]}</span> : null}
-                                </Td>
-                                <Td className="cell-actions text-right max-md:text-left">
-                                  <form action={deleteQuestion}>
-                                    <input type="hidden" name="id" value={r.id} />
-                                    <button type="submit" className="text-xs text-muted hover:text-danger">
-                                      Delete
-                                    </button>
-                                  </form>
-                                </Td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </Table>
+                      <QuestionBulkTable questions={questions} />
                     )}
                   </Card>
 

@@ -82,6 +82,39 @@ ${JSON_EXAMPLE}
 Rules: give 4 options each. "answer" is the letter of the correct option (A, B, C or D). "difficulty" is easy, medium or hard. "topic" and "explanation" are optional.`;
 }
 
+type IssueGroup = { key: string; label: string; fix: string; items: ParseResult["issues"] };
+
+function groupIssues(issues: ParseResult["issues"]): IssueGroup[] {
+  const groups = new Map<string, IssueGroup>();
+  const add = (key: string, label: string, fix: string, issue: (typeof issues)[number]) => {
+    if (!groups.has(key)) groups.set(key, { key, label, fix, items: [] });
+    groups.get(key)!.items.push(issue);
+  };
+  for (const i of issues) {
+    const m = i.message.toLowerCase();
+    if (m.includes("question text is empty") || m.includes("body is empty")) {
+      add("empty", "Missing question text", "Fill in column A (the question). In Word/text format, write the question before the A., B., C. option lines.", i);
+    } else if (m.includes("answer is missing")) {
+      add("no-ans", "Missing answer", 'Each question needs an answer. In your file add a line "ANSWER: B" after the options. In CSV/Excel fill the Answer column with A, B, C or D.', i);
+    } else if (m.includes("doesn't match") || (m.includes("answer") && (m.includes("letter") || m.includes("use a")))) {
+      add("bad-ans", "Answer letter doesn't match any option", "The letter in your Answer column must be one of your options (A, B, C or D). Check for typos, extra spaces, or a number used instead of a letter.", i);
+    } else if (m.includes("at least 2 options")) {
+      add("few-opts", "Too few options", 'Each question needs at least A and B. Make sure each option is on its own line in the right format: "A. First option", "B. Second option".', i);
+    } else if (m.includes("more than 6 options") || m.includes("maximum is a")) {
+      add("many-opts", "Too many options", "Maximum is 6 options (A–F). Delete the extra options from these rows.", i);
+    } else if (m.includes("without gaps") || m.includes("filled in order")) {
+      add("gap-opts", "Gap in options", "Options must go in order A, B, C… with no letters skipped. If you have A, B, D (no C), rename D to C or add a C option.", i);
+    } else if (m.includes("header") || m.includes("column") || m.includes("template")) {
+      add("header", "Wrong or missing column headers", 'The first row must have: "Question", "Option A", "Option B", "Option C", "Option D", "Answer". Download and use the template.', i);
+    } else if (m.includes("could not be read") || m.includes("not valid json") || m.includes("could not read")) {
+      add("unreadable", "File could not be read", "Make sure you're using the right file type (.xlsx for Excel, .docx for Word). Or copy and paste your questions directly using Copy and paste.", i);
+    } else {
+      add("other", "Other problems", "Check these rows in your file, fix the issue shown next to each one, then upload again.", i);
+    }
+  }
+  return [...groups.values()];
+}
+
 export function ImportWizard({
   subjects,
   years,
@@ -199,6 +232,8 @@ export function ImportWizard({
   const problems = (questions ?? []).map(problemWith);
   const firstProblem = problems.findIndex(Boolean);
 
+  const issueGroups = groupIssues(issues);
+
   function save() {
     if (!questions?.length) return;
     if (firstProblem >= 0) {
@@ -206,24 +241,33 @@ export function ImportWizard({
       return;
     }
     startTransition(async () => {
+      const unreadable = issues.length;
       const res = await commitImport({ subjectId, yearId: yearId || null, assessmentId: assessmentId ?? null, questions });
       if (res && res.ok) {
-        setMessage({ tone: "success", text: res.message ?? "Imported." });
-        setQuestions(null);
-        setIssues([]);
-        setPaste("");
-        setNotes([]);
-        setFileName(null);
         const added = res.data?.added ?? 0;
         const skipped = res.data?.skipped ?? 0;
-        // On to the next step: the test being built, or the question bank for this subject.
-        if (added > 0) {
+        const parts: string[] = [];
+        if (added > 0) parts.push(`${added} question${added === 1 ? "" : "s"} uploaded`);
+        if (skipped > 0) parts.push(`${skipped} duplicate${skipped === 1 ? "" : "s"} already in bank`);
+        if (unreadable > 0) parts.push(`${unreadable} couldn't be read — see below`);
+        const text = parts.length ? parts.join(" · ") + "." : res.message ?? "Imported.";
+        setMessage({ tone: "success", text });
+        setQuestions(null);
+        setNotes([]);
+        setPaste("");
+        setFileName(null);
+        if (added > 0 && unreadable === 0) {
+          setIssues([]);
           router.push(
             assessmentId
               ? `/teach/assessments/${assessmentId}?added=${added}`
               : `/teach/assessments/new?subject=${subjectId}${yearId ? `&year=${yearId}` : ""}`,
           );
-        } else router.refresh();
+        } else if (added === 0) {
+          setIssues([]);
+          router.refresh();
+        }
+        // if added > 0 && unreadable > 0: stay on page so teacher can see which questions failed
       } else {
         setMessage({ tone: "danger", text: res && !res.ok ? res.error : "Import failed." });
       }
@@ -378,7 +422,11 @@ export function ImportWizard({
         <Card id="import-preview" className="scroll-mt-20">
           <CardHeader
             title={`3. Check and edit — ${fileName}`}
-            description={`${questions.length} ready · ${issues.length} need fixing`}
+            description={
+              issues.length > 0
+                ? `${questions.length + issues.length} found in file · ${issues.length} couldn't be read · ${questions.length} ready to import`
+                : `${questions.length} question${questions.length === 1 ? "" : "s"} ready to import`
+            }
             actions={
               <Button onClick={save} disabled={pending || questions.length === 0 || !subjectId}>
                 {pending ? "Importing…" : `Import ${questions.length} question${questions.length === 1 ? "" : "s"}`}
@@ -396,18 +444,26 @@ export function ImportWizard({
               </Alert>
             </div>
           ) : null}
-          {issues.length ? (
-            <div className="border-b border-border p-5">
-              <Alert tone="warning" title="These couldn't be read and were left out — fix them in your file and upload again:">
-                <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                  {issues.slice(0, 50).map((i, idx) => (
-                    <li key={idx}>
-                      <strong>{i.source}:</strong> {i.message}
-                    </li>
-                  ))}
-                </ul>
-                {issues.length > 50 ? <p className="mt-1">…and {issues.length - 50} more.</p> : null}
-              </Alert>
+          {issueGroups.length ? (
+            <div className="space-y-3 border-b border-border p-5">
+              <p className="text-sm font-semibold text-warning">
+                {issues.length} question{issues.length === 1 ? "" : "s"} couldn't be read and were left out — fix them in your file and upload again:
+              </p>
+              {issueGroups.map((g) => (
+                <Alert key={g.key} tone="warning" title={`${g.label} (${g.items.length} question${g.items.length === 1 ? "" : "s"})`}>
+                  <p className="mt-1 text-xs">
+                    <strong>How to fix:</strong> {g.fix}
+                  </p>
+                  <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs">
+                    {g.items.slice(0, 8).map((item, idx) => (
+                      <li key={idx}>
+                        <strong>{item.source}:</strong> {item.message}
+                      </li>
+                    ))}
+                    {g.items.length > 8 ? <li>…and {g.items.length - 8} more like this.</li> : null}
+                  </ul>
+                </Alert>
+              ))}
             </div>
           ) : null}
           {firstProblem >= 0 ? (

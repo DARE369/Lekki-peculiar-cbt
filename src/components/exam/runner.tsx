@@ -8,6 +8,7 @@ import {
   Cloud,
   CloudCheck,
   CloudOff,
+  EyeOff,
   Flag,
   Hand,
   ListChecks,
@@ -53,6 +54,8 @@ export function ExamRunner({
   const [blocked, setBlocked] = useState<string | null>(null);
   const [needsGesture, setNeedsGesture] = useState(() => resumed && !initial.result && !initial.sealed);
   const [fullscreenLost, setFullscreenLost] = useState(false);
+  const [penaltySecsLeft, setPenaltySecsLeft] = useState<number | null>(null);
+  const penaltyActive = penaltySecsLeft !== null && penaltySecsLeft > 0;
 
   const settings = att.assessment.settings;
   const allowBack = settings.allow_back !== false;
@@ -128,11 +131,25 @@ export function ExamRunner({
     return () => clearInterval(t);
   }, [runSync, update]);
 
+  // Penalty countdown: tick down one second per second while active.
+  useEffect(() => {
+    if (!penaltyActive) return;
+    const t = setInterval(() => {
+      setPenaltySecsLeft((s) => (s !== null && s > 1 ? s - 1 : null));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [penaltyActive]);
+
   // Integrity signals: leaving the tab/window, exiting full screen. Copy/paste/right-click blocked.
   useEffect(() => {
     if (att.result) return;
+    const focusPenaltyMins = latest.current.assessment.focus_penalty_minutes ?? 0;
     const onVis = () => {
-      if (document.visibilityState === "hidden") logEvent("focus_lost", { via: "tab" });
+      if (document.visibilityState === "hidden") {
+        logEvent("focus_lost", { via: "tab" });
+      } else if (focusPenaltyMins > 0 && !latest.current.sealed && !latest.current.result) {
+        setPenaltySecsLeft(focusPenaltyMins * 60);
+      }
     };
     const onFs = () => {
       if (!document.fullscreenElement && !latest.current.result) {
@@ -211,7 +228,7 @@ export function ExamRunner({
   const finished = Boolean(att.result);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (reviewOpen || sealed || finished || needsGesture) return;
+      if (reviewOpen || sealed || finished || needsGesture || penaltySecsLeft !== null) return;
       if (e.target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
       const idx = LETTERS.indexOf(e.key.toUpperCase());
       if (idx >= 0 && q && idx < q.options.length) {
@@ -225,7 +242,7 @@ export function ExamRunner({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [q, current, sealed, finished, reviewOpen, needsGesture, choose, goTo]);
+  }, [q, current, sealed, finished, reviewOpen, needsGesture, penaltySecsLeft, choose, goTo]);
 
   // ------------------------------------------------------------------ screens
   if (blocked) {
@@ -300,6 +317,7 @@ export function ExamRunner({
     );
   }
 
+  const penaltyMins = att.assessment.focus_penalty_minutes ?? 0;
   const answer = att.answers[q.id];
   const low = remaining < 5 * 60_000;
   const critical = remaining < 60_000;
@@ -310,6 +328,20 @@ export function ExamRunner({
 
   return (
     <div className="flex min-h-screen flex-col bg-bg select-none">
+      {/* Focus-leave penalty overlay */}
+      {penaltySecsLeft !== null && penaltyMins > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm" aria-live="assertive">
+          <div className="mx-4 w-full max-w-sm rounded-3xl bg-surface p-8 text-center shadow-2xl">
+            <span className="inline-flex size-16 items-center justify-center rounded-3xl bg-warning-soft text-warning">
+              <EyeOff className="size-8" aria-hidden />
+            </span>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight">You left the exam screen</h2>
+            <p className="mt-2 text-muted">Please wait before you can continue.</p>
+            <p className="mt-6 text-6xl font-bold tabular-nums text-warning">{fmt(penaltySecsLeft * 1000)}</p>
+            <p className="mt-3 text-sm text-muted">Your exam timer is still running.</p>
+          </div>
+        </div>
+      )}
       <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">

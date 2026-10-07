@@ -65,6 +65,7 @@ export interface LocalAttempt {
     duration_minutes: number;
     question_count: number;
     settings: ExamSettings;
+    focus_penalty_minutes: number;
   };
   questions: ExamQuestion[];
   deadline: string;

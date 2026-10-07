@@ -219,6 +219,18 @@ export async function grantMakeup(_: ActionResult, fd: FormData): Promise<Action
 // ---------------------------------------------------------------------------
 // Resume attempts
 // ---------------------------------------------------------------------------
+export async function setFocusPenalty(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const windowId = str(fd, "window_id");
+  const minutes = int(fd, "minutes", 0);
+  if (minutes < 0 || minutes > 60) return fail("Enter a value between 0 and 60 minutes.");
+  const supabase = await createClient();
+  const { error } = await supabase.from("exam_windows").update({ focus_penalty_minutes: minutes }).eq("id", windowId);
+  if (error) return fail(error);
+  revalidatePath(`/admin/exams/${windowId}`);
+  return ok(minutes === 0 ? "Focus penalty disabled." : `Focus penalty set to ${minutes} minutes.`);
+}
+
 export async function requestResumes(windowId: string, studentIds: string[]): Promise<ActionResult> {
   if (!studentIds.length || studentIds.length > 50) return fail("Invalid request.");
   await requireAdmin();

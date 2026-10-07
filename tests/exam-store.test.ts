@@ -8,7 +8,7 @@ function attempt(): LocalAttempt {
     token: "t",
     attemptId: "a",
     student: { id: "s", name: "Charles", first_name: "Charles", class_name: "Y4", photo_url: null },
-    assessment: { title: "T", type: "test", subject: "Bio", duration_minutes: 20, question_count: 2, settings: {} },
+    assessment: { title: "T", type: "test", subject: "Bio", duration_minutes: 20, question_count: 2, settings: {}, focus_penalty_minutes: 0 },
     questions: [],
     deadline: new Date(Date.now() + 60_000).toISOString(),
     offsetMs: 0,

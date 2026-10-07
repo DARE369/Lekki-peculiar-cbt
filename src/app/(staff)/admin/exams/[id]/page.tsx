@@ -12,7 +12,7 @@ import { signPhotos } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/server";
 import { formatTime, isoToLagosLocal } from "@/lib/time";
 import type { AssessmentType, WindowState } from "@/lib/types";
-import { deleteWindow, extendTime, grantMakeup, unlockRelogin, voidAttempt, windowAction } from "../../actions";
+import { deleteWindow, extendTime, grantMakeup, setFocusPenalty, unlockRelogin, voidAttempt, windowAction } from "../../actions";
 import { ResumePanel, type ApprovedResumeRequest, type PendingResumeRequest, type ResumableStudent } from "./resume-panel";
 
 export const metadata: Metadata = { title: "Live monitor" };
@@ -394,6 +394,21 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {canStart ? (
+          <Card>
+            <CardHeader
+              title="Focus-leave penalty"
+              description="Students who leave the exam screen face a countdown before continuing. Set 0 to disable."
+            />
+            <ActionForm action={setFocusPenalty} className="flex flex-wrap items-end gap-3 p-5">
+              <input type="hidden" name="window_id" value={id} />
+              <Field label="Penalty (minutes, 0 = off)">
+                <Input name="minutes" type="number" min={0} max={60} defaultValue={w.focus_penalty_minutes ?? 0} className="w-24" />
+              </Field>
+              <SubmitButton variant="secondary">Save</SubmitButton>
+            </ActionForm>
+          </Card>
+        ) : null}
         {can(staff, "exam.extend_time") && state !== "closed" ? (
           <Card>
             <CardHeader title="Extra time for everyone" description="E.g. after a power cut. Adds to every running attempt and the closing time." />

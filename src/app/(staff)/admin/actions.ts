@@ -216,6 +216,50 @@ export async function grantMakeup(_: ActionResult, fd: FormData): Promise<Action
   return ok(`Make-up granted to ${studentIds.length} student${studentIds.length === 1 ? "" : "s"}.`);
 }
 
+// ---------------------------------------------------------------------------
+// Resume attempts
+// ---------------------------------------------------------------------------
+export async function requestResumes(windowId: string, studentIds: string[]): Promise<ActionResult> {
+  if (!studentIds.length || studentIds.length > 50) return fail("Invalid request.");
+  await requireAdmin();
+  const supabase = await createClient();
+  let created = 0;
+  const noTime: string[] = [];
+  const errors: string[] = [];
+  for (const sid of studentIds) {
+    const { error } = await supabase.rpc("request_resume", { p_window: windowId, p_student: sid });
+    if (error) {
+      if (error.message.includes("no_extra_time")) noTime.push(sid);
+      else errors.push(error.message);
+    } else {
+      created++;
+    }
+  }
+  revalidatePath(`/admin/exams/${windowId}`);
+  if (created === 0) {
+    if (noTime.length) return fail("No extra time has been added. Add extra time to the exam before requesting a resume.");
+    return fail(errors[0] ?? "Could not create resume requests.");
+  }
+  const suffix = noTime.length ? ` (${noTime.length} skipped — no extra time).` : ".";
+  return ok(`Resume requested for ${created} student${created === 1 ? "" : "s"}${suffix}`);
+}
+
+export async function approveResumes(windowId: string, requestIds: string[]): Promise<ActionResult> {
+  if (!requestIds.length || requestIds.length > 50) return fail("Invalid request.");
+  await requireAdmin();
+  const supabase = await createClient();
+  let approved = 0;
+  const errors: string[] = [];
+  for (const rid of requestIds) {
+    const { error } = await supabase.rpc("approve_resume", { p_request: rid });
+    if (error) errors.push(error.message);
+    else approved++;
+  }
+  revalidatePath(`/admin/exams/${windowId}`);
+  if (approved === 0) return fail(errors[0] ?? "Could not approve resumes.");
+  return ok(`${approved} student${approved === 1 ? "" : "s"} can now continue their exam.`);
+}
+
 export async function deleteWindow(fd: FormData) {
   await requireAdmin();
   const supabase = await createClient();

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Table, Td, Th, cn } from "@/components/ui";
 import { WINDOW_LABEL, windowState } from "@/lib/labels";
-import { formatDateTime } from "@/lib/data";
 import type { AssessmentType } from "@/lib/types";
 import { bulkWindowAction } from "./actions";
 
@@ -86,6 +85,8 @@ export function ExamBulkTable({
   if (rows.length === 0) return null;
 
   const TYPE_LABEL_SHORT: Record<string, string> = { test: "Test", exam: "Exam", quiz: "Quiz", mock: "Mock" };
+  const fmtDt = (iso: string) =>
+    new Intl.DateTimeFormat("en-NG", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Africa/Lagos" }).format(new Date(iso));
 
   return (
     <>
@@ -203,8 +204,8 @@ export function ExamBulkTable({
                   </span>
                 </Td>
                 <Td label="Class">{classNames[r.class_id] ?? r.class_id}</Td>
-                <Td label="Opens" className="text-sm whitespace-nowrap">{formatDateTime(r.starts_at)}</Td>
-                <Td label="Closes" className="text-sm whitespace-nowrap">{formatDateTime(r.ends_at)}</Td>
+                <Td label="Opens" className="text-sm whitespace-nowrap">{fmtDt(r.starts_at)}</Td>
+                <Td label="Closes" className="text-sm whitespace-nowrap">{fmtDt(r.ends_at)}</Td>
                 <Td label="Status">
                   <Badge tone={tone}>{label}</Badge>
                 </Td>

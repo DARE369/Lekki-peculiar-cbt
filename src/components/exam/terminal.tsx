@@ -762,7 +762,7 @@ function Consent({
         </label>
         <div className="mt-7 flex flex-wrap gap-3">
           <Button size="lg" className="h-14 min-w-52 text-lg" disabled={!agreed || busy} onClick={onStart}>
-            <PlayCircle className="!size-5" /> {busy ? "Starting…" : "Start exam"}
+            <PlayCircle className="!size-5" /> {busy ? "Starting…" : exam.attempt_status === "in_progress" ? "Continue exam" : "Start exam"}
           </Button>
           <Button size="lg" variant="secondary" className="h-14" onClick={onBack}>
             Back

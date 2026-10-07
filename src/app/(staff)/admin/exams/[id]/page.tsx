@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatTime, isoToLagosLocal } from "@/lib/time";
 import type { AssessmentType, WindowState } from "@/lib/types";
 import { deleteWindow, extendTime, grantMakeup, unlockRelogin, voidAttempt, windowAction } from "../../actions";
+import { ResumePanel, type ApprovedResumeRequest, type PendingResumeRequest, type ResumableStudent } from "./resume-panel";
 
 export const metadata: Metadata = { title: "Live monitor" };
 
@@ -53,7 +54,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
   const a = w.assessments as { id: string; title: string; type: AssessmentType; subject_id: string; question_count: number; duration_minutes: number };
   const state: WindowState = windowState(w);
 
-  const [{ data: classStudents }, { data: attemptsData }, { data: exceptions }, { data: terminals }] = await Promise.all([
+  const [{ data: classStudents }, { data: attemptsData }, { data: exceptions }, { data: terminals }, { data: resumeReqs }] = await Promise.all([
     supabase
       .from("students")
       .select("id, admission_no, first_name, last_name, other_names, photo_path")
@@ -63,6 +64,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
     supabase.from("attempts").select("*").eq("window_id", id).order("started_at"),
     supabase.from("exam_exceptions").select("*").eq("window_id", id).order("created_at", { ascending: false }),
     supabase.from("lab_terminals").select("id, name"),
+    supabase.from("resume_requests").select("id, student_id, status, extra_minutes, requested_at, approved_at").eq("window_id", id).order("requested_at", { ascending: false }),
   ]);
   const attempts = (attemptsData ?? []) as Attempt[];
   const liveAttemptIds = attempts.filter((t) => t.status === "in_progress").map((t) => t.id);
@@ -109,6 +111,34 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
     const t = latest.get(st.id);
     return !t || t.status === "voided";
   });
+
+  // Resume panel data
+  type ResumeReqRow = { id: string; student_id: string; status: string; extra_minutes: number; requested_at: string; approved_at: string | null };
+  const resumeReqRows = (resumeReqs ?? []) as ResumeReqRow[];
+  const resumeRequestedIds = new Set(resumeReqRows.filter((r) => r.status !== "rejected").map((r) => r.student_id));
+  const resumableStudents: ResumableStudent[] = canStart
+    ? students
+        .filter((st) => {
+          const t = latest.get(st.id);
+          return t && t.status === "submitted" && !resumeRequestedIds.has(st.id);
+        })
+        .map((st) => {
+          const t = latest.get(st.id)!;
+          return { id: st.id, name: fullName(st), submittedAt: t.submitted_at };
+        })
+    : [];
+  const pendingResumeRequests: PendingResumeRequest[] = resumeReqRows
+    .filter((r) => r.status === "pending")
+    .map((r) => {
+      const st = students.find((x) => x.id === r.student_id);
+      return { id: r.id, studentId: r.student_id, studentName: st ? fullName(st) : "Student", extraMinutes: r.extra_minutes, requestedAt: r.requested_at };
+    });
+  const approvedResumeRequests: ApprovedResumeRequest[] = resumeReqRows
+    .filter((r) => r.status === "approved")
+    .map((r) => {
+      const st = students.find((x) => x.id === r.student_id);
+      return { id: r.id, studentId: r.student_id, studentName: st ? fullName(st) : "Student", extraMinutes: r.extra_minutes, approvedAt: r.approved_at ?? "" };
+    });
 
   return (
     <div className="space-y-6">
@@ -353,6 +383,15 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
           </tbody>
         </Table>
       </Card>
+
+      {(resumableStudents.length > 0 || pendingResumeRequests.length > 0 || approvedResumeRequests.length > 0) && (
+        <ResumePanel
+          windowId={id}
+          resumable={resumableStudents}
+          pending={pendingResumeRequests}
+          approved={approvedResumeRequests}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {can(staff, "exam.extend_time") && state !== "closed" ? (

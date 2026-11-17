@@ -369,6 +369,7 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
       settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(str(fd, "instructions") ? { instructions: str(fd, "instructions") } : {}) },
       class_ids: classIds,
       created_by: staff.id,
+      ...(str(fd, "sequence_label") ? { sequence_label: str(fd, "sequence_label").slice(0, 30) } : {}),
     })
     .select("id")
     .single();
@@ -760,6 +761,7 @@ export async function createBatchAssessments(_: ActionResult, fd: FormData): Pro
         settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(instructions ? { instructions } : {}) },
         class_ids: g.classIds,
         created_by: staff.id,
+        ...(str(fd, "sequence_label") ? { sequence_label: str(fd, "sequence_label").slice(0, 30) } : {}),
       })
       .select("id")
       .single();

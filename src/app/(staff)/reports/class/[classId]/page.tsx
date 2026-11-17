@@ -26,8 +26,9 @@ export default async function ClassBroadsheet(props: PageProps<"/reports/class/[
   const termId = typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
   const subjectId = typeof sp.subject === "string" && sp.subject ? sp.subject : "";
   const type = (typeof sp.type === "string" && sp.type in TYPES ? sp.type : "all") as keyof typeof TYPES;
+  const roundFilter = typeof sp.round === "string" ? sp.round : "";
 
-  const all = await loadClassAttempts(classId, termId);
+  const all = await loadClassAttempts(classId, termId, roundFilter || undefined);
   const filtered = all.filter(
     (a) =>
       a.assessments &&
@@ -58,8 +59,22 @@ export default async function ClassBroadsheet(props: PageProps<"/reports/class/[
   );
   const rows = [...sheet.rows].sort((a, b) => (a.position ?? 9999) - (b.position ?? 9999));
   const photos = await signPhotos([...students.values()].map((x) => x.photo_path));
+  // Also fetch distinct round labels available for this class+term for the filter dropdown.
+  const supabase2 = await createClient();
+  const { data: roundRows } = await supabase2
+    .from("attempts")
+    .select("assessments!inner(sequence_label)")
+    .eq("class_id", classId)
+    .eq("status", "submitted")
+    .eq("assessments.term_id", termId)
+    .not("assessments.sequence_label", "is", null);
+  const availableRounds = [...new Set((roundRows ?? []).flatMap((r) => {
+    const a = r.assessments as unknown as { sequence_label: string | null } | null;
+    return a?.sequence_label ? [a.sequence_label] : [];
+  }))].sort();
+
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ term: termId, type, ...(subjectId ? { subject: subjectId } : {}), ...patch });
+    const p = new URLSearchParams({ term: termId, type, ...(subjectId ? { subject: subjectId } : {}), ...(roundFilter ? { round: roundFilter } : {}), ...patch });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     return `?${p.toString()}`;
   };
@@ -119,6 +134,17 @@ export default async function ClassBroadsheet(props: PageProps<"/reports/class/[
             ))}
           </Select>
         </label>
+        {availableRounds.length > 0 ? (
+          <label className="space-y-1">
+            <span className="block text-xs text-muted">Round</span>
+            <Select name="round" defaultValue={roundFilter} className="w-44">
+              <option value="">All rounds</option>
+              {availableRounds.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
         <button className="h-10 rounded-lg border border-border px-4 text-sm hover:bg-surface-2">Show</button>
       </form>
 

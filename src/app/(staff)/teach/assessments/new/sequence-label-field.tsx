@@ -10,7 +10,7 @@ export function SequenceLabelField({ defaultValue = "" }: { defaultValue?: strin
   return (
     <Field
       label="Sequence / category"
-      hint='Groups this test with others of the same label (e.g. all "Test 1" tests this term). Optional — leave blank if you don't need it.'
+      hint="Groups this test with others of the same label (e.g. all &quot;Test 1&quot; tests this term). Optional — leave blank if you don't need it."
     >
       <input
         name="sequence_label"

@@ -18,18 +18,24 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
   const staff = await requireStaff();
   const s = await getStructure();
   const termId = typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
+  const roundFilter = typeof sp.round === "string" ? sp.round : "";
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const supabase = await createClient();
   await supabase.rpc("finalize_expired_attempts");
 
-  const [{ data: assessments }, classIds] = await Promise.all([
-    supabase
-      .from("assessments")
-      .select("id, title, type, subject_id, year_id, attempts(score, max_score, status)")
-      .eq("term_id", termId)
-      .eq("status", "approved")
-      .order("subject_id"),
+  let assessmentQuery = supabase
+    .from("assessments")
+    .select("id, title, type, subject_id, year_id, sequence_label, attempts(score, max_score, status)")
+    .eq("term_id", termId)
+    .eq("status", "approved")
+    .order("subject_id");
+  if (roundFilter === "__none__") assessmentQuery = assessmentQuery.is("sequence_label", null);
+  else if (roundFilter) assessmentQuery = assessmentQuery.eq("sequence_label", roundFilter);
+
+  const [{ data: assessments }, classIds, { data: roundRows }] = await Promise.all([
+    assessmentQuery,
     visibleClassIds(staff, s),
+    supabase.from("assessments").select("sequence_label").eq("term_id", termId).eq("status", "approved").not("sequence_label", "is", null),
   ]);
   const { data: found } = q
     ? await supabase
@@ -39,7 +45,9 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
         .limit(20)
     : { data: null };
 
-  type A = { id: string; title: string; type: AssessmentType; subject_id: string; year_id: string; attempts: { score: number; max_score: number; status: string }[] };
+  const availableRounds = [...new Set((roundRows ?? []).map((r) => r.sequence_label as string))].sort();
+
+  type A = { id: string; title: string; type: AssessmentType; subject_id: string; year_id: string; sequence_label: string | null; attempts: { score: number; max_score: number; status: string }[] };
   const rows = ((assessments ?? []) as unknown as A[]).map((a) => {
     const pcts = a.attempts.filter((t) => t.status === "submitted").map(percent).filter((v): v is number => v != null);
     return { ...a, summary: summarize(pcts, 50) };
@@ -64,6 +72,18 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
             ))}
           </Select>
         </label>
+        {availableRounds.length > 0 ? (
+          <label className="space-y-1">
+            <span className="block text-xs text-muted">Round</span>
+            <Select name="round" defaultValue={roundFilter} className="w-44">
+              <option value="">All rounds</option>
+              {availableRounds.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+              <option value="__none__">No label</option>
+            </Select>
+          </label>
+        ) : null}
         <label className="space-y-1">
           <span className="block text-xs text-muted">Find a student</span>
           <Input name="q" defaultValue={q} placeholder="Name or admission no." className="w-64" />
@@ -102,7 +122,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
             {classes.map((c) => (
               <Link
                 key={c.id}
-                href={`/reports/class/${c.id}?term=${termId}`}
+                href={`/reports/class/${c.id}?term=${termId}${roundFilter && roundFilter !== "__none__" ? `&round=${encodeURIComponent(roundFilter)}` : ""}`}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:border-brand hover:text-brand"
               >
                 {c.name}
@@ -136,6 +156,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
                       {a.title}
                     </Link>{" "}
                     <Badge>{TYPE_LABEL[a.type]}</Badge>
+                    {a.sequence_label ? <Badge tone="brand">{a.sequence_label}</Badge> : null}
                   </Td>
                   <Td label="Subject">{s.subjectById.get(a.subject_id)?.name}</Td>
                   <Td label="Year">{s.yearById.get(a.year_id)?.name}</Td>

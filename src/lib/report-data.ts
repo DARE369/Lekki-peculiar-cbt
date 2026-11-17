@@ -52,19 +52,21 @@ export async function loadAssessmentReport(id: string, classId?: string) {
 }
 
 export interface BroadsheetAttempt extends AttemptRow {
-  assessments: { id: string; title: string; type: AssessmentType; subject_id: string; term_id: string; settings: Partial<AssessmentSettings> } | null;
+  assessments: { id: string; title: string; type: AssessmentType; subject_id: string; term_id: string; sequence_label: string | null; settings: Partial<AssessmentSettings> } | null;
 }
 
 /** Submitted attempts for one class in one term (only those this user may see — RLS). */
-export async function loadClassAttempts(classId: string, termId: string) {
+export async function loadClassAttempts(classId: string, termId: string, sequenceLabel?: string) {
   const supabase = await createClient();
   await supabase.rpc("finalize_expired_attempts");
-  const { data } = await supabase
+  let q = supabase
     .from("attempts")
-    .select(`${ATTEMPT_COLUMNS}, assessments!inner(id, title, type, subject_id, term_id, settings)`)
+    .select(`${ATTEMPT_COLUMNS}, assessments!inner(id, title, type, subject_id, term_id, sequence_label, settings)`)
     .eq("class_id", classId)
     .eq("status", "submitted")
     .eq("assessments.term_id", termId)
     .order("submitted_at");
+  if (sequenceLabel) q = q.eq("assessments.sequence_label", sequenceLabel);
+  const { data } = await q;
   return (data ?? []) as unknown as BroadsheetAttempt[];
 }

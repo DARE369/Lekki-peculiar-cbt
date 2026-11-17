@@ -8,6 +8,7 @@ import { teachableSubjects } from "@/lib/scope";
 import { createAssessment } from "../../actions";
 import { TestTarget, type ClassOption } from "./test-target";
 import { TypeFields } from "./type-fields";
+import { SequenceLabelField } from "./sequence-label-field";
 import { BatchCreate } from "./batch-create";
 import { createClient } from "@/lib/supabase/server";
 
@@ -124,6 +125,7 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
             <Card className="p-5">
               <ActionForm action={createAssessment} className="space-y-5">
                 <TypeFields />
+                <SequenceLabelField />
                 <TestTarget
                   options={options}
                   defaultClass={defaultClass}

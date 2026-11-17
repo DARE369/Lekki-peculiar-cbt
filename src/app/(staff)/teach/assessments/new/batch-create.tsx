@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, Input, Select, Textarea, cn } from "@/components/ui";
 import { createBatchAssessments } from "../../actions";
+import { SequenceLabelField } from "./sequence-label-field";
 import type { ClassOption } from "./test-target";
 
 export function BatchCreate({ options }: { options: ClassOption[] }) {
@@ -68,6 +69,7 @@ export function BatchCreate({ options }: { options: ClassOption[] }) {
           </div>
         ))}
       </div>
+      <SequenceLabelField />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Type">
           <Select name="type" defaultValue="test">

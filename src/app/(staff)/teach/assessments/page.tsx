@@ -18,14 +18,17 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
   const termId = isAdmin && typeof sp.term === "string" ? sp.term : (s.currentTerm?.id ?? "");
   const scope = sp.scope === "all" ? "all" : "mine";
   const teacherFilter = typeof sp.teacher === "string" ? sp.teacher : "";
+  const roundFilter = typeof sp.round === "string" ? sp.round : "";
   const supabase = await createClient();
 
   let query = supabase
     .from("assessments")
-    .select("id, title, type, status, subject_id, year_id, question_count, duration_minutes, updated_at, created_by, staff:created_by(id, full_name)")
+    .select("id, title, type, status, subject_id, year_id, question_count, duration_minutes, updated_at, created_by, sequence_label, staff:created_by(id, full_name)")
     .order("updated_at", { ascending: false });
 
   if (termId) query = query.eq("term_id", termId);
+  if (roundFilter === "__none__") query = query.is("sequence_label", null);
+  else if (roundFilter) query = query.eq("sequence_label", roundFilter);
 
   if (scope === "mine") {
     query = query.eq("created_by", staff.id);
@@ -58,6 +61,15 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
       existing.classCount += 1;
     }
   }
+
+  // Collect distinct round labels across all assessments in this term (unfiltered) for the dropdown.
+  const { data: roundRows } = await supabase
+    .from("assessments")
+    .select("sequence_label")
+    .eq("term_id", termId)
+    .not("sequence_label", "is", null)
+    .order("sequence_label");
+  const availableRounds = [...new Set((roundRows ?? []).map((r) => r.sequence_label as string))].sort();
 
   type Assessment = (typeof assessments)[number];
   type StaffRef = { id: string; full_name: string } | null;
@@ -133,6 +145,18 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
             </Select>
           </label>
         ) : null}
+        {availableRounds.length > 0 ? (
+          <label className="space-y-1">
+            <span className="block text-xs text-muted">Round</span>
+            <Select name="round" defaultValue={roundFilter} className="w-44">
+              <option value="">All rounds</option>
+              {availableRounds.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+              <option value="__none__">No label</option>
+            </Select>
+          </label>
+        ) : null}
         <button className="h-10 rounded-lg border border-border px-4 text-sm hover:bg-surface-2">Apply</button>
       </form>
 
@@ -183,7 +207,12 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                                       <Link href={`/teach/assessments/${a.id}`} className="text-brand font-medium hover:underline">
                                         {a.title}
                                       </Link>
-                                      <span className="block text-xs text-muted">{TYPE_LABEL[a.type as AssessmentType]}</span>
+                                      <span className="block text-xs text-muted">
+                                        {TYPE_LABEL[a.type as AssessmentType]}
+                                        {(a as unknown as { sequence_label: string | null }).sequence_label ? (
+                                          <> · <span className="font-semibold text-brand">{(a as unknown as { sequence_label: string }).sequence_label}</span></>
+                                        ) : null}
+                                      </span>
                                     </Td>
                                     <Td label="Teacher" className="text-sm">
                                       {teacher?.full_name ?? "—"}
@@ -243,8 +272,11 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
                         </Link>
                         <span className="block text-xs text-muted">
                           {TYPE_LABEL[a.type as AssessmentType]}
+                          {(a as unknown as { sequence_label: string | null }).sequence_label ? (
+                            <> · <span className="font-semibold text-brand">{(a as unknown as { sequence_label: string }).sequence_label}</span></>
+                          ) : null}
                           {scope === "all"
-                            ? ` · ${(a.staff as unknown as { full_name: string } | null)?.full_name}`
+                            ? ` · ${(a.staff as unknown as { full_name: string } | null)?.full_name ?? ""}`
                             : ""}
                         </span>
                       </Td>

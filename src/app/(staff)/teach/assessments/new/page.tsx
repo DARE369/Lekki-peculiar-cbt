@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { FilePlus2 } from "lucide-react";
+import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
+import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Textarea } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getStructure, getRoundConfigs } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
@@ -103,18 +104,18 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
         <>
           {!locked ? (
             <div className="flex gap-2">
-              <a
+              <Link
                 href="/teach/assessments/new"
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${!batch ? "border-brand bg-brand-soft text-brand" : "border-border"}`}
               >
                 Single test
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/teach/assessments/new?batch=1"
                 className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${batch ? "border-brand bg-brand-soft text-brand" : "border-border"}`}
               >
                 Batch create
-              </a>
+              </Link>
             </div>
           ) : null}
           {batch && !locked ? (

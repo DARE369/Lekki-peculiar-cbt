@@ -98,7 +98,7 @@ export function TestTarget({
         <fieldset key={`${classId}:${subjectId}`}>
           <legend className="mb-1 text-sm font-medium">Which classes is it for?</legend>
           {siblings.length > 0 ? (
-            <p className="mb-2 text-xs text-muted">Untick any that won't take this test.</p>
+            <p className="mb-2 text-xs text-muted">Untick any that won&apos;t take this test.</p>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <label className={cn(

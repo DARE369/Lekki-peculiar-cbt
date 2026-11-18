@@ -447,7 +447,7 @@ export function ImportWizard({
           {issueGroups.length ? (
             <div className="space-y-3 border-b border-border p-5">
               <p className="text-sm font-semibold text-warning">
-                {issues.length} question{issues.length === 1 ? "" : "s"} couldn't be read and were left out — fix them in your file and upload again:
+                {issues.length} question{issues.length === 1 ? "" : "s"} couldn&apos;t be read and were left out — fix them in your file and upload again:
               </p>
               {issueGroups.map((g) => (
                 <Alert key={g.key} tone="warning" title={`${g.label} (${g.items.length} question${g.items.length === 1 ? "" : "s"})`}>

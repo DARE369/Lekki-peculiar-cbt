@@ -75,7 +75,7 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
         title="Class assignments"
         description={`Who teaches what in ${s.currentTerm?.session_name ?? "this session"}. Teachers only see students and results for their approved classes.`}
       />
-      {!manage ? <Alert tone="warning">You can view assignments but need the "Approve teaching assignments" permission to change them.</Alert> : null}
+      {!manage ? <Alert tone="warning">You can view assignments but need the &quot;Approve teaching assignments&quot; permission to change them.</Alert> : null}
 
       {/* Pending requests */}
       <Card>

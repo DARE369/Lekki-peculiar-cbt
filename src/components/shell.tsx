@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   BookOpenCheck,
@@ -92,7 +92,7 @@ function NavigationProgress() {
   // Hide once the new page has arrived.
   useEffect(() => {
     lastPathname.current = pathname;
-    setActive(false);
+    startTransition(() => setActive(false));
   }, [pathname]);
 
   return (

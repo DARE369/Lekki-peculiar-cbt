@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Field, Input, Select, Textarea, cn } from "@/components/ui";
+import { Field, Select, Textarea, cn } from "@/components/ui";
 import { createBatchAssessments } from "../../actions";
 import { SequenceLabelField } from "./sequence-label-field";
 import type { ClassOption } from "./test-target";

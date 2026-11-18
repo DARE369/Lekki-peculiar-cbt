@@ -28,7 +28,7 @@ export async function savePassword(_: ActionResult, fd: FormData): Promise<Actio
   if (password !== str(fd, "confirm")) return fail("The two passwords are not the same. Please type them again.");
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
-  if (error && !/same|different from the old/i.test(error.message)) return fail(error.message);
+  if (error) return fail(/same|different from the old/i.test(error.message) ? "That's already your password — please choose a new one." : error.message);
   await createAdminClient().from("staff").update({ needs_password: false }).eq("id", me.id);
   redirect(`/welcome?step=${str(fd, "next")}`);
 }

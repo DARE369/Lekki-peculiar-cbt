@@ -1,18 +1,12 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site";
 import { fail, ok, str, type ActionResult } from "@/lib/actions";
 
 function safeNext(next: string) {
   return next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-}
-
-async function origin() {
-  const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${h.get("x-forwarded-host") ?? h.get("host")}`;
 }
 
 export async function signInWithPassword(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -38,7 +32,7 @@ export async function sendMagicLink(_: ActionResult, fd: FormData): Promise<Acti
     email,
     options: {
       shouldCreateUser: false,
-      emailRedirectTo: `${await origin()}/auth/callback?next=${encodeURIComponent(safeNext(str(fd, "next")))}`,
+      emailRedirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent(safeNext(str(fd, "next")))}`,
     },
   });
   // Don't reveal whether the email exists.
@@ -51,7 +45,7 @@ export async function sendPasswordReset(_: ActionResult, fd: FormData): Promise<
   if (!email) return fail("Enter your school email first.");
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${await origin()}/auth/callback?next=${encodeURIComponent("/account?reset=1")}`,
+    redirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent("/auth/set-password")}`,
   });
   if (error && /rate|limit|seconds|too many/i.test(error.message)) return fail(emailError(error.message));
   return ok("If that email belongs to a staff account, a reset link is on its way.");
@@ -63,7 +57,7 @@ export async function signInWithGoogle(fd: FormData) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${await origin()}/auth/callback?next=${encodeURIComponent(safeNext(str(fd, "next")))}`,
+      redirectTo: `${await siteOrigin()}/auth/callback?next=${encodeURIComponent(safeNext(str(fd, "next")))}`,
       // Show the account chooser, preferring school accounts. The real check is the staff list.
       queryParams: { prompt: "select_account", ...(process.env.GOOGLE_HOSTED_DOMAIN ? { hd: process.env.GOOGLE_HOSTED_DOMAIN } : {}) },
     },

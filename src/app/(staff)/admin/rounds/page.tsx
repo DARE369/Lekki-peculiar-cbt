@@ -49,7 +49,7 @@ export default async function RoundsPage() {
                     <ActionForm action={moveRound} className="inline">
                       <input type="hidden" name="id" value={r.id} />
                       <input type="hidden" name="direction" value="up" />
-                      <SubmitButton size="sm" variant="secondary" title="Move up">↑</SubmitButton>
+                      <SubmitButton size="sm" variant="secondary">↑</SubmitButton>
                     </ActionForm>
                   ) : null}
                   {/* Move down */}
@@ -57,7 +57,7 @@ export default async function RoundsPage() {
                     <ActionForm action={moveRound} className="inline">
                       <input type="hidden" name="id" value={r.id} />
                       <input type="hidden" name="direction" value="down" />
-                      <SubmitButton size="sm" variant="secondary" title="Move down">↓</SubmitButton>
+                      <SubmitButton size="sm" variant="secondary">↓</SubmitButton>
                     </ActionForm>
                   ) : null}
                   {/* Set default */}

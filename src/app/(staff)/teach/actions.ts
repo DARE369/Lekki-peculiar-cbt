@@ -2,14 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
 import { fail, ok, bool, int, str, type ActionResult } from "@/lib/actions";
 import { applySubjectPicks } from "@/lib/assignments";
 import { getStructure } from "@/lib/data";
 import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
-import { dedupeKey, OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
+import { OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
 import { DEFAULT_SETTINGS, TYPE_DEFAULTS, type AssessmentSettings, type AssessmentType } from "@/lib/types";
 import { lagosLocalToIso } from "@/lib/time";
 
@@ -156,16 +155,25 @@ type BulkPreview = {
 };
 
 /** Returns which questions can be safely deleted vs which are blocked by active/upcoming exams. */
+const MAX_DELETE = 1000;
+
+/** Splits long id lists so each request stays a sensible size. */
+function chunks<T>(list: T[], size = 150): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
 export async function previewBulkDelete(ids: string[]): Promise<BulkPreview> {
-  if (!ids.length || ids.length > 200) return { safe: [], blocked: [] };
+  if (!ids.length || ids.length > MAX_DELETE) return { safe: [], blocked: [] };
   const staff = await requireStaff();
   const supabase = await createClient();
 
-  const { data: qs } = await supabase
-    .from("questions")
-    .select("id, body, owner_id")
-    .in("id", ids)
-    .eq("archived", false);
+  const qs: { id: string; body: string; owner_id: string }[] = [];
+  for (const part of chunks(ids)) {
+    const { data } = await supabase.from("questions").select("id, body, owner_id").in("id", part).eq("archived", false);
+    qs.push(...((data ?? []) as typeof qs));
+  }
 
   const owned = (qs ?? []).filter(
     (q) => (q.owner_id as string) === staff.id || staff.isAdmin || staff.isSuperAdmin,
@@ -173,10 +181,11 @@ export async function previewBulkDelete(ids: string[]): Promise<BulkPreview> {
   const ownedIds = owned.map((q) => q.id as string);
   if (!ownedIds.length) return { safe: [], blocked: [] };
 
-  const { data: links } = await supabase
-    .from("assessment_questions")
-    .select("question_id, assessment_id")
-    .in("question_id", ownedIds);
+  const links: { question_id: string; assessment_id: string }[] = [];
+  for (const part of chunks(ownedIds)) {
+    const { data } = await supabase.from("assessment_questions").select("question_id, assessment_id").in("question_id", part);
+    links.push(...((data ?? []) as typeof links));
+  }
 
   const assessmentIds = [...new Set((links ?? []).map((l) => l.assessment_id as string))];
 
@@ -230,7 +239,7 @@ export async function previewBulkDelete(ids: string[]): Promise<BulkPreview> {
 
 /** Permanently delete (or archive) the given questions after re-checking safety. */
 export async function confirmBulkDelete(ids: string[]): Promise<ActionResult> {
-  if (!ids.length || ids.length > 200) return fail("Invalid request.");
+  if (!ids.length || ids.length > MAX_DELETE) return fail("Invalid request.");
   const preview = await previewBulkDelete(ids);
   if (preview.safe.length === 0 && preview.blocked.length === 0) return fail("Questions not found or you don't have permission.");
   if (preview.safe.length === 0)
@@ -238,89 +247,82 @@ export async function confirmBulkDelete(ids: string[]): Promise<ActionResult> {
 
   const supabase = await createClient();
   let deleted = 0;
-  for (const q of preview.safe) {
-    if (q.willHardDelete) {
-      const { error } = await supabase.from("questions").delete().eq("id", q.id);
-      if (!error) deleted++;
-    } else {
-      const { error } = await supabase.from("questions").update({ archived: true }).eq("id", q.id);
-      if (!error) deleted++;
-    }
+  let failed = 0;
+  // Questions never used in a test are removed; ones used in a past test are archived so its results stay intact.
+  const hard = preview.safe.filter((q) => q.willHardDelete).map((q) => q.id);
+  const soft = preview.safe.filter((q) => !q.willHardDelete).map((q) => q.id);
+  for (const part of chunks(hard)) {
+    const { error, count } = await supabase.from("questions").delete({ count: "exact" }).in("id", part);
+    if (error) failed += part.length;
+    else deleted += count ?? part.length;
   }
+  for (const part of chunks(soft)) {
+    const { error, count } = await supabase.from("questions").update({ archived: true }, { count: "exact" }).in("id", part);
+    if (error) failed += part.length;
+    else deleted += count ?? part.length;
+  }
+  if (deleted === 0 && failed > 0) return fail("Those questions couldn't be deleted. Nothing was changed — please try again.");
 
   revalidatePath("/teach/questions");
   const skipped = preview.blocked.length;
   return ok(
-    `${deleted} question${deleted === 1 ? "" : "s"} deleted${skipped ? ` · ${skipped} skipped (linked to active exams)` : ""}.`,
+    `${deleted} question${deleted === 1 ? "" : "s"} deleted${skipped ? ` · ${skipped} kept because they're in a live or upcoming exam` : ""}${failed ? ` · ${failed} couldn't be deleted, try again` : ""}.`,
     { deleted, blocked: skipped },
   );
 }
 
-const importSchema = z.object({
-  subjectId: z.string().uuid(),
-  yearId: z.string().uuid().nullable(),
-  assessmentId: z.string().uuid().nullable(),
-  questions: z.array(parsedQuestionSchema).min(1).max(500),
-});
+// ---------------------------------------------------------------------------
+// Uploads (named sets of questions)
+// ---------------------------------------------------------------------------
+async function uploadQuestionIds(supabase: Awaited<ReturnType<typeof createClient>>, uploadId: string) {
+  const ids: string[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabase.from("questions").select("id").eq("upload_id", uploadId).eq("archived", false).range(from, from + 999);
+    ids.push(...(data ?? []).map((r) => r.id as string));
+    if (!data || data.length < 1000) break;
+  }
+  return ids;
+}
 
-export async function commitImport(input: {
-  subjectId: string;
-  yearId: string | null;
-  assessmentId: string | null;
-  questions: ParsedQuestion[];
-}): Promise<ActionResult> {
-  const staff = await requireStaff();
-  const parsed = importSchema.safeParse(input);
-  if (!parsed.success) return fail("The upload data was not valid. Please try again.");
-  const { subjectId, yearId, assessmentId, questions } = parsed.data;
+export async function renameUpload(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireStaff();
+  const label = str(fd, "label").slice(0, 80);
+  if (!label) return fail("Give the upload a name.");
   const supabase = await createClient();
-
-  const { data: existing } = await supabase.from("questions").select("body").eq("subject_id", subjectId).eq("archived", false);
-  const seen = new Set((existing ?? []).map((e) => dedupeKey(e.body)));
-  const fresh = questions.filter((q) => {
-    const k = dedupeKey(q.body);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  if (fresh.length === 0) return ok("Every question in the file is already in the bank — nothing new to add.");
-
-  const { data: inserted, error } = await supabase
-    .from("questions")
-    .insert(
-      fresh.map((q) => ({
-        subject_id: subjectId,
-        year_id: yearId,
-        owner_id: staff.id,
-        body: q.body,
-        options: q.options,
-        answer: q.answer,
-        topic: q.topic,
-        difficulty: q.difficulty,
-        explanation: q.explanation,
-        image_url: q.image_url,
-      })),
-    )
-    .select("id");
+  const { data, error } = await supabase.from("question_uploads").update({ label }).eq("id", str(fd, "id")).select("id");
   if (error) return fail(error);
+  if (!data?.length) return fail("Only the teacher who uploaded these (or an admin) can rename them.");
+  revalidatePath("/teach/questions");
+  return ok("Renamed.");
+}
 
-  if (assessmentId && inserted?.length) {
-    const { count } = await supabase
-      .from("assessment_questions")
-      .select("question_id", { count: "exact", head: true })
-      .eq("assessment_id", assessmentId);
-    const { error: linkError } = await supabase.from("assessment_questions").insert(
-      inserted.map((q, i) => ({ assessment_id: assessmentId, question_id: q.id, position: (count ?? 0) + i + 1 })),
-    );
-    if (linkError) return fail(linkError);
-    revalidatePath(`/teach/assessments/${assessmentId}`);
+/** What deleting a whole upload would do (some questions may be in a live or upcoming exam). */
+export async function previewUploadDelete(uploadId: string): Promise<BulkPreview> {
+  await requireStaff();
+  const supabase = await createClient();
+  const ids = await uploadQuestionIds(supabase, uploadId);
+  if (!ids.length) return { safe: [], blocked: [] };
+  return previewBulkDelete(ids);
+}
+
+/** Deletes an upload's questions (keeping any in live/upcoming exams); removes the upload once it's empty. */
+export async function confirmUploadDelete(uploadId: string): Promise<ActionResult> {
+  await requireStaff();
+  const supabase = await createClient();
+  const ids = await uploadQuestionIds(supabase, uploadId);
+  let message = "Upload deleted.";
+  if (ids.length) {
+    const res = await confirmBulkDelete(ids);
+    if (!res?.ok) return res;
+    message = res.message ?? message;
+  }
+  const left = await uploadQuestionIds(supabase, uploadId);
+  if (left.length === 0) {
+    const { error } = await supabase.from("question_uploads").delete().eq("id", uploadId);
+    if (error) return fail(error);
   }
   revalidatePath("/teach/questions");
-  const skipped = questions.length - fresh.length;
-  return ok(
-    `Added ${fresh.length} question${fresh.length === 1 ? "" : "s"}${skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : ""}.`,
-    { added: fresh.length, skipped },
-  );
+  return ok(message);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +376,21 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
     .select("id")
     .single();
   if (error) return fail(error);
-  redirect(`/teach/assessments/${data.id}`);
+  // Started from an upload in the bank: put that upload's questions straight into the new test.
+  const fromUpload = str(fd, "from_upload");
+  let added = 0;
+  if (fromUpload) {
+    const ids = await uploadQuestionIds(supabase, fromUpload);
+    const { data: same } = ids.length
+      ? await supabase.from("questions").select("id, created_at").in("id", ids.slice(0, 500)).eq("subject_id", subjectId).order("created_at")
+      : { data: [] };
+    const rows = (same ?? []).map((q, i) => ({ assessment_id: data.id, question_id: q.id as string, position: i + 1 }));
+    if (rows.length) {
+      const { error: linkError } = await supabase.from("assessment_questions").insert(rows);
+      if (!linkError) added = rows.length;
+    }
+  }
+  redirect(`/teach/assessments/${data.id}${added ? `?added=${added}` : ""}`);
 }
 
 export async function updateAssessmentSettings(_: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -439,6 +455,7 @@ export async function addAllBankQuestions(_: ActionResult, fd: FormData): Promis
   const staff = await requireStaff();
   const id = str(fd, "assessment_id");
   const topicFilter = str(fd, "topic");
+  const uploadFilter = str(fd, "upload");
   const supabase = await createClient();
   const { data: a } = await supabase.from("assessments").select("subject_id, year_id, created_by, status, amending").eq("id", id).maybeSingle();
   if (!a) return fail("Test not found.");
@@ -449,7 +466,9 @@ export async function addAllBankQuestions(_: ActionResult, fd: FormData): Promis
   const existingIds = new Set((existing ?? []).map((r) => r.question_id as string));
   let qQuery = supabase.from("questions").select("id").eq("subject_id", a.subject_id).eq("archived", false).or(`year_id.eq.${a.year_id},year_id.is.null`);
   if (topicFilter) qQuery = qQuery.eq("topic", topicFilter);
-  const { data: bank } = await qQuery;
+  if (uploadFilter === "none") qQuery = qQuery.is("upload_id", null);
+  else if (uploadFilter) qQuery = qQuery.eq("upload_id", uploadFilter);
+  const { data: bank } = await qQuery.order("created_at").limit(1000);
   const toAdd = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
   if (toAdd.length === 0) return ok("All matching questions are already in this test.");
   const { count } = await supabase.from("assessment_questions").select("question_id", { count: "exact", head: true }).eq("assessment_id", id);

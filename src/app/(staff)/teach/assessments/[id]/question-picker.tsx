@@ -17,10 +17,16 @@ export function QuestionPicker({
   assessmentId,
   bank,
   needed,
+  topic,
+  upload,
+  uploadLabel,
 }: {
   assessmentId: string;
   bank: BankQ[];
   needed: number;
+  topic?: string;
+  upload?: string;
+  uploadLabel?: string;
 }) {
   return (
     <div className="space-y-0">
@@ -75,8 +81,10 @@ export function QuestionPicker({
         <div className="flex flex-wrap gap-2">
           <ActionForm action={addAllBankQuestions} hideSuccess className="contents">
             <input type="hidden" name="assessment_id" value={assessmentId} />
-            <SubmitButton size="sm" variant="secondary">
-              Add all {bank.length} questions
+            {topic ? <input type="hidden" name="topic" value={topic} /> : null}
+            {upload ? <input type="hidden" name="upload" value={upload} /> : null}
+            <SubmitButton size="sm" variant={uploadLabel ? "primary" : "secondary"}>
+              {uploadLabel ? `Add all ${bank.length} from “${uploadLabel}”` : `Add all ${bank.length} shown`}
             </SubmitButton>
           </ActionForm>
           {needed > 0 ? (

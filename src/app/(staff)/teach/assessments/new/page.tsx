@@ -143,6 +143,7 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
                 </Field>
                 {/* Term is set by the super admin; teachers always use the current term. */}
                 <input type="hidden" name="term_id" value={s.currentTerm?.id ?? ""} />
+                {typeof sp.upload === "string" ? <input type="hidden" name="from_upload" value={sp.upload} /> : null}
                 {!s.currentTerm ? <Alert tone="warning">No current term is set — ask the super admin to set one before creating a test.</Alert> : null}
                 <SubmitButton>Create and add questions</SubmitButton>
               </ActionForm>

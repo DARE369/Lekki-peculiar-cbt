@@ -48,10 +48,11 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
     setSelected(allSelected ? new Set() : new Set(questions.map((q) => q.id)));
   }
 
-  function openPreview() {
-    if (!selected.size) return;
+  function openPreview(ids: string[] = [...selected]) {
+    if (!ids.length) return;
+    if (ids.length === 1 && !selected.has(ids[0])) setSelected(new Set(ids));
     startTransition(async () => {
-      const p = await previewBulkDelete([...selected]);
+      const p = await previewBulkDelete(ids);
       setPreview(p);
     });
   }
@@ -213,10 +214,19 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
                   {r.topic ?? "—"}
                   {r.difficulty ? <span className="block text-muted">{DIFF[r.difficulty]}</span> : null}
                 </Td>
-                <Td className="cell-actions text-right max-md:text-left">
-                  <Link href={`/teach/questions/${r.id}`} className="text-xs text-muted hover:text-brand">
+                <Td className="cell-actions text-right whitespace-nowrap max-md:text-left">
+                  <Link href={`/teach/questions/${r.id}`} className="inline-flex min-h-8 items-center px-2 text-xs font-medium text-brand hover:underline">
                     Edit
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => openPreview([r.id])}
+                    disabled={pending}
+                    className="inline-flex min-h-8 items-center px-2 text-xs font-medium text-muted hover:text-danger"
+                    aria-label="Delete this question"
+                  >
+                    Delete
+                  </button>
                 </Td>
               </tr>
             );
@@ -238,7 +248,7 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
               Clear
             </button>
             <button
-              onClick={openPreview}
+              onClick={() => openPreview()}
               disabled={pending}
               className="rounded-lg bg-danger px-3 py-1.5 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-50"
             >

@@ -64,6 +64,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   const amending = a.status === "approved" && Boolean(a.amending);
   const editable = (a.status === "draft" || a.status === "changes_requested" || amending) && (a.created_by === staff.id || staff.isAdmin);
   const topicFilter = typeof sp.topic === "string" ? sp.topic : "";
+  const uploadFilter = typeof sp.upload === "string" ? sp.upload : "";
 
   let selected: Q[] = [];
   if (a.paper && !amending) {
@@ -80,17 +81,37 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
 
   let bank: Q[] = [];
   let topics: string[] = [];
+  let uploadOptions: { id: string; label: string; count: number }[] = [];
   if (editable) {
-    const { data } = await supabase
-      .from("questions")
-      .select("id, body, options, answer, topic, year_id")
-      .eq("subject_id", a.subject_id)
-      .eq("archived", false)
-      .order("created_at", { ascending: false })
-      .limit(500);
-    const all = (data ?? []).filter((q) => !q.year_id || q.year_id === a.year_id) as (Q & { year_id: string | null })[];
+    type BankRow = Q & { year_id: string | null; upload_id: string | null };
+    const all: BankRow[] = [];
+    for (let from = 0; from < 5000; from += 1000) {
+      const { data } = await supabase
+        .from("questions")
+        .select("id, body, options, answer, topic, year_id, upload_id")
+        .eq("subject_id", a.subject_id)
+        .eq("archived", false)
+        .or(`year_id.eq.${a.year_id},year_id.is.null`)
+        .order("created_at", { ascending: false })
+        .range(from, from + 999);
+      all.push(...((data ?? []) as BankRow[]));
+      if (!data || data.length < 1000) break;
+    }
     topics = [...new Set(all.map((q) => q.topic).filter((t): t is string => Boolean(t)))].sort();
-    bank = all.filter((q) => !selectedIds.has(q.id) && (!topicFilter || q.topic === topicFilter));
+    const available = all.filter((q) => !selectedIds.has(q.id));
+    const perUpload = new Map<string, number>();
+    for (const q of available) if (q.upload_id) perUpload.set(q.upload_id, (perUpload.get(q.upload_id) ?? 0) + 1);
+    if (perUpload.size) {
+      const { data: ups } = await supabase
+        .from("question_uploads")
+        .select("id, label, created_at")
+        .in("id", [...perUpload.keys()])
+        .order("created_at", { ascending: false });
+      uploadOptions = (ups ?? []).map((u) => ({ id: u.id as string, label: u.label as string, count: perUpload.get(u.id as string) ?? 0 }));
+    }
+    bank = available
+      .filter((q) => !topicFilter || q.topic === topicFilter)
+      .filter((q) => !uploadFilter || (uploadFilter === "none" ? !q.upload_id : q.upload_id === uploadFilter));
   }
 
   const [{ data: windows }, classesResult, assignedResult] = await Promise.all([
@@ -311,15 +332,28 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                 title="Add from the question bank"
                 description={`${bank.length} available for ${s.subjectById.get(a.subject_id)?.name}`}
                 actions={
-                  topics.length ? (
-                    <form className="flex gap-2">
-                      <Select name="topic" defaultValue={topicFilter} className="h-8 w-44 text-xs">
-                        <option value="">All topics</option>
-                        {topics.map((t) => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </Select>
-                      <button className="h-8 rounded-lg border border-border px-3 text-xs">Filter</button>
+                  topics.length || uploadOptions.length ? (
+                    <form className="flex flex-wrap gap-2">
+                      {uploadOptions.length ? (
+                        <Select name="upload" defaultValue={uploadFilter} aria-label="From upload" className="h-8 w-52 text-xs">
+                          <option value="">From any upload</option>
+                          {uploadOptions.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.label} ({u.count})
+                            </option>
+                          ))}
+                          <option value="none">Added earlier</option>
+                        </Select>
+                      ) : null}
+                      {topics.length ? (
+                        <Select name="topic" defaultValue={topicFilter} aria-label="Topic" className="h-8 w-40 text-xs">
+                          <option value="">All topics</option>
+                          {topics.map((t) => (
+                            <option key={t}>{t}</option>
+                          ))}
+                        </Select>
+                      ) : null}
+                      <button className="h-8 rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-2">Show</button>
                     </form>
                   ) : null
                 }
@@ -331,6 +365,9 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                   assessmentId={a.id}
                   bank={bank}
                   needed={Math.max(0, a.question_count - selected.length)}
+                  topic={topicFilter}
+                  upload={uploadFilter}
+                  uploadLabel={uploadOptions.find((u) => u.id === uploadFilter)?.label}
                 />
               )}
             </Card>

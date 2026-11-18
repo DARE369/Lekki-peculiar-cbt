@@ -17,18 +17,20 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
   let subjectId = typeof sp.subject === "string" ? sp.subject : undefined;
   let yearId = typeof sp.year === "string" ? sp.year : undefined;
   const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
+  let assessmentTitle: string | undefined;
   if (assessmentId) {
     const supabase = await createClient();
-    const { data } = await supabase.from("assessments").select("subject_id, year_id").eq("id", assessmentId).maybeSingle();
+    const { data } = await supabase.from("assessments").select("subject_id, year_id, title").eq("id", assessmentId).maybeSingle();
     subjectId = data?.subject_id ?? subjectId;
     yearId = data?.year_id ?? yearId;
+    assessmentTitle = data?.title ?? undefined;
   }
   return (
     <div>
       <PageHeader
         icon={Upload}
         title="Upload questions"
-        description="Questions are checked before anything is saved. Duplicates already in the bank are skipped."
+        description="Nothing is saved until you've checked every question. Questions you already have are reused, not lost."
         back={assessmentId ? { href: `/teach/assessments/${assessmentId}`, label: "Back to test" } : { href: "/teach/questions", label: "Question bank" }}
       />
       {subjects.length === 0 ? (
@@ -42,6 +44,7 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
           defaultSubject={subjectId}
           defaultYear={yearId}
           assessmentId={assessmentId}
+          assessmentTitle={assessmentTitle}
         />
       )}
     </div>

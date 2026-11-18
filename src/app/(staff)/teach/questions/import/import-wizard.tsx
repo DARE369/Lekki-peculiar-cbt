@@ -1,13 +1,16 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Braces, Check, ClipboardCheck, ClipboardPaste, Copy, FileSpreadsheet, FileText, Keyboard, Sheet, Sparkles, type LucideIcon } from "lucide-react";
-import { Alert, Button, Card, CardHeader, Field, Input, Select, Textarea, cn } from "@/components/ui";
-import { OPTION_KEYS, looksLikeJson, parseCsv, parseText, type ParseResult, type ParsedQuestion } from "@/lib/import/questions";
+import { Alert, Badge, Button, Card, CardHeader, Field, Input, LinkButton, Select, Textarea, cn } from "@/components/ui";
+import { OPTION_KEYS, looksLikeJson, parseCsv, parseText, questionFingerprint, type IssueCode, type ParseResult, type ParsedQuestion } from "@/lib/import/questions";
 import type { Subject, Year } from "@/lib/types";
-import { commitImport } from "../../actions";
+import { checkImportDuplicates, commitImport, type BankMatch, type ImportReceipt } from "../../import-actions";
+
+type Draft = ParsedQuestion & { forceNew?: boolean };
+type SourceFormat = "paste" | "word" | "excel" | "csv" | "json" | "text";
 
 type Format = "word" | "excel" | "paste" | "csv" | "json";
 
@@ -84,35 +87,42 @@ Rules: give 4 options each. "answer" is the letter of the correct option (A, B, 
 
 type IssueGroup = { key: string; label: string; fix: string; items: ParseResult["issues"] };
 
+const ISSUE_HELP: Record<IssueCode, { label: string; fix: string }> = {
+  EMPTY_QUESTION: { label: "Missing question text", fix: "Write the question before the A., B., C. option lines (or fill the Question column)." },
+  NO_ANSWER: { label: "Missing answer", fix: 'Add a line like "ANSWER: B" under the options, or fill the Answer column with the letter.' },
+  ANSWER_NOT_AN_OPTION: { label: "Answer doesn't match an option", fix: "The answer must be one of the option letters. Check for typos, or a letter with no option (e.g. answer E with only A–D)." },
+  OPTION_GAP: { label: "Gap in the options", fix: "Options must run A, B, C… with no letter skipped." },
+  TOO_FEW_OPTIONS: { label: "Too few options", fix: 'Every question needs at least A and B, each on its own line: "A. First option".' },
+  TOO_MANY_OPTIONS: { label: "Too many options", fix: "The most is six options (A–F)." },
+  SUSPECTED_MERGE: { label: "Two questions ran together", fix: "Add the ANSWER line to the first question and leave an empty line before the next one." },
+  TOO_LONG: { label: "Too long", fix: "Shorten the text. Questions can be up to 5,000 characters and options up to 1,000." },
+  FILE_UNREADABLE: { label: "Couldn't read the file", fix: "Check it's the right kind of file (.docx for Word, .xlsx for Excel), or copy the questions and use Copy and paste." },
+  NO_QUESTION_COLUMN: { label: "Column headings not found", fix: 'The first row needs headings like "Question", "Option A", "Option B", "Answer". Download the template to see them.' },
+  OTHER: { label: "Other problems", fix: "Fix the problem shown next to each one, then upload again." },
+};
+
 function groupIssues(issues: ParseResult["issues"]): IssueGroup[] {
   const groups = new Map<string, IssueGroup>();
-  const add = (key: string, label: string, fix: string, issue: (typeof issues)[number]) => {
-    if (!groups.has(key)) groups.set(key, { key, label, fix, items: [] });
-    groups.get(key)!.items.push(issue);
-  };
   for (const i of issues) {
-    const m = i.message.toLowerCase();
-    if (m.includes("question text is empty") || m.includes("body is empty")) {
-      add("empty", "Missing question text", "Fill in column A (the question). In Word/text format, write the question before the A., B., C. option lines.", i);
-    } else if (m.includes("answer is missing")) {
-      add("no-ans", "Missing answer", 'Each question needs an answer. In your file add a line "ANSWER: B" after the options. In CSV/Excel fill the Answer column with A, B, C or D.', i);
-    } else if (m.includes("doesn't match") || (m.includes("answer") && (m.includes("letter") || m.includes("use a")))) {
-      add("bad-ans", "Answer letter doesn't match any option", "The letter in your Answer column must be one of your options (A, B, C or D). Check for typos, extra spaces, or a number used instead of a letter.", i);
-    } else if (m.includes("at least 2 options")) {
-      add("few-opts", "Too few options", 'Each question needs at least A and B. Make sure each option is on its own line in the right format: "A. First option", "B. Second option".', i);
-    } else if (m.includes("more than 6 options") || m.includes("maximum is a")) {
-      add("many-opts", "Too many options", "Maximum is 6 options (A–F). Delete the extra options from these rows.", i);
-    } else if (m.includes("without gaps") || m.includes("filled in order")) {
-      add("gap-opts", "Gap in options", "Options must go in order A, B, C… with no letters skipped. If you have A, B, D (no C), rename D to C or add a C option.", i);
-    } else if (m.includes("header") || m.includes("column") || m.includes("template")) {
-      add("header", "Wrong or missing column headers", 'The first row must have: "Question", "Option A", "Option B", "Option C", "Option D", "Answer". Download and use the template.', i);
-    } else if (m.includes("could not be read") || m.includes("not valid json") || m.includes("could not read")) {
-      add("unreadable", "File could not be read", "Make sure you're using the right file type (.xlsx for Excel, .docx for Word). Or copy and paste your questions directly using Copy and paste.", i);
-    } else {
-      add("other", "Other problems", "Check these rows in your file, fix the issue shown next to each one, then upload again.", i);
-    }
+    const code = i.code ?? "OTHER";
+    if (!groups.has(code)) groups.set(code, { key: code, ...ISSUE_HELP[code], items: [] });
+    groups.get(code)!.items.push(i);
   }
   return [...groups.values()];
+}
+
+function formatOf(name: string): SourceFormat {
+  const ext = name.toLowerCase().split(".").pop();
+  if (name === "pasted text") return "paste";
+  if (ext === "docx") return "word";
+  if (ext === "xlsx") return "excel";
+  if (ext === "csv") return "csv";
+  if (ext === "json") return "json";
+  return "text";
+}
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function ImportWizard({
@@ -121,20 +131,27 @@ export function ImportWizard({
   defaultSubject,
   defaultYear,
   assessmentId,
+  assessmentTitle,
 }: {
   subjects: Subject[];
   years: Year[];
   defaultSubject?: string;
   defaultYear?: string;
   assessmentId?: string;
+  assessmentTitle?: string;
 }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(defaultSubject ?? subjects[0]?.id ?? "");
   const [yearId, setYearId] = useState(defaultYear ?? "");
+  const [label, setLabel] = useState(assessmentTitle ?? "");
+  const [removed, setRemoved] = useState(0);
+  const [matches, setMatches] = useState<Map<string, BankMatch>>(new Map());
+  const [checking, setChecking] = useState(false);
+  const [receipt, setReceipt] = useState<ImportReceipt | null>(null);
   const [format, setFormat] = useState<Format>("paste");
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<ParsedQuestion[] | null>(null);
+  const [questions, setQuestions] = useState<Draft[] | null>(null);
   const [issues, setIssues] = useState<ParseResult["issues"]>([]);
   const [notes, setNotes] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
@@ -154,7 +171,48 @@ export function ImportWizard({
     setIssues(result.issues);
     setNotes(result.notes ?? []);
     setEditing(null);
+    setRemoved(0);
+    setReceipt(null);
   }
+
+  // Which questions are already in this teacher's bank? Checked before anything is saved, so the
+  // preview can say so on each one instead of quietly leaving them out.
+  const prints = useMemo(() => (questions ?? []).map((q) => questionFingerprint(q)), [questions]);
+  const printKey = prints.join("\n");
+  useEffect(() => {
+    if (!questions?.length || !subjectId) return;
+    let cancelled = false;
+    const list = questions.map((q) => ({ body: q.body, options: q.options.map((o) => ({ text: o.text })) }));
+    // Deferred a tick so typing/pasting stays smooth; results are keyed by fingerprint, so stale ones are harmless.
+    const t = setTimeout(() => {
+      setChecking(true);
+      checkImportDuplicates({ subjectId, yearId: yearId || null, assessmentId: assessmentId ?? null, questions: list })
+        .then((found) => {
+          if (!cancelled) setMatches(new Map(found.map((m) => [prints[m.index], m])));
+        })
+        .catch(() => {
+          if (!cancelled) setMatches(new Map());
+        })
+        .finally(() => {
+          if (!cancelled) setChecking(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- printKey stands for the questions' content
+  }, [printKey, subjectId, yearId, assessmentId]);
+
+  // The same question twice in this file: the second copy is left out unless the teacher keeps it.
+  const repeatOf = useMemo(() => {
+    const first = new Map<string, number>();
+    return prints.map((p, i) => {
+      if (first.has(p)) return first.get(p)!;
+      first.set(p, i);
+      return null;
+    });
+  }, [prints]);
 
   function scrollToPreview() {
     setTimeout(() => document.getElementById("import-preview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
@@ -170,19 +228,19 @@ export function ImportWizard({
         fd.append("file", file);
         const res = await fetch("/api/import/parse", { method: "POST", body: fd });
         const json = await res.json();
-        show(res.ok ? json : { questions: [], issues: [{ source: "file", message: json.error ?? "Upload failed" }] }, file.name);
+        show(res.ok ? json : { questions: [], issues: [{ source: "file", code: "FILE_UNREADABLE", message: json.error ?? "Upload failed" }] }, file.name);
       } else if (ext === "docx") {
         const { docxToText } = await import("@/lib/import/docx");
         show(parseText(await docxToText(await file.arrayBuffer())), file.name);
       } else if (ext === "doc") {
-        show({ questions: [], issues: [{ source: "file", message: "This is an old Word file (.doc). Open it in Word and use File → Save As → Word Document (.docx)." }] }, file.name);
+        show({ questions: [], issues: [{ source: "file", code: "FILE_UNREADABLE", message: "This is an old Word file (.doc). Open it in Word and use File → Save As → Word Document (.docx)." }] }, file.name);
       } else {
         const content = await file.text();
         show(ext === "csv" ? parseCsv(content) : parseText(content), file.name);
       }
       scrollToPreview();
     } catch {
-      show({ questions: [], issues: [{ source: "file", message: "Could not read this file. Check it is the right type and try again." }] }, file.name);
+      show({ questions: [], issues: [{ source: "file", code: "FILE_UNREADABLE", message: "Could not read this file. Check it is the right type and try again." }] }, file.name);
     } finally {
       setBusy(false);
     }
@@ -221,12 +279,16 @@ export function ImportWizard({
     }
   }
 
-  function update(i: number, q: ParsedQuestion) {
+  function update(i: number, q: Draft) {
     setQuestions((qs) => qs!.map((x, j) => (j === i ? q : x)));
   }
   function remove(i: number) {
     setQuestions((qs) => qs!.filter((_, j) => j !== i));
+    setRemoved((n) => n + 1);
     setEditing(null);
+  }
+  function toggleForceNew(i: number) {
+    setQuestions((qs) => qs!.map((x, j) => (j === i ? { ...x, forceNew: !x.forceNew } : x)));
   }
 
   const problems = (questions ?? []).map(problemWith);
@@ -234,53 +296,74 @@ export function ImportWizard({
 
   const issueGroups = groupIssues(issues);
 
+  const reused = (questions ?? []).filter((q, i) => !q.forceNew && (matches.has(prints[i]) || repeatOf[i] !== null)).length;
+  const newCount = (questions?.length ?? 0) - reused;
+
   function save() {
-    if (!questions?.length) return;
+    if (!questions?.length && issues.length === 0) return;
     if (firstProblem >= 0) {
       setEditing(firstProblem);
       return;
     }
+    setMessage(null);
     startTransition(async () => {
-      const unreadable = issues.length;
-      const res = await commitImport({ subjectId, yearId: yearId || null, assessmentId: assessmentId ?? null, questions });
-      if (res && res.ok) {
-        const added = res.data?.added ?? 0;
-        const skipped = res.data?.skipped ?? 0;
-        const parts: string[] = [];
-        if (added > 0) parts.push(`${added} question${added === 1 ? "" : "s"} uploaded`);
-        if (skipped > 0) parts.push(`${skipped} duplicate${skipped === 1 ? "" : "s"} already in bank`);
-        if (unreadable > 0) parts.push(`${unreadable} couldn't be read — see below`);
-        const text = parts.length ? parts.join(" · ") + "." : res.message ?? "Imported.";
-        setMessage({ tone: "success", text });
+      const res = await commitImport({
+        subjectId,
+        yearId: yearId || null,
+        assessmentId: assessmentId ?? null,
+        label: label.trim(),
+        fileName: fileName === "pasted text" ? null : fileName,
+        format: fileName ? formatOf(fileName) : null,
+        questions: questions ?? [],
+        removedCount: removed,
+        unreadable: issues.map((i) => ({ code: i.code, source: i.source.slice(0, 200), message: i.message.slice(0, 600), excerpt: i.excerpt })),
+      });
+      if (res.ok) {
+        setReceipt(res.receipt);
         setQuestions(null);
         setNotes([]);
         setPaste("");
-        setFileName(null);
-        if (added > 0 && unreadable === 0) {
-          setIssues([]);
-          router.push(
-            assessmentId
-              ? `/teach/assessments/${assessmentId}?added=${added}`
-              : `/teach/assessments/new?subject=${subjectId}${yearId ? `&year=${yearId}` : ""}`,
-          );
-        } else if (added === 0) {
-          setIssues([]);
-          router.refresh();
-        }
-        // if added > 0 && unreadable > 0: stay on page so teacher can see which questions failed
+        router.refresh();
+        setTimeout(() => document.getElementById("import-receipt")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
       } else {
-        setMessage({ tone: "danger", text: res && !res.ok ? res.error : "Import failed." });
+        setMessage({ tone: "danger", text: res.ref ? `${res.error} (Reference ${res.ref})` : res.error });
       }
     });
+  }
+
+  if (receipt) {
+    return (
+      <ImportReceiptCard
+        receipt={receipt}
+        issues={issues}
+        assessmentId={assessmentId}
+        bankHref={`/teach/questions?subject=${subjectId}${yearId ? `&year=${yearId}` : ""}&upload=${receipt.uploadId}`}
+        onAgain={() => {
+          setReceipt(null);
+          setIssues([]);
+          setFileName(null);
+          setLabel("");
+        }}
+      />
+    );
   }
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader title="1. Where do these questions belong?" />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid gap-4 p-5 sm:grid-cols-3">
           <Field label="Subject">
-            <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={Boolean(assessmentId)}>
+            <Select
+              value={subjectId}
+              onChange={(e) => {
+                setSubjectId(e.target.value);
+                // a year group from another section would hide the questions from every bank view
+                const next = subjects.find((x) => x.id === e.target.value);
+                if (yearId && years.find((y) => y.id === yearId)?.section_id !== next?.section_id) setYearId("");
+              }}
+              disabled={Boolean(assessmentId)}
+            >
               {subjects.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -289,7 +372,7 @@ export function ImportWizard({
             </Select>
           </Field>
           <Field label="Year group" hint="So the questions show up for the right classes.">
-            <Select value={yearId} onChange={(e) => setYearId(e.target.value)}>
+            <Select value={yearId} onChange={(e) => setYearId(e.target.value)} disabled={Boolean(assessmentId)}>
               <option value="">Any year</option>
               {sectionYears.map((y) => (
                 <option key={y.id} value={y.id}>
@@ -297,6 +380,14 @@ export function ImportWizard({
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field label="Name this upload" hint="You'll find it by this name in the bank and when building tests.">
+            <Input
+              value={label}
+              maxLength={80}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={`e.g. 1st CA — ${subject?.name ?? "Maths"}`}
+            />
           </Field>
         </div>
       </Card>
@@ -423,13 +514,18 @@ export function ImportWizard({
           <CardHeader
             title={`3. Check and edit — ${fileName}`}
             description={
-              issues.length > 0
-                ? `${questions.length + issues.length} found in file · ${issues.length} couldn't be read · ${questions.length} ready to import`
-                : `${questions.length} question${questions.length === 1 ? "" : "s"} ready to import`
+              <>
+                {questions.length + issues.length + removed} found
+                {newCount ? ` · ${newCount} new` : ""}
+                {reused ? ` · ${reused} already in your bank${assessmentId ? " (will be added to this test)" : ""}` : ""}
+                {issues.length ? ` · ${issues.length} couldn't be read` : ""}
+                {removed ? ` · ${removed} removed by you` : ""}
+                {checking ? " · checking your bank…" : ""}
+              </>
             }
             actions={
-              <Button onClick={save} disabled={pending || questions.length === 0 || !subjectId}>
-                {pending ? "Importing…" : `Import ${questions.length} question${questions.length === 1 ? "" : "s"}`}
+              <Button onClick={save} disabled={pending || checking || questions.length === 0 || !subjectId}>
+                {pending ? "Saving…" : `Save ${questions.length} question${questions.length === 1 ? "" : "s"}`}
               </Button>
             }
           />
@@ -447,7 +543,7 @@ export function ImportWizard({
           {issueGroups.length ? (
             <div className="space-y-3 border-b border-border p-5">
               <p className="text-sm font-semibold text-warning">
-                {issues.length} question{issues.length === 1 ? "" : "s"} couldn&apos;t be read and were left out — fix them in your file and upload again:
+                {issues.length} question{issues.length === 1 ? "" : "s"} couldn&apos;t be read. They won&apos;t be saved, and this upload&apos;s record will list them so you can fix them in your file:
               </p>
               {issueGroups.map((g) => (
                 <Alert key={g.key} tone="warning" title={`${g.label} (${g.items.length} question${g.items.length === 1 ? "" : "s"})`}>
@@ -457,7 +553,8 @@ export function ImportWizard({
                   <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs">
                     {g.items.slice(0, 8).map((item, idx) => (
                       <li key={idx}>
-                        <strong>{item.source}:</strong> {item.message}
+                        <strong>{item.source}</strong>
+                        {item.excerpt ? <> (&ldquo;{item.excerpt}&rdquo;)</> : null}: {item.message}
                       </li>
                     ))}
                     {g.items.length > 8 ? <li>…and {g.items.length - 8} more like this.</li> : null}
@@ -492,6 +589,18 @@ export function ImportWizard({
                     </div>
                     {q.topic ? <p className="mt-1 text-xs text-muted">Topic: {q.topic}</p> : null}
                     {problems[i] ? <p className="mt-1 text-xs font-semibold text-danger">{problems[i]}</p> : null}
+                    {q.warnings?.map((w) => (
+                      <p key={w} className="mt-1 text-xs text-warning">
+                        {w}
+                      </p>
+                    ))}
+                    <DuplicateNote
+                      match={matches.get(prints[i])}
+                      repeatOf={repeatOf[i]}
+                      forceNew={Boolean(q.forceNew)}
+                      inTestFlow={Boolean(assessmentId)}
+                      onToggle={() => toggleForceNew(i)}
+                    />
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
                     <button type="button" onClick={() => setEditing(i)} className="text-xs font-semibold text-brand hover:underline" aria-label={`Edit question ${i + 1}`}>
@@ -508,6 +617,102 @@ export function ImportWizard({
         </Card>
       ) : null}
     </div>
+  );
+}
+
+function DuplicateNote({
+  match,
+  repeatOf,
+  forceNew,
+  inTestFlow,
+  onToggle,
+}: {
+  match?: BankMatch;
+  repeatOf: number | null;
+  forceNew: boolean;
+  inTestFlow: boolean;
+  onToggle: () => void;
+}) {
+  if (!match && repeatOf === null) return null;
+  const where = match ? (match.uploadLabel ? `“${match.uploadLabel}”` : "your bank") : null;
+  const what = match
+    ? `Already in ${where}, added ${shortDate(match.createdAt)}. ${
+        forceNew ? "A second copy will be saved." : match.inTest ? "It's already in this test." : inTestFlow ? "The existing one will be added to this test." : "It won't be saved again."
+      }`
+    : `Same as question ${repeatOf! + 1} in this file. ${forceNew ? "Both will be saved." : "Only one copy will be saved."}`;
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <Badge tone={forceNew ? "neutral" : "info"}>{forceNew ? "Saving a copy" : "Duplicate"}</Badge>
+      <span className="text-muted">{what}</span>
+      <button type="button" onClick={onToggle} className="font-semibold text-brand hover:underline">
+        {forceNew ? "Don't save a copy" : "Save a copy anyway"}
+      </button>
+    </p>
+  );
+}
+
+function ImportReceiptCard({
+  receipt: r,
+  issues,
+  assessmentId,
+  bankHref,
+  onAgain,
+}: {
+  receipt: ImportReceipt;
+  issues: ParseResult["issues"];
+  assessmentId?: string;
+  bankHref: string;
+  onAgain: () => void;
+}) {
+  const rows: [string, number, string][] = [
+    ["Saved as new questions", r.imported, "text-success"],
+    [assessmentId ? "Already in your bank, added to this test" : "", r.linked, ""],
+    ["Already in your bank, not saved again", r.alreadyInBank, ""],
+    ["Repeated in this file, saved once", r.duplicateInFile, ""],
+    ["Removed by you before saving", r.removed, ""],
+    ["Couldn't be read", r.unreadable, "text-danger"],
+  ];
+  return (
+    <Card id="import-receipt" className="scroll-mt-20">
+      <CardHeader title={`Saved “${r.label}”`} description={`${r.found} question${r.found === 1 ? "" : "s"} in what you uploaded. Here's what happened to each one.`} />
+      <dl className="divide-y divide-border">
+        {rows
+          .filter(([label, n]) => label && n > 0)
+          .map(([label, n, cls]) => (
+            <div key={label} className="flex items-baseline justify-between gap-4 px-5 py-3 text-sm">
+              <dt>{label}</dt>
+              <dd className={cn("font-semibold tabular-nums", cls)}>{n}</dd>
+            </div>
+          ))}
+        <div className="flex items-baseline justify-between gap-4 bg-surface-2 px-5 py-3 text-sm font-semibold">
+          <dt>Total</dt>
+          <dd className="tabular-nums">{r.found}</dd>
+        </div>
+      </dl>
+      {issues.length ? (
+        <div className="space-y-2 border-t border-border p-5 text-sm">
+          <p className="font-semibold">Fix these in your file, then upload them again:</p>
+          <ul className="list-disc space-y-1 pl-5 text-muted">
+            {issues.slice(0, 20).map((i, k) => (
+              <li key={k}>
+                <span className="font-medium text-text">{i.source}</span>
+                {i.excerpt ? <> (&ldquo;{i.excerpt}&rdquo;)</> : null}: {i.message}
+              </li>
+            ))}
+            {issues.length > 20 ? <li>…and {issues.length - 20} more. They are all listed on this upload in the question bank.</li> : null}
+          </ul>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-2 border-t border-border p-5">
+        {assessmentId ? <LinkButton href={`/teach/assessments/${assessmentId}`}>Back to the test</LinkButton> : null}
+        <LinkButton href={bankHref} variant={assessmentId ? "secondary" : "primary"}>
+          See this upload in the bank
+        </LinkButton>
+        <Button variant="ghost" onClick={onAgain}>
+          Upload more
+        </Button>
+      </div>
+    </Card>
   );
 }
 

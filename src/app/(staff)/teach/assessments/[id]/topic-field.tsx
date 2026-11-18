@@ -71,7 +71,7 @@ export function TopicField({ defaultValue, subjectName, editable }: { defaultVal
               key={s}
               type="button"
               onClick={() => setValue(s)}
-              className={cn("rounded-full border px-2.5 py-1 text-xs hover:border-brand hover:text-brand", "border-border")}
+              className={cn("rounded-md border px-2.5 py-1 text-xs hover:border-brand hover:text-brand", "border-border")}
             >
               {s}
             </button>

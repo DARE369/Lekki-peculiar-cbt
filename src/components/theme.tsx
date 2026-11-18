@@ -45,7 +45,7 @@ export function ThemeSwitcher({ className, compact = false }: { className?: stri
     <div
       role="radiogroup"
       aria-label="Colour theme"
-      className={cn("inline-flex items-center gap-0.5 rounded-full border border-border bg-surface-2 p-0.5", className)}
+      className={cn("inline-flex items-center gap-0.5 rounded-md border border-border bg-surface-2 p-0.5", className)}
     >
       {OPTIONS.map(({ value, label, Icon }) => {
         const active = pref === value;
@@ -61,8 +61,8 @@ export function ThemeSwitcher({ className, compact = false }: { className?: stri
               apply(value);
             }}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-              active ? "bg-surface text-text shadow-soft" : "text-muted hover:text-text",
+              "inline-flex min-h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors",
+              active ? "bg-surface text-text ring-1 ring-border" : "text-muted hover:text-text",
             )}
           >
             <Icon className="size-3.5" aria-hidden />

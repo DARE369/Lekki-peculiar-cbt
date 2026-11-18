@@ -451,7 +451,7 @@ export function ImportWizard({
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" aria-live="polite">
                 {paste.trim() ? (
                   <>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1 rounded-sm bg-accent-soft px-1.5 py-0.5 text-xs font-semibold">
                       {looksLikeJson(paste) ? "Reading as JSON" : "Reading as plain text"}
                     </span>
                     {questions && fileName === "pasted text" ? (

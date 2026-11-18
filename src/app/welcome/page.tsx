@@ -62,10 +62,10 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-surface p-6 shadow-card sm:p-8">
+        <div className="rounded-3xl border border-border bg-surface p-6 sm:p-8">
           {step === "about" ? (
             <>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{index === 0 ? `Welcome, ${firstName}!` : "About you"}</h1>
+              <h1 className="text-2xl font-bold sm:text-3xl">{index === 0 ? `Welcome, ${firstName}!` : "About you"}</h1>
               <p className="mt-2 text-base text-muted">Check your name and give us a phone number.</p>
               <ActionForm action={saveAbout} className="mt-6 space-y-5">
                 <input type="hidden" name="next" value={next} />
@@ -94,7 +94,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
           {step === "password" ? (
             <>
               <p className="text-base font-semibold text-brand">Welcome, {firstName}!</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Choose your password</h1>
+              <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Choose your password</h1>
               <p className="mt-2 text-base text-muted">
                 You&apos;ll use it with your school email (<strong className="text-text">{staff.email}</strong>) to sign in next time. Your
                 browser may offer to save it — press <strong className="text-text">Save</strong>.
@@ -147,7 +147,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
     const home = await homeSectionOf(staffId);
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">What do you teach?</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">What do you teach?</h1>
         <p className="mt-2 text-base text-muted">
           Tap every class you teach under each subject. Your Head of Section will approve them — you can start uploading questions straight
           away.
@@ -184,7 +184,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
     const deadline = deadlines[0] ?? settings.defaultDeadline;
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">How to upload your questions</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">How to upload your questions</h1>
         <p className="mt-2 text-base text-muted">It takes three simple steps. You can come back to this any time from your dashboard.</p>
         {deadline ? <DeadlineBox deadline={deadline} /> : null}
         <ol className="mt-6 space-y-4">
@@ -232,7 +232,7 @@ export default async function WelcomePage(props: PageProps<"/welcome">) {
     const deadline = deadlineForSection(sectionIds[0], s, settings);
     return (
       <>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Your section{names.length > 1 ? "s" : ""}: {names.join(" & ") || "—"}</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">Your section{names.length > 1 ? "s" : ""}: {names.join(" & ") || "—"}</h1>
         <p className="mt-2 text-base text-muted">As Head of Section, you keep things moving for your teachers. Here&apos;s what to do:</p>
         {deadline ? <DeadlineBox deadline={deadline} /> : null}
         <ol className="mt-6 space-y-4">

@@ -378,7 +378,7 @@ export function ReviewBoard({
             key={label}
             className="rounded-2xl border border-border bg-surface px-4 py-3"
           >
-            <p className="text-xs font-semibold tracking-wide text-muted uppercase">
+            <p className="text-xs font-semibold text-muted">
               {label}
             </p>
             <p className={cn("mt-1 text-2xl font-bold tabular-nums", tone)}>
@@ -405,7 +405,7 @@ export function ReviewBoard({
                 setFocus("");
               }}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                "rounded-md border px-3 py-1.5 text-sm font-medium",
                 view === v
                   ? "border-brand bg-brand text-white"
                   : "border-border hover:border-brand",
@@ -737,7 +737,7 @@ function TestRow({
       {pending && canDecide && decision ? (
         <div className="mt-3 space-y-2">
           <label
-            className="block text-xs font-semibold tracking-wide text-muted uppercase"
+            className="block text-xs font-semibold text-muted"
             htmlFor={`d-${t.id}`}
           >
             Your decision

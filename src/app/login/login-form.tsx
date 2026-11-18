@@ -38,7 +38,7 @@ export function LoginForm({ next, google = false }: { next: string; google?: boo
       {google && mode !== "reset" ? (
         <>
           <GoogleButton next={next} />
-          <div className="my-6 flex items-center gap-3 text-xs font-medium tracking-wide text-muted uppercase">
+          <div className="my-6 flex items-center gap-3 text-xs font-medium text-muted">
             <span className="h-px flex-1 bg-border" /> or use your email <span className="h-px flex-1 bg-border" />
           </div>
         </>
@@ -54,7 +54,7 @@ export function LoginForm({ next, google = false }: { next: string; google?: boo
               onClick={() => setMode(value)}
               className={cn(
                 "inline-flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors",
-                mode === value ? "bg-surface text-text shadow-soft" : "text-muted hover:text-text",
+                mode === value ? "bg-surface text-text" : "text-muted hover:text-text",
               )}
             >
               <Icon className="size-4" aria-hidden /> {label}

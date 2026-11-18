@@ -80,7 +80,7 @@ function Chips({ values, current, onPick, format }: { values: number[]; current:
           type="button"
           onClick={() => onPick(String(v))}
           className={cn(
-            "rounded-full border px-3 py-1 text-xs font-semibold",
+            "rounded-md border px-2.5 py-1 text-xs font-medium",
             current === String(v) ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
           )}
         >

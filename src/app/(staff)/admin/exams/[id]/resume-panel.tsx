@@ -156,7 +156,7 @@ export function ResumePanel({
             </p>
             <div className="overflow-hidden rounded-xl border border-border">
               <table className="w-full text-sm">
-                <thead className="bg-surface-2 text-xs font-semibold text-muted uppercase tracking-wide">
+                <thead className="bg-surface-2 text-xs font-semibold text-muted">
                   <tr>
                     <th className="w-8 px-3 py-2">
                       <input
@@ -216,7 +216,7 @@ export function ResumePanel({
             </p>
             <div className="overflow-hidden rounded-xl border border-border">
               <table className="w-full text-sm">
-                <thead className="bg-surface-2 text-xs font-semibold text-muted uppercase tracking-wide">
+                <thead className="bg-surface-2 text-xs font-semibold text-muted">
                   <tr>
                     <th className="w-8 px-3 py-2">
                       <input

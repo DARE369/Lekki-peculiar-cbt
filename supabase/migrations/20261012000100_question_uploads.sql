@@ -41,10 +41,11 @@ create policy question_uploads_read on public.question_uploads for select to aut
     or public.teaches_subject(subject_id)
     or public.admin_of_section(public.section_of_subject(subject_id))
   );
+-- Same rule as adding questions: teachers may upload while their subject is still awaiting approval.
 create policy question_uploads_insert on public.question_uploads for insert to authenticated
   with check (
     owner_id = auth.uid()
-    and (public.teaches_subject(subject_id) or public.admin_of_section(public.section_of_subject(subject_id)))
+    and (public.requested_or_teaches_subject(subject_id) or public.admin_of_section(public.section_of_subject(subject_id)))
   );
 create policy question_uploads_update on public.question_uploads for update to authenticated
   using (owner_id = auth.uid() or public.admin_of_section(public.section_of_subject(subject_id)))

@@ -195,7 +195,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                     key={`${e.subjectId}:${e.yearId}`}
                     href={`/teach/questions?subject=${e.subjectId}&year=${e.yearId}`}
                     className={cn(
-                      "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
+                      "shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
                       isActive ? "border-brand bg-brand-soft text-brand" : "border-border",
                     )}
                   >
@@ -212,7 +212,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
               <nav className="space-y-5">
                 {[...yearGroups.entries()].map(([yearId, group]) => (
                   <div key={yearId}>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.yearName}</p>
+                    <p className="mb-1 text-xs font-semibold text-muted">{group.yearName}</p>
                     <ul className="space-y-0.5">
                       {group.entries.map((e) => {
                         const isActive = active?.subjectId === e.subjectId && active?.yearId === e.yearId;
@@ -243,11 +243,11 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
               {active ? (
                 <>
                   <div>
-                    <h2 className="text-lg font-semibold tracking-tight">
+                    <h2 className="text-lg font-semibold">
                       {active.subjectName} <span className="font-normal text-muted">· {active.yearName}</span>
                     </h2>
                     <p className="text-sm text-muted">
-                      {allCount} question{allCount === 1 ? "" : "s"} in {uploads.length} upload{uploads.length === 1 ? "" : "s"}
+                      {allCount} question{allCount === 1 ? "" : "s"} in {uploads.filter((u) => u.count > 0).length} upload{uploads.filter((u) => u.count > 0).length === 1 ? "" : "s"}
                       {untrackedCount ? `, plus ${untrackedCount} added earlier` : ""}
                     </p>
                   </div>
@@ -255,7 +255,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                   {/* Uploads: every file or paste is its own set */}
                   <nav aria-label="Uploads" className="-mx-1 flex flex-wrap gap-1.5 px-1">
                     <UploadTab href={withParams({ upload: undefined, page: undefined })} active={!uploadParam} label="All questions" count={allCount} />
-                    {uploads.map((u) => (
+                    {uploads.filter((u) => u.count > 0 || u.unreadable_count > 0 || u.id === uploadParam).map((u) => (
                       <UploadTab
                         key={u.id}
                         href={withParams({ upload: u.id, page: undefined })}

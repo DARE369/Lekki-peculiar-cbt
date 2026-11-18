@@ -37,7 +37,7 @@ export default async function SchoolPage() {
                       ) : (
                         <form key={t.id} action={setCurrentTerm}>
                           <input type="hidden" name="term_id" value={t.id} />
-                          <button className="rounded-full border border-border px-3 py-0.5 text-sm hover:border-brand" title="Make this the current term">
+                          <button className="rounded-md border border-border px-2.5 py-0.5 text-sm hover:border-brand" title="Make this the current term">
                             {t.name}
                           </button>
                         </form>

@@ -86,7 +86,7 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
           aria-modal="true"
           aria-labelledby="bulk-del-title"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-float">
             <h2 id="bulk-del-title" className="text-base font-bold">
               Delete {selected.size} question{selected.size === 1 ? "" : "s"}?
             </h2>
@@ -236,7 +236,7 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
 
       {/* Sticky selection bar */}
       {selected.size > 0 && (
-        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-xl">
+        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-float">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium">
               {selected.size} question{selected.size === 1 ? "" : "s"} selected

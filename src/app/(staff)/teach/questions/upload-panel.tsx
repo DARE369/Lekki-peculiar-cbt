@@ -82,9 +82,11 @@ export function UploadPanel({ upload: u, useHref, afterDeleteHref }: { upload: U
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <LinkButton href={useHref} size="sm">
-            Make a test from these
-          </LinkButton>
+          {u.count > 0 ? (
+            <LinkButton href={useHref} size="sm">
+              Make a test from these
+            </LinkButton>
+          ) : null}
           <Button size="sm" variant="ghost" onClick={askDelete} disabled={pending || u.count === 0} className="text-danger hover:text-danger">
             Delete upload
           </Button>

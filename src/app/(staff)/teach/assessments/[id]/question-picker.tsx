@@ -77,7 +77,7 @@ export function QuestionPicker({
 
       {/* Quick alternatives */}
       <div className="border-t border-border bg-surface-2 px-4 py-3 space-y-2 rounded-b-xl">
-        <p className="text-xs font-semibold text-muted uppercase tracking-wide">Quick options</p>
+        <p className="text-xs font-semibold text-muted">Quick options</p>
         <div className="flex flex-wrap gap-2">
           <ActionForm action={addAllBankQuestions} hideSuccess className="contents">
             <input type="hidden" name="assessment_id" value={assessmentId} />

@@ -141,7 +141,7 @@ function saveFailed(err: unknown, context: Record<string, unknown>): CommitResul
   let error = "Your questions couldn't be saved. Nothing was saved, so you can safely try again.";
   if (raw.includes("can no longer be changed")) error = "This test has been submitted or approved, so questions can't be added to it. Nothing was saved.";
   else if (raw.includes("same section")) error = "That year group isn't in the same section as the subject. Choose the year group again. Nothing was saved.";
-  else if (raw.includes("row-level security") || raw.includes("permission")) error = "You can only upload questions for subjects you've been approved to teach. Nothing was saved.";
+  else if (raw.includes("row-level security") || raw.includes("permission")) error = "You can only upload questions for subjects you teach (or have asked to teach). Nothing was saved.";
   else if (raw.includes("different subject")) error = "This test is for a different subject. Nothing was saved.";
   return { ok: false, error, ref };
 }
@@ -199,7 +199,9 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
   }
 
   const found = questions.length + removedCount + unreadable.length;
-  const label = parsed.data.label || `${subject.name} — ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Africa/Lagos" })}`;
+  const label =
+    parsed.data.label ||
+    `${subject.name} — ${new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}`;
   const { data, error } = await supabase.rpc("import_questions", {
     p_upload: {
       subject_id: subjectId,

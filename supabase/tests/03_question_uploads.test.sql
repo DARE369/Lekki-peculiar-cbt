@@ -103,11 +103,23 @@ select pg_temp.expect_error($q$
     '[]'::jsonb)
 $q$, 'same section');
 
--- A teacher who doesn't teach the subject can't upload into it.
+-- A teacher who doesn't teach (or hasn't asked to teach) the subject can't upload into it.
 select pg_temp.act_as((select v from ids where k = 't2'));
 select pg_temp.expect_error($q$
   select public.import_questions(jsonb_build_object('subject_id', (select v from ids where k = 'bio'), 'label', 'x'), '[]'::jsonb)
 $q$, 'row-level security');
+
+-- ...but once they've asked to teach it, they can upload while waiting for approval.
+reset role;
+insert into public.teaching_assignments (teacher_id, subject_id, class_id, session_id, status)
+select (select v from ids where k = 't2'), (select v from ids where k = 'bio'), c.id, (select id from public.academic_sessions where is_current), 'requested'
+from public.classes c where c.name = 'Year 4 Upload';
+select pg_temp.act_as((select v from ids where k = 't2'));
+do $$ declare r jsonb; begin
+  r := public.import_questions(jsonb_build_object('subject_id', (select v from ids where k = 'bio'), 'label', 'waiting'),
+    '[{"body":"Waiting Q","options":[{"key":"A","text":"a"},{"key":"B","text":"b"}],"answer":"A"}]'::jsonb);
+  if (r->>'imported')::int <> 1 then raise exception 'requested teacher could not upload'; end if;
+end $$;
 
 -- Deleting an upload keeps its questions (they just lose the upload tag).
 select pg_temp.act_as((select v from ids where k = 't1'));

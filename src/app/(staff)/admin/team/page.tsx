@@ -46,7 +46,7 @@ export default async function TeamPage(props: PageProps<"/admin/team">) {
               href={key ? `/admin/team?section=${key}` : "/admin/team"}
               role="tab"
               aria-selected={sectionFilter === key}
-              className={cn("rounded-full border px-3.5 py-1.5 text-sm font-semibold", sectionFilter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand")}
+              className={cn("rounded-md border px-3 py-1.5 text-sm font-medium", sectionFilter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand")}
             >
               {label}
             </Link>

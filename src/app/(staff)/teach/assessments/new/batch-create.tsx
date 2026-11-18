@@ -6,8 +6,9 @@ import { Field, Input, Select, Textarea, cn } from "@/components/ui";
 import { createBatchAssessments } from "../../actions";
 import { SequenceLabelField } from "./sequence-label-field";
 import type { ClassOption } from "./test-target";
+import type { RoundConfig } from "@/lib/data";
 
-export function BatchCreate({ options }: { options: ClassOption[] }) {
+export function BatchCreate({ options, rounds }: { options: ClassOption[]; rounds: RoundConfig[] }) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
 
   function toggle(key: string) {
@@ -69,7 +70,7 @@ export function BatchCreate({ options }: { options: ClassOption[] }) {
           </div>
         ))}
       </div>
-      <SequenceLabelField />
+      <SequenceLabelField rounds={rounds} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Type">
           <Select name="type" defaultValue="test">

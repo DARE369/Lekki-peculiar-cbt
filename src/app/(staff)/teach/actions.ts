@@ -402,9 +402,10 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
 
   const supabase = await createClient();
   const topic = str(fd, "topic").trim().slice(0, 200) || null;
+  const sequenceLabel = str(fd, "sequence_label").slice(0, 30) || null;
   const { data, error } = await supabase
     .from("assessments")
-    .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}) })
+    .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}), sequence_label: sequenceLabel })
     .eq("id", id)
     .select("id");
   if (error) return fail(error);

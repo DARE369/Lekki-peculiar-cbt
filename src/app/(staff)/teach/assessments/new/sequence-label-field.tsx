@@ -2,11 +2,59 @@
 
 import { useState } from "react";
 import { Field, cn } from "@/components/ui";
+import type { RoundConfig } from "@/lib/data";
 
-const PRESETS = ["Test 1", "Test 2", "Test 3", "1st CA", "2nd CA", "Mid-Term", "Exam"];
+const FALLBACK_PRESETS = ["Test 1", "Test 2", "Test 3", "1st CA", "2nd CA", "Mid-Term", "Exam"];
 
-export function SequenceLabelField({ defaultValue = "" }: { defaultValue?: string }) {
-  const [value, setValue] = useState(defaultValue);
+interface Props {
+  rounds?: RoundConfig[];
+  defaultValue?: string;
+}
+
+export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
+  const activeRounds = rounds.filter((r) => r.is_active);
+  const presets = activeRounds.length > 0 ? activeRounds.map((r) => r.label) : FALLBACK_PRESETS;
+  const resolved = defaultValue ?? (activeRounds.find((r) => r.is_default)?.label ?? "");
+  const [value, setValue] = useState(resolved);
+
+  if (activeRounds.length > 0) {
+    // Controlled vocabulary: teacher picks from the configured list.
+    return (
+      <Field
+        label="CA round"
+        hint="Groups this test with others in the same CA round. Set by your administrator."
+      >
+        <input type="hidden" name="sequence_label" value={value} />
+        <div className="flex flex-wrap gap-1.5">
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setValue(p)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                value === p ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
+              )}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setValue("")}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-semibold transition",
+              value === "" ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
+            )}
+          >
+            None
+          </button>
+        </div>
+      </Field>
+    );
+  }
+
+  // Fallback: no rounds configured — free text with preset buttons.
   return (
     <Field
       label="Sequence / category"
@@ -21,7 +69,7 @@ export function SequenceLabelField({ defaultValue = "" }: { defaultValue?: strin
         className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm focus:border-brand focus:outline-none"
       />
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {PRESETS.map((p) => (
+        {FALLBACK_PRESETS.map((p) => (
           <button
             key={p}
             type="button"
@@ -34,7 +82,6 @@ export function SequenceLabelField({ defaultValue = "" }: { defaultValue?: strin
             {p}
           </button>
         ))}
-        {value && !PRESETS.includes(value) ? null : null}
         <button
           type="button"
           onClick={() => setValue("")}

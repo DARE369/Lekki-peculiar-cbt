@@ -20,7 +20,7 @@ import {
 import { NextSteps } from "@/components/next-steps";
 import { flagLabel } from "@/lib/readiness";
 import { requireStaff } from "@/lib/auth";
-import { formatDateTime, getStructure } from "@/lib/data";
+import { formatDateTime, getStructure, getRoundConfigs } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
@@ -37,6 +37,7 @@ import {
   withdrawSubmission,
 } from "../../actions";
 import { TopicField } from "./topic-field";
+import { RoundField } from "./round-field";
 import { ScheduleForm } from "./schedule-form";
 import { QuestionPicker } from "./question-picker";
 
@@ -54,7 +55,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   const { id } = await props.params;
   const sp = await props.searchParams;
   const staff = await requireStaff();
-  const s = await getStructure();
+  const [s, rounds] = await Promise.all([getStructure(), getRoundConfigs()]);
   const supabase = await createClient();
   const { data: a } = await supabase.from("assessments").select("*").eq("id", id).maybeSingle();
   if (!a) notFound();
@@ -129,7 +130,9 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         back={{ href: "/teach/assessments", label: "Tests & exams" }}
         title={
           <span className="flex flex-wrap items-center gap-3">
-            {a.title} <Badge tone={statusTone}>{statusLabel}</Badge>
+            {a.title}
+            {a.sequence_label ? <Badge tone="neutral">{a.sequence_label}</Badge> : null}
+            <Badge tone={statusTone}>{statusLabel}</Badge>
           </span>
         }
         description={`${s.subjectById.get(a.subject_id)?.name} · ${(a.class_ids ?? []).length ? (a.class_ids as string[]).map((c) => s.className(c)).join(", ") : s.yearById.get(a.year_id)?.name} · ${TYPE_LABEL[a.type as AssessmentType]} · ${a.question_count} questions · ${a.duration_minutes} minutes`}
@@ -343,6 +346,11 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
                 <Field label="Title">
                   <Input name="title" defaultValue={a.title} required />
                 </Field>
+                <RoundField
+                  rounds={rounds}
+                  defaultValue={(a as { sequence_label?: string | null }).sequence_label ?? null}
+                  disabled={!editable || amending}
+                />
                 <TopicField
                   defaultValue={(a as { topic?: string | null }).topic ?? ""}
                   subjectName={s.subjectById.get(a.subject_id)?.name ?? ""}

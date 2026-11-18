@@ -80,6 +80,21 @@ export function formatDateTime(iso: string | null | undefined) {
   }).format(new Date(iso));
 }
 
+export interface RoundConfig {
+  id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  is_default: boolean;
+}
+
+/** Active CA round configs, ordered by sort_order. Cached per request. */
+export const getRoundConfigs = cache(async (): Promise<RoundConfig[]> => {
+  const supabase = await createClient();
+  const { data } = await supabase.from("ca_round_configs").select("*").order("sort_order");
+  return (data ?? []) as RoundConfig[];
+});
+
 export function pct(score: number | null | undefined, max: number | null | undefined) {
   if (score == null || !max) return null;
   return Math.round((Number(score) / Number(max)) * 1000) / 10;

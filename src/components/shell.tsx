@@ -23,6 +23,7 @@ import {
   X,
   type LucideIcon,
   ListChecks,
+  Tag,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
@@ -44,6 +45,7 @@ const ICONS = {
   audit: ScrollText,
   staff: UserCog,
   sessions: ShieldCheck,
+  rounds: Tag,
 } satisfies Record<string, LucideIcon>;
 export type NavIcon = keyof typeof ICONS;
 

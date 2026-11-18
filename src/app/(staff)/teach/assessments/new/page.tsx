@@ -3,7 +3,7 @@ import { FilePlus2 } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Alert, Card, EmptyState, Field, Input, LinkButton, PageHeader, Select, Textarea } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
+import { getStructure, getRoundConfigs } from "@/lib/data";
 import { teachableSubjects } from "@/lib/scope";
 import { createAssessment } from "../../actions";
 import { TestTarget, type ClassOption } from "./test-target";
@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "New test or exam" };
 export default async function NewAssessment(props: PageProps<"/teach/assessments/new">) {
   const sp = await props.searchParams;
   const staff = await requireStaff();
-  const s = await getStructure();
+  const [s, rounds] = await Promise.all([getStructure(), getRoundConfigs()]);
   const subjects = await teachableSubjects(staff, s);
   // What the teacher can set a test for: their approved subject + class pairs; admins also get every class in their sections.
   const supabase = await createClient();
@@ -119,13 +119,13 @@ export default async function NewAssessment(props: PageProps<"/teach/assessments
           ) : null}
           {batch && !locked ? (
             <Card className="p-5">
-              <BatchCreate options={options} />
+              <BatchCreate options={options} rounds={rounds} />
             </Card>
           ) : (
             <Card className="p-5">
               <ActionForm action={createAssessment} className="space-y-5">
                 <TypeFields />
-                <SequenceLabelField />
+                <SequenceLabelField rounds={rounds} />
                 <TestTarget
                   options={options}
                   defaultClass={defaultClass}

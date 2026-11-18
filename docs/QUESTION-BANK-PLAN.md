@@ -1,6 +1,7 @@
 # Question bank, rounds & upload reliability — plan
 
-> Status: **proposal, not built.** Covers three linked problems:
+> Status: **Phase 1 built** (section 4), plus **uploads as named sets** in the bank (§4b). Phases 2–4 not built.
+> Decisions in §7 were accepted as recommended. Covers three linked problems:
 > 1. Exam questions and test questions end up mixed in one bank.
 > 2. Assessment types (test / exam / mock / practice), "rounds" (1st CA, Exam…) and topics overlap and confuse people.
 > 3. Some uploaded questions go missing with no explanation, and there is no record of why anything fails.
@@ -152,6 +153,16 @@ These don't depend on the restructure and should ship first.
 
 Each fix gets a unit test built from a real problem file (with personal data removed). I'd like **2–3
 files teachers say lost questions** — that's the fastest way to confirm we've covered their actual cases.
+
+### 4b. Uploads as named sets (built)
+
+Every upload is saved as a named set (`question_uploads`), e.g. "1st CA — Year 9 Maths":
+
+- **Bank:** tabs per upload, with "Added earlier" for older questions. Each upload can be renamed, deleted (questions in a live or upcoming exam are kept), or used to make a test. It also shows what couldn't be read and why.
+- **Test builder:** "From upload" filter, plus "Add all N from ‘upload’".
+- **Single questions:** Edit and Delete on every row.
+
+This is also the upload receipt from §5.2: counts plus coded reasons are stored on each upload.
 
 ---
 

@@ -197,7 +197,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
           {a.status === "draft" || a.status === "rejected"
             ? enough
               ? "You have enough questions. Check them below, then press Send for review."
-              : `This test needs ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"}. Upload more, or pick some from your question bank below.`
+              : `This test needs ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"}. Add some from a bank below, or upload more.`
             : null}
         </NextSteps>
       ) : null}

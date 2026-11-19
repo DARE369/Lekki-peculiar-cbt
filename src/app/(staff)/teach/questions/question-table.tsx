@@ -287,7 +287,7 @@ function TopicPicker({ topics, busy, onPick }: { topics: string[]; busy: boolean
   const [t, setT] = useState("");
   return (
     <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3 text-sm">
-      <Input value={t} onChange={(e) => setT(e.target.value)} list="bank-topics" placeholder="Topic, e.g. Fractions" maxLength={200} aria-label="Topic" className="h-8 w-56" />
+      <Input value={t} onChange={(e) => setT(e.target.value)} list="bank-topics" placeholder="Topic, e.g. Fractions" maxLength={200} aria-label="New topic" className="h-8 w-56" />
       <datalist id="bank-topics">
         {topics.map((x) => (
           <option key={x} value={x} />

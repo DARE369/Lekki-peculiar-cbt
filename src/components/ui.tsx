@@ -63,11 +63,14 @@ const fieldBase =
 /** Full width unless the caller sets its own width. */
 const widthOf = (className?: string) => (/(^|\s)(w-|max-w-|flex-1|basis-)/.test(className ?? "") ? "" : "w-full");
 
+/** 36px tall unless the caller sets its own height. */
+const heightOf = (className?: string) => (/(^|\s)h-/.test(className ?? "") ? "" : "h-9");
+
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input className={cn(fieldBase, widthOf(className), "h-9", className)} {...props} />;
+  return <input className={cn(fieldBase, widthOf(className), heightOf(className), className)} {...props} />;
 }
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select className={cn(fieldBase, widthOf(className), "h-9 cursor-pointer pr-8", className)} {...props} />;
+  return <select className={cn(fieldBase, widthOf(className), heightOf(className), "cursor-pointer pr-8", className)} {...props} />;
 }
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea className={cn(fieldBase, widthOf(className), "py-2.5 leading-relaxed", className)} {...props} />;

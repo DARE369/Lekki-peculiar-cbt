@@ -231,13 +231,16 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
   await receipt.getByRole("link", { name: "Back to the test" }).click();
   await expect(page).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+(\?.*)?$/);
   await expect(page.getByText("Questions (6)")).toBeVisible();
-  // A topic is required before submitting.
+  // Settings save by themselves: a topic, and marks "out of 20".
   await page.getByRole("textbox", { name: /^Topic/ }).fill("Living things");
-  await page.getByRole("button", { name: "Save settings" }).click();
-  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await page.getByRole("textbox", { name: "Test is out of" }).fill("20");
+  await expect(page.getByText(/Scores are out of 20/)).toBeVisible();
+  await expect(page.getByText(/^Saved \d/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Test is out of" })).toHaveValue("20");
 
-  page.once("dialog", (d) => d.accept());
-  await page.getByRole("button", { name: "Submit for approval" }).click();
+  // Nothing left to check, so it goes straight off for review.
+  await page.getByRole("button", { name: "Send for review" }).click();
   await expect(page).toHaveURL(/\/dashboard\?done=submitted/);
   await expect(page.getByText("Your test was sent for approval.")).toBeVisible();
   await shot(page, "04-submitted");
@@ -334,7 +337,8 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
   // Network returns → submission uploads → score shown.
   await lab.setOffline(false);
   await expect(pc.getByText("Exam submitted")).toBeVisible({ timeout: 30_000 });
-  await expect(pc.getByText(/3\s*\/ 5/)).toBeVisible();
+  // The test is marked out of 20: 3 of 5 right = 12 / 20 (60%).
+  await expect(pc.getByText(/12\s*\/ 20/)).toBeVisible();
   await shot(pc, "11-result");
   await pc.getByRole("button", { name: /Finish — next student/ }).click();
 
@@ -356,7 +360,7 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
 
   // Monitor reflects it.
   await hod.reload();
-  await expect(hod.getByText("3/5")).toBeVisible();
+  await expect(hod.getByText("12/20")).toBeVisible();
   await expect(hod.getByText("Name login").or(hod.getByText("Not started")).first()).toBeVisible();
   await shot(hod, "13-monitor");
 });
@@ -382,6 +386,7 @@ test("teacher sees organised reports and can fix an answer key", async ({ browse
   await expect(page.getByText(/regraded/)).toBeVisible();
   await page.getByRole("link", { name: "Students" }).click();
   await expect(page.getByRole("cell", { name: "80%" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "16/20" })).toBeVisible();
 
   await page.goto("/reports");
   await page.getByRole("link", { name: "Year 4 Gold" }).click();
@@ -750,8 +755,8 @@ test("a teacher pastes JSON copied from ChatGPT, with smart quotes and chatter, 
   await expect(page.getByText("Already in your bank, not saved again")).toBeVisible();
 
   // The upload is its own set in the bank, with its questions.
-  await page.getByRole("link", { name: "See this upload in the bank" }).click();
-  await expect(page.getByRole("button", { name: "Delete upload" })).toBeVisible();
+  await page.getByRole("link", { name: "See this bank" }).click();
+  await expect(page.getByRole("button", { name: "Delete bank" })).toBeVisible();
   await shot(page, "21-bank-by-upload");
 });
 
@@ -1023,4 +1028,62 @@ test("Heads of Section manage their rounds and can look up problems by reference
   await hod.getByLabel("Find a reference code").fill("ZZZZZZ");
   await hod.getByRole("button", { name: "Find" }).click();
   await expect(hod.getByText("No error with reference ZZZZZZ")).toBeVisible();
+});
+
+test("questions first: select all in a bank, make a test from it, top it up from another bank, and send with the checklist", async ({ browser }) => {
+  const page = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await page.goto("/teach/questions");
+  // A bank made by hand: select every question in the 2nd CA round and move them into a named bank.
+  await page.getByRole("navigation", { name: "Rounds" }).getByRole("link", { name: /2nd CA/ }).click();
+  await expect(page.getByRole("navigation", { name: "Rounds" }).getByRole("link", { name: /2nd CA/ })).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: /^Select all \d+/ }).click();
+  await expect(page.getByText(/^All \d+ selected$/)).toBeVisible();
+  await page.getByRole("button", { name: "Deselect all" }).first().click();
+  await expect(page.getByText("Tick questions to act on them")).toBeVisible();
+  await page.getByRole("button", { name: /^Select all \d+/ }).click();
+  await page.getByRole("button", { name: "Move to bank" }).click();
+  await page.getByPlaceholder("e.g. 2nd CA revision").fill("Second CA set A");
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(page.getByText(/now in “Second CA set A”/)).toBeVisible();
+
+  // Set a topic on them all at once.
+  await page.getByRole("navigation", { name: "Banks" }).getByRole("link", { name: /Second CA set A/ }).click();
+  await expect(page.getByRole("navigation", { name: "Banks" }).getByRole("link", { name: /Second CA set A/ })).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: /^Select all \d+/ }).click();
+  await page.getByRole("button", { name: "Set topic" }).click();
+  await page.getByLabel("New topic").fill("Revision");
+  await page.getByRole("button", { name: "Set topic" }).last().click();
+  await expect(page.getByText(/Topic “Revision” set on/)).toBeVisible();
+
+  // Make a test straight from the bank: it opens with the questions already in.
+  await page.getByRole("button", { name: "Make a test from this bank" }).click();
+  await expect(page.getByText(/^Test made from \d+ question/)).toBeVisible();
+  await shot(page, "24-test-from-bank");
+
+  // Top it up: choose another bank, take 3 at random, then remove one.
+  const before = Number((await page.getByRole("heading", { name: /^Questions \(\d+\)/ }).textContent())!.match(/\d+/)![0]);
+  const add = page.locator("#add-questions");
+  const from = add.getByLabel("Add questions from");
+  await from.selectOption((await from.locator("option", { hasText: "Basic Science Test 1" }).first().getAttribute("value"))!);
+  await add.getByLabel("How many at random").fill("3");
+  await add.getByRole("button", { name: "at random" }).click();
+  await expect(add.getByText(/^Added 3 questions at random/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Questions (${before + 3})` })).toBeVisible();
+  await page.getByRole("button", { name: "Remove", exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: `Questions (${before + 2})` })).toBeVisible();
+
+  // Choosing Exam after typing your own numbers asks first.
+  await page.getByLabel("Questions per student").fill("4");
+  await page.getByLabel("Type").selectOption("exam");
+  await expect(page.getByText(/Use the exam defaults \(40 questions, 60 min\)/)).toBeVisible();
+  await page.getByRole("button", { name: "Keep mine" }).click();
+  await expect(page.getByLabel("Questions per student")).toHaveValue("4");
+  await expect(page.getByText(/^Saved \d/)).toBeVisible();
+
+  // Send: no topic on the test and default marks, so it lists what's worth checking first.
+  await page.getByRole("button", { name: "Send for review" }).click();
+  await expect(page.getByText("Worth checking before you send")).toBeVisible();
+  await expect(page.getByText(/Marks are still the default/)).toBeVisible();
+  await page.getByRole("button", { name: "Send anyway" }).click();
+  await expect(page).toHaveURL(/\/dashboard\?done=submitted/);
 });

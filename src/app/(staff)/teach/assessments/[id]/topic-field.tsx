@@ -53,7 +53,7 @@ export function TopicField({ defaultValue, subjectName, editable }: { defaultVal
   return (
     <Field
       label="Topic"
-      hint={!value.trim() ? "Required before you can submit for approval." : "The unit or area this test covers."}
+      hint={!value.trim() ? "Optional. Shown to the reviewer and in reports." : "The unit or area this test covers."}
     >
       <Input
         id="topic-input"

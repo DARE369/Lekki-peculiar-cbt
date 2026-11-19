@@ -27,7 +27,9 @@ export function AddQuestions({
   defaultBank: string;
 }) {
   const router = useRouter();
-  const [bank, setBank] = useState(defaultBank);
+  const [chosen, setBank] = useState(defaultBank);
+  // If the chosen bank has run out (all its questions are now in the test), move on to the next one.
+  const bank = banks.some((b) => b.id === chosen) ? chosen : (banks[0]?.id ?? "");
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [random, setRandom] = useState(String(Math.max(1, needed || 5)));
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
@@ -85,7 +87,7 @@ export function AddQuestions({
               {other.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.label}
-                  {b.round ? ` — ${b.round}` : ""} ({b.count})
+                  {b.round && !b.label.includes(b.round) ? ` — ${b.round}` : ""} ({b.count})
                 </option>
               ))}
             </optgroup>

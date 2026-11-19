@@ -42,9 +42,11 @@ export async function moveToBank(input: { ids: string[]; bankId?: string; newNam
     const name = (input.newName ?? "").trim().slice(0, 80);
     if (!name) return fail("Give the new bank a name.");
     const s = await getStructure();
+    const rounds = [...new Set((await questionsInfo(supabase, ids)).map((q) => q.round_id))];
     const { data, error } = await supabase
       .from("question_uploads")
       .insert({
+        round_id: rounds.length === 1 ? rounds[0] : null,
         owner_id: staff.id,
         subject_id: input.subjectId,
         year_id: input.yearId,

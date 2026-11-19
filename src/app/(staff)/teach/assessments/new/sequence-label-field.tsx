@@ -21,8 +21,8 @@ export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
     // Controlled vocabulary: teacher picks from the configured list.
     return (
       <Field
-        label="CA round"
-        hint="Groups this test with others in the same CA round. Set by your administrator."
+        label="Round"
+        hint="Which round this test is for (1st CA, Exam…). Set by your administrator."
       >
         <input type="hidden" name="sequence_label" value={value} />
         <div className="flex flex-wrap gap-1.5">

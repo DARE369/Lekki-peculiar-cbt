@@ -82,6 +82,8 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   let earlier: EarlierGroup[] = [];
   let allCount = 0;
   const roundCounts = new Map<string, number>();
+  /** the rounds each bank has questions in, so a bank shows under every round it covers */
+  const bankRounds = new Map<string, Set<string>>();
   let unsortedCount = 0;
 
   if (active) {
@@ -119,7 +121,12 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
       .or(yearFilter)
       .order("created_at", { ascending: false });
     const perBank = new Map<string, number>();
-    for (const r of light) if (r.upload_id) perBank.set(r.upload_id, (perBank.get(r.upload_id) ?? 0) + 1);
+    for (const r of light) {
+      if (!r.upload_id) continue;
+      perBank.set(r.upload_id, (perBank.get(r.upload_id) ?? 0) + 1);
+      if (!bankRounds.has(r.upload_id)) bankRounds.set(r.upload_id, new Set());
+      bankRounds.get(r.upload_id)!.add(r.round_id ?? "none");
+    }
     const testIds = [...new Set((upRows ?? []).map((u) => u.assessment_id).filter((x): x is string => Boolean(x)))];
     const titles = new Map<string, string>();
     if (testIds.length) {
@@ -190,7 +197,11 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
     for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== "") p.set(k, String(v));
     return `/teach/questions?${p.toString()}`;
   };
-  const visibleBanks = banks.filter((b) => (b.count > 0 || b.unreadable_count > 0 || b.id === bankParam) && (!roundParam || roundParam === "none" || b.round_id === roundParam || b.id === bankParam));
+  const visibleBanks = banks.filter(
+    (b) =>
+      (b.count > 0 || b.unreadable_count > 0 || b.id === bankParam) &&
+      (!roundParam || b.id === bankParam || bankRounds.get(b.id)?.has(roundParam) || (!bankRounds.has(b.id) && b.round_id === roundParam)),
+  );
   const visibleEarlier = earlier.filter((g) => !roundParam || (roundParam === "none" ? !g.roundId : g.roundId === roundParam) || `earlier:${g.from}` === bankParam);
 
   // Group sidebar entries by year for display

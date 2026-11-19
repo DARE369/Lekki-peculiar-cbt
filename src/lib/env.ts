@@ -39,3 +39,27 @@ export function isConfigured() {
       (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
   );
 }
+
+const REQUIRED = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "EXAM_TOKEN_SECRET",
+] as const;
+
+/**
+ * Which settings this deployment can see — names and yes/no only, never values. `atBuild` is what was
+ * baked in when the app was built (NEXT_PUBLIC_* values are fixed at build time); `now` is what the
+ * server sees at this moment. A variable that is there now but wasn't at build means: redeploy.
+ */
+export function envReport() {
+  const atBuild: Record<string, boolean> = {
+    NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
+  };
+  const env = process.env as Record<string, string | undefined>;
+  return REQUIRED.map((name) => {
+    const now = Boolean(env[name] ?? (name === "NEXT_PUBLIC_SUPABASE_ANON_KEY" ? env["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"] : undefined));
+    return { name, now, atBuild: name in atBuild ? atBuild[name] : now };
+  });
+}

@@ -378,7 +378,7 @@ export function ReviewBoard({
             key={label}
             className="rounded-2xl border border-border bg-surface px-4 py-3"
           >
-            <p className="text-xs font-semibold tracking-wide text-muted uppercase">
+            <p className="text-xs font-semibold text-muted">
               {label}
             </p>
             <p className={cn("mt-1 text-2xl font-bold tabular-nums", tone)}>
@@ -405,7 +405,7 @@ export function ReviewBoard({
                 setFocus("");
               }}
               className={cn(
-                "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                "rounded-md border px-3 py-1.5 text-sm font-medium",
                 view === v
                   ? "border-brand bg-brand text-white"
                   : "border-border hover:border-brand",
@@ -737,7 +737,7 @@ function TestRow({
       {pending && canDecide && decision ? (
         <div className="mt-3 space-y-2">
           <label
-            className="block text-xs font-semibold tracking-wide text-muted uppercase"
+            className="block text-xs font-semibold text-muted"
             htmlFor={`d-${t.id}`}
           >
             Your decision
@@ -754,10 +754,18 @@ function TestRow({
               Approve
             </option>
             <option value="flag" disabled={t.verdict === "blocked"}>
-              Approve, but flag for a second look
+              Approve, but it needs a fix before the exam
             </option>
-            <option value="send_back">Send back for changes</option>
+            <option value="send_back">Needs changes — send back</option>
           </Select>
+          {decision.action === "approve" ? (
+            <Input
+              value={decision.note}
+              onChange={(e) => onChange({ note: e.target.value })}
+              placeholder="Note for the teacher (optional — no changes needed)"
+              aria-label={`Approval note for ${t.title}`}
+            />
+          ) : null}
           {decision.action === "flag" ? (
             <div className="grid gap-2 sm:grid-cols-[16rem_1fr]">
               <Select

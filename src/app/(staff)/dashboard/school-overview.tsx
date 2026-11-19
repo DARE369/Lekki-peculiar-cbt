@@ -213,7 +213,7 @@ export async function SchoolOverview({ s }: { s: Structure }) {
                 ["Flagged", String(d.flagged)],
               ].map(([k, v]) => (
                 <div key={k}>
-                  <dt className="text-xs font-semibold tracking-wide text-muted uppercase">{k}</dt>
+                  <dt className="text-xs font-semibold text-muted">{k}</dt>
                   <dd className="text-lg font-bold tabular-nums">{v}</dd>
                 </div>
               ))}

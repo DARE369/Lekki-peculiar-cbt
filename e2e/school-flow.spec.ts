@@ -17,7 +17,11 @@ let hodPassword = "";
 let teacherPassword = "";
 let terminalCode = "";
 
-async function signIn(browser: Browser, email: string, password: string) {
+/** Passwords people chose at first sign-in (a temporary password can't be kept). */
+const chosen = new Map<string, string>();
+
+async function signIn(browser: Browser, email: string, givenPassword: string) {
+  const password = chosen.get(email) ?? givenPassword;
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto("/login");
@@ -26,7 +30,7 @@ async function signIn(browser: Browser, email: string, password: string) {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   // Sign-in lands on /dashboard, which sends first-timers on to /welcome: wait until a page has settled.
   await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: /^(Welcome,|Good |Choose your password|About you)/ })).toBeVisible();
-  if (/\/welcome/.test(page.url())) await quickOnboarding(page, password);
+  if (/\/welcome/.test(page.url())) await quickOnboarding(page, password, email);
   await expect(page).toHaveURL(/\/dashboard/);
   return page;
 }
@@ -52,15 +56,17 @@ async function wordFile() {
 }
 
 /** First sign-in setup, taking the shortest path (the full flow has its own test). */
-async function quickOnboarding(page: Page, password: string) {
+async function quickOnboarding(page: Page, password: string, email?: string) {
   for (let i = 0; i < 5; i++) {
     await page.waitForURL(/\/(welcome|dashboard)/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     if (/\/dashboard/.test(page.url())) return;
     const h1 = (await page.getByRole("heading", { level: 1 }).textContent()) ?? "";
     if (h1.includes("Choose your password")) {
-      await page.getByLabel("New password").fill(password);
-      await page.getByLabel("Type it again").fill(password);
+      const next = password.endsWith("-mine") ? password : `${password}-mine`;
+      if (email) chosen.set(email, next);
+      await page.getByLabel("New password").fill(next);
+      await page.getByLabel("Type it again").fill(next);
       await page.getByRole("button", { name: "Save password and continue" }).click();
     } else if (await page.getByLabel("Your phone number").isVisible()) {
       await page.getByLabel("Your phone number").fill("0803 000 0000");
@@ -199,8 +205,9 @@ test("teacher requests a subject and the HOD approves", async ({ browser }) => {
 test("teacher uploads questions, builds a test and submits it", async ({ browser }) => {
   const page = await signIn(browser, "dixon@lps.test", teacherPassword);
   await page.goto("/teach/assessments/new");
-  await page.locator(`select[name="subject_id"]`).selectOption({ label: "Basic Science (Elementary)" });
-  await page.getByLabel("Year group").selectOption({ label: "Year 4" });
+  await page.getByLabel("Class").selectOption({ index: 1 });
+  const science = await page.locator(`select[name="subject_id"] option`, { hasText: "Basic Science" }).first().getAttribute("value");
+  await page.locator(`select[name="subject_id"]`).selectOption(science!);
   await page.getByLabel("Title").fill("Basic Science Test 1");
   await page.getByLabel("Number of questions").fill("5");
   await page.getByLabel("Time allowed (minutes)").fill("20");
@@ -213,11 +220,21 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
   await expect(page.getByRole("button", { name: "Copy and paste" })).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Paste your questions").fill(text);
   await expect(page.getByText("6 questions found")).toBeVisible();
-  await expect(page.getByText("6 ready · 0 need fixing")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save 6 questions" })).toBeVisible();
   await shot(page, "03-import-preview");
-  await page.getByRole("button", { name: "Import 6 questions" }).click();
+  await page.getByRole("button", { name: "Save 6 questions" }).click();
+  // The upload ends on a receipt that accounts for every question.
+  const receipt = page.locator("#import-receipt");
+  await expect(receipt.getByText("Saved as new questions")).toBeVisible();
+  await expect(receipt.getByText("Total")).toBeVisible();
+  await shot(page, "03b-import-receipt");
+  await receipt.getByRole("link", { name: "Back to the test" }).click();
   await expect(page).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+(\?.*)?$/);
   await expect(page.getByText("Questions (6)")).toBeVisible();
+  // A topic is required before submitting.
+  await page.getByRole("textbox", { name: /^Topic/ }).fill("Living things");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
 
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Submit for approval" }).click();
@@ -236,6 +253,9 @@ test("HOD approves, schedules and creates a lab registration code", async ({ bro
   const later = new Date(now.getTime() + 3 * 3600_000);
   await page.getByLabel("Opens (Lagos time)").fill(now.toISOString().slice(0, 16));
   await page.getByLabel("Closes (no new starts after this)").fill(later.toISOString().slice(0, 16));
+  // Exams start by themselves by default; this one is set to wait for an administrator.
+  await expect(page.getByLabel("Start automatically at the opening time")).toBeChecked();
+  await page.getByLabel("Start automatically at the opening time").uncheck();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Approve & schedule" }).click();
   await expect(page).toHaveURL(/\/admin\/exams/);
@@ -539,8 +559,8 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await expect(ada.getByLabel("Year group")).toHaveValue(/.+/);
   const text = Array.from({ length: 3 }, (_, i) => `Ada question ${i + 1}?\nA. one\nB. two\nC. three\nD. four\nANSWER: A`).join("\n\n");
   await ada.getByLabel("Paste your questions").fill(text);
-  await ada.getByRole("button", { name: "Import 3 questions" }).click();
-  await expect(ada.getByText("Added 3 questions.")).toBeVisible();
+  await ada.getByRole("button", { name: "Save 3 questions" }).click();
+  await expect(ada.getByText("Saved as new questions")).toBeVisible();
   await ada.goto("/dashboard");
   await expect(checklist.locator("li", { hasText: "Year 4" }).getByText("questions uploaded")).toContainText("3");
   await expect(ada.getByText(/\/ 40|of 40/)).toHaveCount(0);
@@ -580,13 +600,14 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
   await ada.goto("/dashboard");
   await expect(ada.getByText("Waiting for approval — you can still upload")).toHaveCount(0);
 
-  // New test: only her subjects, only her year groups, and her classes pre-ticked.
+  // New test: class first, then only the subjects she teaches in that class.
   await ada.goto("/teach/assessments/new");
+  const classSelect = ada.getByRole("combobox", { name: /^Class/ });
+  await expect(classSelect.locator("option:not([disabled])")).toHaveText([/Year 4 Gold/, /Year 5/]);
+  await classSelect.selectOption({ label: (await classSelect.locator("option", { hasText: "Year 4 Gold" }).textContent())! });
   const subjectSelect = ada.locator(`select[name="subject_id"]`);
-  await expect(subjectSelect.locator("option:not([disabled])")).toHaveText(["English Language (Elementary)", "Mathematics (Elementary)"]);
-  await subjectSelect.selectOption({ label: "Mathematics (Elementary)" });
-  await expect(ada.locator(`select[name="year_id"]`).locator("option:not([disabled])")).toHaveText(["Year 4", "Year 5"]);
-  await ada.locator(`select[name="year_id"]`).selectOption({ label: "Year 4" });
+  await expect(subjectSelect.locator("option:not([disabled])")).toHaveText([/Mathematics/]); // English is for Year 5 only
+  await subjectSelect.selectOption((await subjectSelect.locator("option", { hasText: "Mathematics" }).getAttribute("value"))!);
   await expect(ada.getByLabel("Year 4 Gold")).toBeChecked();
   await ada.getByRole("button", { name: /^Exam mock/ }).click();
   await expect(ada.getByLabel("Number of questions")).toHaveValue("40");
@@ -603,14 +624,16 @@ test("a new teacher is guided through setup, uploads while waiting, and is email
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     buffer: await wordFile(),
   });
-  await expect(ada.getByText("2 ready · 0 need fixing")).toBeVisible();
+  await expect(ada.getByRole("button", { name: "Save 2 questions" })).toBeVisible();
   await expect(ada.getByText("A. Kano")).toBeVisible(); // automatic lettering came through
   await ada.getByRole("button", { name: "Edit question 1" }).click();
   await ada.getByLabel("Correct answer").selectOption("C");
   await ada.getByRole("button", { name: "Done" }).click();
   await expect(ada.getByText("C. 6 ✓")).toBeVisible();
   await ada.getByRole("button", { name: "Remove question 2" }).click();
-  await ada.getByRole("button", { name: "Import 1 question" }).click();
+  await ada.getByRole("button", { name: "Save 1 question" }).click();
+  await expect(ada.getByText("Removed by you before saving")).toBeVisible();
+  await ada.getByRole("link", { name: "Back to the test" }).click();
   await expect(ada).toHaveURL(/\/teach\/assessments\/[0-9a-f-]+(\?.*)?$/);
   await expect(ada.getByText("Questions (1)")).toBeVisible();
   // ...and it can still be edited after saving.
@@ -665,6 +688,8 @@ test("forgot password sends a branded email whose link opens the new-password fo
   await page.goto("/login");
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("School email").fill(OWNER.email);
+  // The previous test emailed this person a moment ago; the auth server allows one email per second.
+  await page.waitForTimeout(1500);
   const sentAfter = Date.now();
   await page.getByRole("button", { name: "Email me a reset link" }).click();
   await expect(page.getByText(/a reset link is on its way/)).toBeVisible();
@@ -684,8 +709,9 @@ test("forgot password sends a branded email whose link opens the new-password fo
 
   const link = mail.match(/href="([^"]+)"[^>]*>Set my password/)![1].replace(/&amp;/g, "&");
   await page.goto(link);
-  await expect(page).toHaveURL(/\/account\?reset=1$/);
-  await expect(page.getByText("Choose a new password")).toBeVisible();
+  // The reset link opens its own page (not the account page) to choose the new password.
+  await expect(page).toHaveURL(/\/auth\/set-password$/);
+  await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
   await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
 });
 
@@ -713,8 +739,20 @@ test("a teacher pastes JSON copied from ChatGPT, with smart quotes and chatter, 
   await page.getByRole("button", { name: "Copy instructions for the AI" }).click();
   await expect(page.getByRole("button", { name: /Copied/ })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reply with ONLY a JSON list");
-  await page.getByRole("button", { name: "Import 2 questions" }).click();
-  await expect(page.getByText("Added 2 questions.")).toBeVisible();
+  await page.getByRole("button", { name: "Save 2 questions" }).click();
+  await expect(page.getByText("Saved as new questions")).toBeVisible();
+
+  // Uploading the same questions again: they are recognised before saving, not silently dropped.
+  await page.getByRole("button", { name: "Upload more" }).click();
+  await page.getByLabel("Paste your questions").fill(messy);
+  await expect(page.getByText(/Already in .*added/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Save 2 questions" }).click();
+  await expect(page.getByText("Already in your bank, not saved again")).toBeVisible();
+
+  // The upload is its own set in the bank, with its questions.
+  await page.getByRole("link", { name: "See this upload in the bank" }).click();
+  await expect(page.getByRole("button", { name: "Delete upload" })).toBeVisible();
+  await shot(page, "21-bank-by-upload");
 });
 
 test("each teacher belongs to one section, and Heads of Section only see their own section's staff", async ({ browser }) => {
@@ -905,7 +943,8 @@ test("bulk approval: review by class, approve, flag and send back; teacher corre
   const card = teacher.locator("li", { has: teacher.getByText("Bulk Warn", { exact: true }) });
   await expect(card.getByText("Typing or formatting mistakes")).toBeVisible();
   await expect(card.getByText("Fix the typo in question 3")).toBeVisible();
-  await card.getByRole("button", { name: "Correct this test" }).click();
+  // "Needs changes" already opened it for fixing: one click to the test, edit, send.
+  await card.getByRole("link", { name: "Fix this test" }).click();
   await expect(teacher.getByText("You are correcting this test")).toBeVisible();
   await expect(teacher.getByText("Questions (12)")).toBeVisible();
   await teacher.getByRole("button", { name: /^Remove/ }).first().click();
@@ -937,4 +976,51 @@ test("bulk approval: review by class, approve, flag and send back; teacher corre
   await expect(owner.getByText("Awaiting approval", { exact: true }).first()).toBeVisible();
   await expect(owner.getByText("Year 4 Gold").first()).toBeVisible();
   await shot(owner, "21-school-dashboard");
+});
+
+test("rounds: a teacher starts a paper from the term grid, uploads into it, and finds it under its round", async ({ browser }) => {
+  const page = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await page.goto("/teach/papers");
+  await expect(page.getByRole("heading", { name: "This term's papers" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "2nd CA" })).toBeVisible();
+  const row = page.getByRole("row", { name: /Basic Science/ });
+  await row.getByRole("button", { name: "Start paper" }).first().click();
+  await expect(page.getByRole("heading", { name: /Basic Science — 2nd CA/ })).toBeVisible();
+  await shot(page, "22-paper-from-grid");
+
+  await page.getByRole("link", { name: "Upload into this test" }).click();
+  // The round comes from the paper and can't be changed here.
+  await expect(page.getByLabel("Which round are these for?")).toBeDisabled();
+  const text = ["Second CA question one?\nA. yes\nB. no\nANSWER: A", "Second CA question two?\nA. yes\nB. no\nANSWER: B"].join("\n\n");
+  await page.getByLabel("Paste your questions").fill(text);
+  await page.getByRole("button", { name: "Save 2 questions" }).click();
+  await page.locator("#import-receipt").getByRole("link", { name: "Back to the test" }).click();
+  await expect(page.getByText("Questions (2)")).toBeVisible();
+
+  // In the bank they sit under 2nd CA, apart from the 1st CA questions.
+  await page.goto("/teach/questions");
+  await page.getByRole("navigation", { name: "Rounds" }).getByRole("link", { name: /2nd CA/ }).click();
+  await expect(page.getByText("Second CA question one?")).toBeVisible();
+  await expect(page.getByText("Question number 1?")).toHaveCount(0);
+  await shot(page, "23-bank-by-round");
+
+  // Back on the grid, the cell shows the paper's progress.
+  await page.goto("/teach/papers");
+  await expect(page.getByRole("row", { name: /Basic Science/ }).getByText(/2 of \d+ questions/)).toBeVisible();
+});
+
+test("Heads of Section manage their rounds and can look up problems by reference", async ({ browser }) => {
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/rounds");
+  await expect(hod.getByRole("heading", { name: "Rounds", level: 1 })).toBeVisible();
+  await hod.getByLabel("Name", { exact: true }).fill("Elementary quiz");
+  await hod.getByRole("button", { name: "Add round" }).click();
+  await expect(hod.getByText('"Elementary quiz" added.')).toBeVisible();
+  await expect(hod.getByText(/Elementary quiz/).first()).toBeVisible();
+
+  await hod.goto("/admin/problems");
+  await expect(hod.getByRole("heading", { name: "Problems" })).toBeVisible();
+  await hod.getByLabel("Find a reference code").fill("ZZZZZZ");
+  await hod.getByRole("button", { name: "Find" }).click();
+  await expect(hod.getByText("No error with reference ZZZZZZ")).toBeVisible();
 });

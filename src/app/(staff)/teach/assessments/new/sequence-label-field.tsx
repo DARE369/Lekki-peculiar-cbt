@@ -32,7 +32,7 @@ export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
               type="button"
               onClick={() => setValue(p)}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold transition",
+                "rounded-md border px-2.5 py-1 text-xs font-medium transition",
                 value === p ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
               )}
             >
@@ -43,7 +43,7 @@ export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
             type="button"
             onClick={() => setValue("")}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold transition",
+              "rounded-md border px-2.5 py-1 text-xs font-medium transition",
               value === "" ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
             )}
           >
@@ -75,7 +75,7 @@ export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
             type="button"
             onClick={() => setValue(p)}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-semibold transition",
+              "rounded-md border px-2.5 py-1 text-xs font-medium transition",
               value === p ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
             )}
           >
@@ -86,7 +86,7 @@ export function SequenceLabelField({ rounds = [], defaultValue }: Props) {
           type="button"
           onClick={() => setValue("")}
           className={cn(
-            "rounded-full border px-3 py-1 text-xs font-semibold transition",
+            "rounded-md border px-2.5 py-1 text-xs font-medium transition",
             value === "" ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
           )}
         >

@@ -99,7 +99,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
                       <div className="space-y-2">
                         {[...yearGroups.entries()].map(([yearName, pairs]) => (
                           <div key={yearName}>
-                            <p className="mb-1.5 text-xs font-semibold text-muted uppercase tracking-wide">{yearName}</p>
+                            <p className="mb-1.5 text-xs font-semibold text-muted">{yearName}</p>
                             <div className="flex flex-wrap gap-2">
                               {pairs.map((p) => (
                                 <label key={p.classId} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft">

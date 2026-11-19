@@ -147,7 +147,7 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                   role="tab"
                   aria-selected={sectionFilter === key}
                   className={cn(
-                    "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                    "rounded-md border px-3 py-1.5 text-sm font-medium",
                     sectionFilter === key ? "border-accent bg-accent-soft text-text" : "border-border hover:border-accent",
                   )}
                 >
@@ -164,7 +164,7 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
                 role="tab"
                 aria-selected={filter === key}
                 className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+                  "rounded-md border px-3 py-1.5 text-sm font-medium",
                   filter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
                 )}
               >

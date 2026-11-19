@@ -4,10 +4,16 @@ import Link from "next/link";
 import { Card, EmptyState, Input, LinkButton, PageHeader, Select, cn } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
 import { requireStaff } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { roundsForSection } from "@/lib/rounds";
+import { ActionForm, SubmitButton } from "@/components/forms";
+import { autoSortIntoRounds } from "../actions";
 import { teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
 import { QuestionBulkTable } from "./bulk-delete";
+import { UploadPanel, type UploadInfo } from "./upload-panel";
+
+const PAGE_SIZE = 100;
 
 type QuestionRow = { id: string; body: string; options: unknown; answer: string; topic: string | null; difficulty: number | null; year_id: string | null; owner_id: string; created_at: string };
 
@@ -62,35 +68,102 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   // Per-entry filters
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const topic = typeof sp.topic === "string" ? sp.topic : "";
+  const uploadParam = typeof sp.upload === "string" ? sp.upload : "";
+  const roundParam = typeof sp.round === "string" ? sp.round : "";
+  const allRounds = await getRoundConfigs();
+  const page = Math.max(1, Number(sp.page) || 1);
 
-  // Fetch questions for active entry
   let questions: QuestionRow[] = [];
+  let total = 0;
   let topics: string[] = [];
+  let uploads: UploadInfo[] = [];
+  let untrackedCount = 0;
+  let allCount = 0;
+  const roundCounts = new Map<string, number>();
+  let unsortedCount = 0;
   if (active) {
+    const yearFilter = `year_id.eq.${active.yearId},year_id.is.null`;
+    // How many questions are in each round (and how many aren't sorted yet).
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase
+        .from("questions")
+        .select("round_id")
+        .eq("owner_id", staff.id)
+        .eq("subject_id", active.subjectId)
+        .eq("archived", false)
+        .or(yearFilter)
+        .range(from, from + 999);
+      for (const r of data ?? []) {
+        if (r.round_id) roundCounts.set(r.round_id as string, (roundCounts.get(r.round_id as string) ?? 0) + 1);
+        else unsortedCount += 1;
+      }
+      if (!data || data.length < 1000) break;
+    }
+    const [upRes, untrackedRes, allRes, tRows] = await Promise.all([
+      supabase
+        .from("question_uploads")
+        .select("id, label, created_at, file_name, assessment_id, round_id, found_count, imported_count, linked_count, duplicate_count, removed_count, unreadable_count, issues, questions(count)")
+        .eq("owner_id", staff.id)
+        .eq("subject_id", active.subjectId)
+        .or(yearFilter)
+        .eq("questions.archived", false)
+        .order("created_at", { ascending: false }),
+      supabase.from("questions").select("id", { count: "exact", head: true }).eq("owner_id", staff.id).eq("subject_id", active.subjectId).eq("archived", false).or(yearFilter).is("upload_id", null),
+      supabase.from("questions").select("id", { count: "exact", head: true }).eq("owner_id", staff.id).eq("subject_id", active.subjectId).eq("archived", false).or(yearFilter),
+      supabase.from("questions").select("topic").eq("subject_id", active.subjectId).eq("owner_id", staff.id).eq("archived", false).or(yearFilter).not("topic", "is", null),
+    ]);
+    untrackedCount = untrackedRes.count ?? 0;
+    allCount = allRes.count ?? 0;
+    topics = [...new Set((tRows.data ?? []).map((t) => t.topic as string))].sort();
+
+    type UpRow = Omit<UploadInfo, "count" | "testTitle"> & { questions: { count: number }[] };
+    const upRows = (upRes.data ?? []) as unknown as UpRow[];
+    const testIds = [...new Set(upRows.map((u) => u.assessment_id).filter((x): x is string => Boolean(x)))];
+    const titles = new Map<string, string>();
+    if (testIds.length) {
+      const { data } = await supabase.from("assessments").select("id, title").in("id", testIds);
+      for (const t of data ?? []) titles.set(t.id as string, t.title as string);
+    }
+    uploads = upRows.map(({ questions: qc, ...u }) => ({
+      ...u,
+      count: qc?.[0]?.count ?? 0,
+      testTitle: u.assessment_id ? (titles.get(u.assessment_id) ?? null) : null,
+    }));
+
     let qQuery = supabase
       .from("questions")
-      .select("id, body, options, answer, topic, difficulty, year_id, owner_id, created_at")
+      .select("id, body, options, answer, topic, difficulty, year_id, owner_id, created_at", { count: "exact" })
       .eq("subject_id", active.subjectId)
       .eq("owner_id", staff.id)
       .eq("archived", false)
-      .order("created_at", { ascending: false })
-      .limit(300);
-    qQuery = qQuery.or(`year_id.eq.${active.yearId},year_id.is.null`);
-    if (q) qQuery = qQuery.ilike("body", `%${q}%`);
+      .or(yearFilter)
+      .order("created_at", { ascending: uploadParam !== "" && uploadParam !== "none" })
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    if (roundParam === "none") qQuery = qQuery.is("round_id", null);
+    else if (roundParam) qQuery = qQuery.eq("round_id", roundParam);
+    if (uploadParam === "none") qQuery = qQuery.is("upload_id", null);
+    else if (uploadParam) qQuery = qQuery.eq("upload_id", uploadParam);
+    if (q) qQuery = qQuery.ilike("body", `%${q.replace(/[%_]/g, "\\$&")}%`);
     if (topic) qQuery = qQuery.eq("topic", topic);
-    const { data } = await qQuery;
+    const { data, count } = await qQuery;
     questions = (data ?? []) as unknown as QuestionRow[];
-
-    const { data: tRows } = await supabase
-      .from("questions")
-      .select("topic")
-      .eq("subject_id", active.subjectId)
-      .eq("owner_id", staff.id)
-      .eq("archived", false)
-      .or(`year_id.eq.${active.yearId},year_id.is.null`)
-      .not("topic", "is", null);
-    topics = [...new Set((tRows ?? []).map((t) => t.topic as string))].sort();
+    total = count ?? questions.length;
   }
+  const selectedUpload = uploads.find((u) => u.id === uploadParam) ?? null;
+  const activeSection = active ? s.subjectById.get(active.subjectId)?.section_id : null;
+  const sectionRounds = roundsForSection(allRounds, activeSection, true).filter((r) => r.is_active || roundCounts.has(r.id));
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const base = active ? `/teach/questions?subject=${active.subjectId}&year=${active.yearId}` : "/teach/questions";
+  const withParams = (extra: Record<string, string | number | undefined>) => {
+    const p = new URLSearchParams();
+    if (active) {
+      p.set("subject", active.subjectId);
+      p.set("year", active.yearId);
+    }
+    const merged = { round: roundParam || undefined, upload: uploadParam || undefined, q: q || undefined, topic: topic || undefined, ...extra };
+    for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== "") p.set(k, String(v));
+    return `/teach/questions?${p.toString()}`;
+  };
 
   // Group sidebar entries by year for display
   const yearGroups = new Map<string, { yearName: string; entries: NavEntry[] }>();
@@ -149,7 +222,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                     key={`${e.subjectId}:${e.yearId}`}
                     href={`/teach/questions?subject=${e.subjectId}&year=${e.yearId}`}
                     className={cn(
-                      "shrink-0 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
+                      "shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium whitespace-nowrap",
                       isActive ? "border-brand bg-brand-soft text-brand" : "border-border",
                     )}
                   >
@@ -166,7 +239,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
               <nav className="space-y-5">
                 {[...yearGroups.entries()].map(([yearId, group]) => (
                   <div key={yearId}>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{group.yearName}</p>
+                    <p className="mb-1 text-xs font-semibold text-muted">{group.yearName}</p>
                     <ul className="space-y-0.5">
                       {group.entries.map((e) => {
                         const isActive = active?.subjectId === e.subjectId && active?.yearId === e.yearId;
@@ -196,55 +269,127 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
             <div className="min-w-0 flex-1 space-y-4">
               {active ? (
                 <>
-                  {/* Header + filters */}
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold">{active.subjectName}</h2>
-                      <p className="text-sm text-muted">{active.yearName}</p>
-                    </div>
-                    <form className="flex flex-wrap items-center gap-2">
-                      <input type="hidden" name="subject" value={active.subjectId} />
-                      <input type="hidden" name="year" value={active.yearId} />
-                      {topics.length > 0 ? (
-                        <Select name="topic" defaultValue={topic} className="h-9 w-36 text-sm">
-                          <option value="">All topics</option>
-                          {topics.map((t) => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </Select>
-                      ) : null}
-                      <Input name="q" defaultValue={q} placeholder="Search questions…" className="h-9 w-48 text-sm" />
-                      <button type="submit" className="h-9 rounded-lg border border-border px-3 text-sm hover:bg-surface-2">
-                        Search
-                      </button>
-                      {(q || topic) ? (
-                        <Link href={`/teach/questions?subject=${active.subjectId}&year=${active.yearId}`} className="h-9 flex items-center px-2 text-sm text-muted hover:text-text">
-                          Clear
-                        </Link>
-                      ) : null}
-                    </form>
+                  <div>
+                    <h2 className="text-lg font-semibold">
+                      {active.subjectName} <span className="font-normal text-muted">· {active.yearName}</span>
+                    </h2>
+                    <p className="text-sm text-muted">
+                      {allCount} question{allCount === 1 ? "" : "s"} in {uploads.filter((u) => u.count > 0).length} upload{uploads.filter((u) => u.count > 0).length === 1 ? "" : "s"}
+                      {untrackedCount ? `, plus ${untrackedCount} added earlier` : ""}
+                    </p>
                   </div>
+
+                  {/* Rounds first: exam questions never mix with CA questions. */}
+                  <nav aria-label="Rounds" className="flex flex-wrap gap-x-5 gap-y-1 border-b border-border">
+                    <RoundTab href={withParams({ round: undefined, upload: undefined, page: undefined })} active={!roundParam} label="All rounds" count={allCount} />
+                    {sectionRounds.map((r) => (
+                      <RoundTab key={r.id} href={withParams({ round: r.id, upload: undefined, page: undefined })} active={roundParam === r.id} label={r.label} count={roundCounts.get(r.id) ?? 0} />
+                    ))}
+                    {unsortedCount ? (
+                      <RoundTab href={withParams({ round: "none", upload: undefined, page: undefined })} active={roundParam === "none"} label="Not sorted yet" count={unsortedCount} warn />
+                    ) : null}
+                  </nav>
+
+                  {roundParam === "none" && unsortedCount ? (
+                    <Card className="p-4 sm:p-5">
+                      <p className="font-medium">{unsortedCount} question{unsortedCount === 1 ? " isn't" : "s aren't"} in a round yet</p>
+                      <p className="mt-1 text-sm text-muted">
+                        These were added before rounds. <strong className="font-medium text-text">Sort automatically</strong> puts each question that&apos;s used in a test into that test&apos;s round. For the rest, tick them below and choose <strong className="font-medium text-text">Move to round</strong>. Nothing changes until you do.
+                      </p>
+                      <ActionForm action={autoSortIntoRounds} className="mt-3">
+                        <input type="hidden" name="subject_id" value={active.subjectId} />
+                        <input type="hidden" name="year_id" value={active.yearId} />
+                        <SubmitButton size="sm" variant="secondary">Sort automatically</SubmitButton>
+                      </ActionForm>
+                    </Card>
+                  ) : null}
+
+                  {/* Uploads: every file or paste is its own set */}
+                  <nav aria-label="Uploads" className="-mx-1 flex flex-wrap gap-1.5 px-1">
+                    <UploadTab
+                      href={withParams({ upload: undefined, page: undefined })}
+                      active={!uploadParam}
+                      label={roundParam ? "All in this round" : "All questions"}
+                      count={!roundParam ? allCount : roundParam === "none" ? unsortedCount : (roundCounts.get(roundParam) ?? 0)}
+                    />
+                    {uploads
+                      .filter((u) => u.count > 0 || u.unreadable_count > 0 || u.id === uploadParam)
+                      .filter((u) => !roundParam || (roundParam === "none" ? !u.round_id : u.round_id === roundParam) || u.id === uploadParam)
+                      .map((u) => (
+                      <UploadTab
+                        key={u.id}
+                        href={withParams({ upload: u.id, page: undefined })}
+                        active={uploadParam === u.id}
+                        label={u.label}
+                        count={u.count}
+                        flag={u.unreadable_count > 0}
+                      />
+                    ))}
+                    {untrackedCount && (!roundParam || roundParam === "none") ? (
+                      <UploadTab href={withParams({ upload: "none", page: undefined })} active={uploadParam === "none"} label="Added earlier" count={untrackedCount} />
+                    ) : null}
+                  </nav>
+
+                  {selectedUpload ? (
+                    <UploadPanel
+                      upload={selectedUpload}
+                      useHref={`/teach/assessments/new?subject=${active.subjectId}&year=${active.yearId}&upload=${selectedUpload.id}`}
+                      afterDeleteHref={base}
+                    />
+                  ) : uploadParam === "none" ? (
+                    <p className="text-sm text-muted">
+                      Questions added before uploads were named, or typed in one at a time. They work exactly like the rest.
+                    </p>
+                  ) : null}
+
+                  <form className="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="subject" value={active.subjectId} />
+                    <input type="hidden" name="year" value={active.yearId} />
+                    {uploadParam ? <input type="hidden" name="upload" value={uploadParam} /> : null}
+                    <Input name="q" defaultValue={q} placeholder="Search question text" aria-label="Search question text" className="h-9 w-56 text-sm" />
+                    {topics.length > 0 ? (
+                      <Select name="topic" defaultValue={topic} aria-label="Topic" className="h-9 w-40 text-sm">
+                        <option value="">All topics</option>
+                        {topics.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </Select>
+                    ) : null}
+                    <button type="submit" className="h-9 rounded-lg border border-border px-3 text-sm font-medium hover:bg-surface-2">
+                      Search
+                    </button>
+                    {q || topic ? (
+                      <Link href={withParams({ q: undefined, topic: undefined, page: undefined })} className="flex h-9 items-center px-2 text-sm text-muted hover:text-text">
+                        Clear
+                      </Link>
+                    ) : null}
+                  </form>
 
                   <Card>
                     {questions.length === 0 ? (
                       <EmptyState
-                        title={q || topic ? "No questions match your filters" : "No questions here yet"}
-                        action={
-                          !q && !topic ? (
-                            <LinkButton href={uploadHref}>Upload questions</LinkButton>
-                          ) : undefined
-                        }
+                        title={q || topic ? "No questions match your search" : "No questions here yet"}
+                        action={!q && !topic ? <LinkButton href={uploadHref}>Upload questions</LinkButton> : undefined}
                       />
                     ) : (
-                      <QuestionBulkTable questions={questions} />
+                      <QuestionBulkTable key={`${roundParam}:${uploadParam}:${page}:${q}:${topic}`} questions={questions} rounds={sectionRounds.map((r) => ({ id: r.id, label: r.label }))} />
                     )}
                   </Card>
 
-                  {questions.length > 0 ? (
-                    <p className="text-xs text-muted">
-                      {questions.length} question{questions.length === 1 ? "" : "s"}
-                      {questions.length === 300 ? " (showing first 300)" : ""}.
-                    </p>
+                  {total > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+                      <p>
+                        {total > PAGE_SIZE
+                          ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`
+                          : `${total} question${total === 1 ? "" : "s"}`}
+                      </p>
+                      {pages > 1 ? (
+                        <div className="flex gap-2">
+                          {page > 1 ? <LinkButton size="sm" variant="secondary" href={withParams({ page: page - 1 })}>Previous</LinkButton> : null}
+                          {page < pages ? <LinkButton size="sm" variant="secondary" href={withParams({ page: page + 1 })}>Next</LinkButton> : null}
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </>
               ) : null}
@@ -253,5 +398,38 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
         </>
       )}
     </div>
+  );
+}
+
+function UploadTab({ href, active, label, count, flag }: { href: string; active: boolean; label: string; count: number; flag?: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+        active ? "border-brand bg-brand-soft font-semibold text-brand" : "border-border bg-surface hover:border-border-strong",
+      )}
+    >
+      <span className="truncate">{label}</span>
+      <span className={cn("tabular-nums text-xs", active ? "text-brand" : "text-muted")}>{count}</span>
+      {flag ? <span className="size-1.5 rounded-full bg-warning" title="Some questions in this upload couldn't be read" /> : null}
+    </Link>
+  );
+}
+
+function RoundTab({ href, active, label, count, warn }: { href: string; active: boolean; label: string; count: number; warn?: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "-mb-px inline-flex items-center gap-1.5 border-b-2 py-2 text-sm",
+        active ? "border-brand font-semibold text-text" : "border-transparent text-muted hover:text-text",
+      )}
+    >
+      {label}
+      <span className={cn("text-xs tabular-nums", warn ? "text-warning" : "text-subtle")}>{count}</span>
+    </Link>
   );
 }

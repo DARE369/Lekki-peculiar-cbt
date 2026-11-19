@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Table, Td, Th, cn } from "@/components/ui";
 import type { QuestionOption } from "@/lib/types";
-import { confirmBulkDelete, previewBulkDelete } from "../actions";
+import { confirmBulkDelete, moveQuestionsToRound, previewBulkDelete } from "../actions";
 
 type Question = {
   id: string;
@@ -20,7 +20,8 @@ type PreviewResult = Awaited<ReturnType<typeof previewBulkDelete>>;
 
 const DIFF = ["", "Easy", "Medium", "Hard"] as const;
 
-export function QuestionBulkTable({ questions }: { questions: Question[] }) {
+export function QuestionBulkTable({ questions, rounds = [] }: { questions: Question[]; rounds?: { id: string; label: string }[] }) {
+  const [moveTo, setMoveTo] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
@@ -48,10 +49,11 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
     setSelected(allSelected ? new Set() : new Set(questions.map((q) => q.id)));
   }
 
-  function openPreview() {
-    if (!selected.size) return;
+  function openPreview(ids: string[] = [...selected]) {
+    if (!ids.length) return;
+    if (ids.length === 1 && !selected.has(ids[0])) setSelected(new Set(ids));
     startTransition(async () => {
-      const p = await previewBulkDelete([...selected]);
+      const p = await previewBulkDelete(ids);
       setPreview(p);
     });
   }
@@ -73,6 +75,20 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 
+  function moveSelected() {
+    if (!moveTo || !selected.size) return;
+    startTransition(async () => {
+      const res = await moveQuestionsToRound([...selected], moveTo);
+      if (res?.ok) {
+        setNotice({ tone: "success", text: res.message ?? "Moved." });
+        setSelected(new Set());
+        router.refresh();
+      } else {
+        setNotice({ tone: "warning", text: res?.error ?? "Couldn't move them." });
+      }
+    });
+  }
+
   if (questions.length === 0) return null;
 
   return (
@@ -85,7 +101,7 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
           aria-modal="true"
           aria-labelledby="bulk-del-title"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-float">
             <h2 id="bulk-del-title" className="text-base font-bold">
               Delete {selected.size} question{selected.size === 1 ? "" : "s"}?
             </h2>
@@ -213,10 +229,19 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
                   {r.topic ?? "—"}
                   {r.difficulty ? <span className="block text-muted">{DIFF[r.difficulty]}</span> : null}
                 </Td>
-                <Td className="cell-actions text-right max-md:text-left">
-                  <Link href={`/teach/questions/${r.id}`} className="text-xs text-muted hover:text-brand">
+                <Td className="cell-actions text-right whitespace-nowrap max-md:text-left">
+                  <Link href={`/teach/questions/${r.id}`} className="inline-flex min-h-8 items-center px-2 text-xs font-medium text-brand hover:underline">
                     Edit
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => openPreview([r.id])}
+                    disabled={pending}
+                    className="inline-flex min-h-8 items-center px-2 text-xs font-medium text-muted hover:text-danger"
+                    aria-label="Delete this question"
+                  >
+                    Delete
+                  </button>
                 </Td>
               </tr>
             );
@@ -226,7 +251,7 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
 
       {/* Sticky selection bar */}
       {selected.size > 0 && (
-        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-xl">
+        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-float">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium">
               {selected.size} question{selected.size === 1 ? "" : "s"} selected
@@ -237,8 +262,32 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
             >
               Clear
             </button>
+            {rounds.length ? (
+              <span className="flex items-center gap-1.5">
+                <select
+                  value={moveTo}
+                  onChange={(e) => setMoveTo(e.target.value)}
+                  aria-label="Round to move the ticked questions to"
+                  className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm"
+                >
+                  <option value="">Move to round…</option>
+                  {rounds.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={moveSelected}
+                  disabled={pending || !moveTo}
+                  className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium hover:bg-surface-2 disabled:opacity-50"
+                >
+                  Move
+                </button>
+              </span>
+            ) : null}
             <button
-              onClick={openPreview}
+              onClick={() => openPreview()}
               disabled={pending}
               className="rounded-lg bg-danger px-3 py-1.5 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-50"
             >

@@ -38,6 +38,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
           title: "Teaching",
           items: [
             { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+            { href: "/teach/papers", label: "This term's papers", icon: "papers" },
             { href: "/teach/classes", label: "My classes", icon: "classes" },
             { href: "/teach/questions", label: "Question bank", icon: "questions" },
             { href: "/teach/assessments", label: "Tests & exams", icon: "tests" },
@@ -56,6 +57,8 @@ export default async function StaffLayout({ children }: { children: React.ReactN
     if (!staff.isSuperAdmin) admin.items.push({ href: "/admin/team", label: "My staff", icon: "staff" });
     admin.items.push({ href: "/admin/classes", label: "Classes & subjects", icon: "structure" });
     if (can(staff, "terminals.manage")) admin.items.push({ href: "/admin/terminals", label: "Lab computers", icon: "terminals" });
+    admin.items.push({ href: "/admin/rounds", label: "Rounds", icon: "rounds" });
+    admin.items.push({ href: "/admin/problems", label: "Problems", icon: "problems" });
     admin.items.push({ href: "/admin/audit", label: "Audit log", icon: "audit" });
     groups.push(admin);
   }
@@ -65,7 +68,6 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       items: [
         { href: "/admin/staff", label: "Staff & permissions", icon: "staff" },
         { href: "/admin/school", label: "Sessions & terms", icon: "sessions" },
-        { href: "/admin/rounds", label: "CA rounds", icon: "rounds" },
       ],
     });
   }

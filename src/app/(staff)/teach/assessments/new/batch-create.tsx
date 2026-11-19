@@ -41,7 +41,7 @@ export function BatchCreate({ options, rounds }: { options: ClassOption[]; round
       <div className="space-y-3">
         {options.map((o) => (
           <div key={o.classId}>
-            <p className="mb-1 text-xs font-semibold text-muted uppercase tracking-wide">{o.className} — {o.yearName}</p>
+            <p className="mb-1 text-xs font-semibold text-muted">{o.className} — {o.yearName}</p>
             <div className="flex flex-wrap gap-2">
               {o.subjects.map((s) => {
                 const key = `${o.classId}:${s.subjectId}`;

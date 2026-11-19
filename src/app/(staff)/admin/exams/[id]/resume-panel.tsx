@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Card, CardHeader, cn } from "@/components/ui";
-import { approveResumes, requestResumes } from "../../actions";
+import { Alert, Badge, Button, Card, CardHeader, Field, Input } from "@/components/ui";
+import { approveResumes, letStudentsContinue } from "../../actions";
 
 export type ResumableStudent = {
   id: string;
@@ -27,24 +27,13 @@ export type ApprovedResumeRequest = {
   approvedAt: string;
 };
 
-function Notice({ tone, text, onDismiss }: { tone: "success" | "warning"; text: string; onDismiss: () => void }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-medium",
-        tone === "success"
-          ? "border-success/30 bg-success-soft text-success"
-          : "border-warning/30 bg-warning-soft text-warning",
-      )}
-    >
-      <span>{text}</span>
-      <button onClick={onDismiss} className="ml-4 text-xs text-muted hover:text-text">
-        Dismiss
-      </button>
-    </div>
-  );
-}
+const time = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" }) : "—";
 
+/**
+ * Students who finished (or ran out of time) can be let back in, in one step: tick them, give the extra
+ * minutes and a reason, press "Let them continue". Requests made the old two-step way can still be approved.
+ */
 export function ResumePanel({
   windowId,
   resumable,
@@ -57,236 +46,105 @@ export function ResumePanel({
   approved: ApprovedResumeRequest[];
 }) {
   const router = useRouter();
-  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
-  const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set());
-  const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
-  const [isPendingReq, startReqTransition] = useTransition();
-  const [isPendingAppr, startApprTransition] = useTransition();
-  const checkStudentsRef = useRef<HTMLInputElement>(null);
-  const checkRequestsRef = useRef<HTMLInputElement>(null);
-  const dismissNotice = useCallback(() => setNotice(null), []);
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [minutes, setMinutes] = useState("10");
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [busy, start] = useTransition();
 
-  const allStudentsSelected = resumable.length > 0 && selectedStudents.size === resumable.length;
-  const allRequestsSelected = pending.length > 0 && selectedRequests.size === pending.length;
-
-  useEffect(() => {
-    if (checkStudentsRef.current) {
-      checkStudentsRef.current.indeterminate =
-        selectedStudents.size > 0 && selectedStudents.size < resumable.length;
-    }
-  }, [selectedStudents.size, resumable.length]);
-
-  useEffect(() => {
-    if (checkRequestsRef.current) {
-      checkRequestsRef.current.indeterminate =
-        selectedRequests.size > 0 && selectedRequests.size < pending.length;
-    }
-  }, [selectedRequests.size, pending.length]);
-
-  function toggleStudent(id: string) {
-    setSelectedStudents((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
+  function toggle(id: string) {
+    setTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }
 
-  function toggleAllStudents() {
-    setSelectedStudents(allStudentsSelected ? new Set() : new Set(resumable.map((s) => s.id)));
-  }
-
-  function toggleRequest(id: string) {
-    setSelectedRequests((s) => {
-      const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  }
-
-  function toggleAllRequests() {
-    setSelectedRequests(allRequestsSelected ? new Set() : new Set(pending.map((r) => r.id)));
-  }
-
-  function handleRequest() {
-    if (!selectedStudents.size) return;
-    startReqTransition(async () => {
-      const res = await requestResumes(windowId, [...selectedStudents]);
-      setSelectedStudents(new Set());
+  function letContinue() {
+    setNotice(null);
+    start(async () => {
+      const res = await letStudentsContinue(windowId, [...ticked], Number.parseInt(minutes, 10), reason);
       if (res?.ok) {
-        setNotice({ tone: "success", text: res.message ?? "Resume requested." });
+        setNotice({ tone: "success", text: res.message ?? "Done." });
+        setTicked(new Set());
+        setReason("");
         router.refresh();
-      } else {
-        setNotice({ tone: "warning", text: res?.error ?? "Could not request resume." });
-      }
+      } else setNotice({ tone: "danger", text: res?.error ?? "That didn't work." });
     });
   }
 
-  function handleApprove() {
-    if (!selectedRequests.size) return;
-    startApprTransition(async () => {
-      const res = await approveResumes(windowId, [...selectedRequests]);
-      setSelectedRequests(new Set());
-      if (res?.ok) {
-        setNotice({ tone: "success", text: res.message ?? "Approved." });
-        router.refresh();
-      } else {
-        setNotice({ tone: "warning", text: res?.error ?? "Could not approve resumes." });
-      }
+  function approveOld() {
+    start(async () => {
+      const res = await approveResumes(windowId, pending.map((p) => p.id));
+      setNotice(res?.ok ? { tone: "success", text: res.message ?? "Approved." } : { tone: "danger", text: res?.error ?? "That didn't work." });
+      router.refresh();
     });
   }
-
-  const hasAnything = resumable.length > 0 || pending.length > 0 || approved.length > 0;
-  if (!hasAnything) return null;
 
   return (
     <Card>
       <CardHeader
-        title="Resume attempts"
-        description="Students who ran out of time can continue with their allocated extra time. Step 1: select students and request resume. Step 2: approve the requests."
+        title="Let a student continue"
+        description="For a student who ran out of time or was interrupted (power cut, computer problem). They get extra minutes and can sign in on any lab computer. Recorded in the audit log."
       />
-      <div className="space-y-6 p-5">
-        {notice && <Notice tone={notice.tone} text={notice.text} onDismiss={dismissNotice} />}
+      <div className="space-y-4 p-4 sm:p-5">
+        {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
 
-        {/* Step 1: Request */}
-        {resumable.length > 0 && (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold">
-              Step 1 — Select students to request resume
-              <span className="ml-2 font-normal text-muted text-xs">Extra time must already be allocated.</span>
-            </p>
-            <div className="overflow-hidden rounded-xl border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-2 text-xs font-semibold text-muted uppercase tracking-wide">
-                  <tr>
-                    <th className="w-8 px-3 py-2">
-                      <input
-                        ref={checkStudentsRef}
-                        type="checkbox"
-                        aria-label="Select all"
-                        checked={allStudentsSelected}
-                        onChange={toggleAllStudents}
-                        className="accent-[var(--brand)]"
-                      />
-                    </th>
-                    <th className="px-3 py-2 text-left">Student</th>
-                    <th className="px-3 py-2 text-left">Submitted at</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {resumable.map((st) => (
-                    <tr
-                      key={st.id}
-                      className={cn("cursor-pointer hover:bg-surface-2", selectedStudents.has(st.id) && "bg-brand-soft/20")}
-                      onClick={() => toggleStudent(st.id)}
-                    >
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.has(st.id)}
-                          onChange={() => toggleStudent(st.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="accent-[var(--brand)]"
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-medium">{st.name}</td>
-                      <td className="px-3 py-2 text-muted">
-                        {st.submittedAt ? new Date(st.submittedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" }) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {resumable.length ? (
+          <>
+            <fieldset>
+              <legend className="text-[13px] font-medium">Students who have finished</legend>
+              <ul className="mt-2 divide-y divide-border rounded-md border border-border">
+                {resumable.map((st) => (
+                  <li key={st.id}>
+                    <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 text-sm">
+                      <input type="checkbox" checked={ticked.has(st.id)} onChange={() => toggle(st.id)} className="size-4 accent-[var(--brand)]" />
+                      <span className="flex-1">{st.name}</span>
+                      <span className="text-xs text-muted">finished {time(st.submittedAt)}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+            <div className="grid gap-3 sm:grid-cols-[8rem_1fr_auto] sm:items-end">
+              <Field label="Extra minutes">
+                <Input type="number" min={1} max={180} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+              </Field>
+              <Field label="Reason">
+                <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Power cut 10:20–10:30" maxLength={300} />
+              </Field>
+              <Button onClick={letContinue} disabled={busy || ticked.size === 0 || !reason.trim()}>
+                {busy ? "Working…" : `Let ${ticked.size || ""} continue`.replace("  ", " ")}
+              </Button>
             </div>
-            <button
-              onClick={handleRequest}
-              disabled={!selectedStudents.size || isPendingReq}
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-brand-ink hover:bg-brand/90 disabled:opacity-40"
-            >
-              {isPendingReq ? "Requesting…" : `Request resume for ${selectedStudents.size || 0} student${selectedStudents.size === 1 ? "" : "s"}`}
-            </button>
-          </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted">No student has finished yet.</p>
         )}
 
-        {/* Step 2: Approve */}
-        {pending.length > 0 && (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold">
-              Step 2 — Approve pending requests
-              <Badge tone="warning" className="ml-2">{pending.length} pending</Badge>
-            </p>
-            <div className="overflow-hidden rounded-xl border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-2 text-xs font-semibold text-muted uppercase tracking-wide">
-                  <tr>
-                    <th className="w-8 px-3 py-2">
-                      <input
-                        ref={checkRequestsRef}
-                        type="checkbox"
-                        aria-label="Select all"
-                        checked={allRequestsSelected}
-                        onChange={toggleAllRequests}
-                        className="accent-[var(--brand)]"
-                      />
-                    </th>
-                    <th className="px-3 py-2 text-left">Student</th>
-                    <th className="px-3 py-2 text-left">Extra time</th>
-                    <th className="px-3 py-2 text-left">Requested</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {pending.map((req) => (
-                    <tr
-                      key={req.id}
-                      className={cn("cursor-pointer hover:bg-surface-2", selectedRequests.has(req.id) && "bg-brand-soft/20")}
-                      onClick={() => toggleRequest(req.id)}
-                    >
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedRequests.has(req.id)}
-                          onChange={() => toggleRequest(req.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="accent-[var(--brand)]"
-                        />
-                      </td>
-                      <td className="px-3 py-2 font-medium">{req.studentName}</td>
-                      <td className="px-3 py-2">{req.extraMinutes} min</td>
-                      <td className="px-3 py-2 text-muted">
-                        {new Date(req.requestedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button
-              onClick={handleApprove}
-              disabled={!selectedRequests.size || isPendingAppr}
-              className="rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white hover:bg-success/90 disabled:opacity-40"
-            >
-              {isPendingAppr ? "Approving…" : `✓ Approve ${selectedRequests.size || 0} request${selectedRequests.size === 1 ? "" : "s"}`}
-            </button>
+        {pending.length ? (
+          <div className="rounded-md border border-border p-3 text-sm">
+            <p className="font-medium">Waiting from before: {pending.length} request{pending.length === 1 ? "" : "s"}</p>
+            <p className="text-muted">{pending.map((p) => `${p.studentName} (${p.extraMinutes} min)`).join(", ")}</p>
+            <Button size="sm" variant="secondary" className="mt-2" onClick={approveOld} disabled={busy}>
+              Approve {pending.length === 1 ? "it" : "them"}
+            </Button>
           </div>
-        )}
+        ) : null}
 
-        {/* Already approved */}
-        {approved.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-muted">Already approved</p>
-            <ul className="space-y-1">
-              {approved.map((req) => (
-                <li key={req.id} className="flex items-center gap-2 text-sm">
-                  <Badge tone="success">Resumed</Badge>
-                  <span className="font-medium">{req.studentName}</span>
-                  <span className="text-muted">+{req.extraMinutes} min ·</span>
-                  <span className="text-muted">
-                    approved {new Date(req.approvedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
+        {approved.length ? (
+          <div className="text-sm">
+            <p className="font-medium">Already let back in</p>
+            <ul className="mt-1 space-y-0.5 text-muted">
+              {approved.map((a) => (
+                <li key={a.id}>
+                  {a.studentName} <Badge>{a.extraMinutes} min</Badge> at {time(a.approvedAt)}
                 </li>
               ))}
             </ul>
           </div>
-        )}
+        ) : null}
       </div>
     </Card>
   );

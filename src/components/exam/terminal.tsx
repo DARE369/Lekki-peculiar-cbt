@@ -180,7 +180,7 @@ export function ExamTerminal() {
         <div className="flex items-center gap-3">
           <Crest size={44} />
           <div className="leading-tight">
-            <p className="font-bold tracking-tight">{brand.schoolName}</p>
+            <p className="font-bold">{brand.schoolName}</p>
             <p className="text-xs font-medium text-muted">Exam centre</p>
           </div>
         </div>
@@ -267,14 +267,14 @@ export function ExamTerminal() {
             />
           ) : null}
           {screen.name === "confirm" ? (
-            <div className="mx-auto max-w-xl rounded-[28px] border border-border bg-surface p-8 text-center shadow-float sm:p-10">
-              <p className="text-sm font-semibold tracking-wide text-brand uppercase">Check it&apos;s you</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Is this you?</h1>
+            <div className="mx-auto max-w-xl rounded-xl border border-border bg-surface p-8 text-center sm:p-10">
+              <p className="text-sm font-semibold text-brand">Check it&apos;s you</p>
+              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Is this you?</h1>
               <div className="mt-8 flex flex-col items-center gap-4">
-                <span className="rounded-full bg-gradient-to-br from-brand to-accent p-1.5 shadow-card">
+                <span className="rounded-full border-4 border-brand-soft">
                   <Avatar src={screen.student.photo_url} name={screen.student.name} size={176} />
                 </span>
-                <p className="text-3xl font-bold tracking-tight">{screen.student.name}</p>
+                <p className="text-3xl font-bold">{screen.student.name}</p>
                 <p className="inline-flex items-center gap-2 rounded-full bg-surface-2 px-4 py-1.5 font-medium text-muted">
                   <UsersRound className="size-4" aria-hidden /> {screen.student.class_name}
                 </p>
@@ -330,7 +330,7 @@ function Panel({
         <span className="mx-auto inline-flex size-14 items-center justify-center rounded-2xl bg-brand-soft text-brand">
           <Icon className="size-7" aria-hidden />
         </span>
-        <h1 className="mt-4 text-3xl font-bold tracking-tight">{title}</h1>
+        <h1 className="mt-4 text-3xl font-bold">{title}</h1>
         {subtitle ? <p className="mx-auto mt-2 max-w-xl text-lg text-muted">{subtitle}</p> : null}
       </div>
       {children}
@@ -377,7 +377,7 @@ function Register({ busy, onDone }: { busy: boolean; onDone: (code: string, name
   const [name, setName] = useState("");
   return (
     <form
-      className="mx-auto max-w-md rounded-[28px] border border-border bg-surface p-8 shadow-float"
+      className="mx-auto max-w-md rounded-xl border border-border bg-surface p-8"
       onSubmit={(e) => {
         e.preventDefault();
         onDone(code, name);
@@ -386,14 +386,14 @@ function Register({ busy, onDone }: { busy: boolean; onDone: (code: string, name
       <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-accent-soft text-[color:var(--warning)] dark:text-accent">
         <MonitorSmartphone className="size-6" aria-hidden />
       </span>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight">Register this computer</h1>
+      <h1 className="mt-4 text-2xl font-bold">Register this computer</h1>
       <p className="mt-1 text-sm text-muted">
         A one-time step for staff. Get a registration code from <strong>Admin → Lab computers</strong>.
       </p>
       <div className="mt-6 space-y-4">
         <label className="block space-y-1.5">
           <span className="text-[13px] font-semibold">Registration code</span>
-          <Input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" placeholder="1234 5678" className="h-12 font-mono text-lg tracking-widest" required />
+          <Input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" placeholder="1234 5678" className="h-12 font-mono text-lg" required />
         </label>
         <label className="block space-y-1.5">
           <span className="text-[13px] font-semibold">Name for this computer</span>
@@ -411,11 +411,11 @@ function Identify({ busy, onSubmit, onForgot }: { busy: boolean; onSubmit: (v: s
   const [value, setValue] = useState("");
   return (
     <div className="mx-auto max-w-xl">
-      <div className="rounded-[28px] border border-border bg-surface p-7 text-center shadow-float sm:p-10">
-        <span className="mx-auto inline-flex size-16 items-center justify-center rounded-3xl bg-brand text-brand-ink shadow-card">
+      <div className="rounded-xl border border-border bg-surface p-7 text-center sm:p-10">
+        <span className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-brand-soft text-brand">
           <UserRound className="size-8" aria-hidden />
         </span>
-        <h1 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Welcome!</h1>
+        <h1 className="mt-5 text-3xl font-bold sm:text-4xl">Welcome!</h1>
         <p className="mt-2 text-lg text-muted">Type your admission number to begin.</p>
         <form
           className="mt-8 space-y-4"
@@ -432,7 +432,7 @@ function Identify({ busy, onSubmit, onForgot }: { busy: boolean; onSubmit: (v: s
             autoComplete="off"
             spellCheck={false}
             aria-label="Admission number"
-            className="h-16 w-full rounded-2xl border-2 border-border bg-surface-2 px-5 text-center font-mono text-2xl tracking-wider transition-colors placeholder:text-subtle focus:border-brand focus:bg-surface focus:ring-4 focus:ring-[var(--ring)] focus:outline-none"
+            className="h-16 w-full rounded-2xl border-2 border-border bg-surface-2 px-5 text-center font-mono text-2xl transition-colors placeholder:text-subtle focus:border-brand focus:bg-surface focus:ring-4 focus:ring-[var(--ring)] focus:outline-none"
           />
           <Button size="lg" className="h-14 w-full text-lg" disabled={busy || !value.trim()}>
             {busy ? "Checking…" : "Continue"}
@@ -459,7 +459,7 @@ function StudentGrid({ students, onPick }: { students: StudentCard[]; onPick: (s
         <button
           key={s.id}
           onClick={() => onPick(s)}
-          className="group flex flex-col items-center gap-3 rounded-3xl border-2 border-border bg-surface p-5 text-center shadow-card transition-all hover:-translate-y-0.5 hover:border-brand focus:border-brand focus:outline-none"
+          className="group flex flex-col items-center gap-3 rounded-3xl border-2 border-border bg-surface p-5 text-center transition-all hover:border-brand focus:border-brand focus:outline-none"
         >
           <Avatar src={s.photo_url} name={s.name} size={104} />
           <span className="text-base leading-snug font-bold">{s.name}</span>
@@ -494,7 +494,7 @@ function ClassPicker({
       <div className="space-y-8">
         {sections.map((sec) => (
           <div key={sec}>
-            <p className="mb-3 text-sm font-semibold tracking-wide text-muted uppercase">{sec}</p>
+            <p className="mb-3 text-sm font-semibold text-muted">{sec}</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {(classes ?? [])
                 .filter((c) => c.section === sec)
@@ -502,7 +502,7 @@ function ClassPicker({
                   <button
                     key={c.id}
                     onClick={() => onPick(c)}
-                    className="h-20 rounded-2xl border-2 border-border bg-surface text-lg font-bold shadow-card transition-all hover:-translate-y-0.5 hover:border-brand hover:text-brand focus:border-brand focus:outline-none"
+                    className="h-20 rounded-2xl border-2 border-border bg-surface text-lg font-bold transition-all hover:border-brand hover:text-brand focus:border-brand focus:outline-none"
                   >
                     {c.name}
                   </button>
@@ -555,7 +555,7 @@ function NameSearch({
           onChange={(e) => setQ(e.target.value)}
           placeholder="Start typing your name…"
           aria-label="Your name"
-          className="h-16 w-full rounded-2xl border-2 border-border bg-surface pr-5 pl-14 text-xl shadow-card focus:border-brand focus:ring-4 focus:ring-[var(--ring)] focus:outline-none"
+          className="h-16 w-full rounded-2xl border-2 border-border bg-surface pr-5 pl-14 text-xl focus:border-brand focus:ring-4 focus:ring-[var(--ring)] focus:outline-none"
         />
       </div>
       {err ? (
@@ -611,12 +611,12 @@ function ExamList({
   const exams = session.exams.filter((e) => e.state !== "closed" || e.attempt_status);
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-border bg-surface p-5 shadow-card sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface p-5 sm:p-6">
         <div className="flex items-center gap-4">
           <Avatar src={session.student.photo_url} name={session.student.name} size={72} />
           <div>
             <p className="text-sm font-medium text-muted">Hello,</p>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{session.student.first_name}</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">{session.student.first_name}</h1>
             <p className="text-sm text-muted">{session.student.class_name}</p>
           </div>
         </div>
@@ -638,7 +638,7 @@ function ExamList({
               <div
                 key={e.window_id}
                 className={cn(
-                  "flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 bg-surface p-5 shadow-card sm:p-6",
+                  "flex flex-wrap items-center justify-between gap-5 rounded-3xl border-2 bg-surface p-5 sm:p-6",
                   live ? "border-brand/50" : "border-border",
                 )}
               >
@@ -651,7 +651,7 @@ function ExamList({
                       {e.subject} · <span className="capitalize">{e.type}</span>
                       {e.is_makeup ? " · make-up" : ""}
                     </p>
-                    <p className="text-xl font-bold tracking-tight">{e.title}</p>
+                    <p className="text-xl font-bold">{e.title}</p>
                     <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
                       <span className="inline-flex items-center gap-1.5">
                         <ListChecks className="size-4" aria-hidden /> {e.question_count} questions
@@ -713,16 +713,15 @@ function Consent({
     { icon: Hourglass, label: "Time", value: `${exam.duration_minutes} minutes` },
   ];
   return (
-    <div className="mx-auto max-w-3xl overflow-hidden rounded-[28px] border border-border bg-surface shadow-float">
-      <div className="relative bg-[linear-gradient(135deg,var(--panel-1),var(--panel-3))] px-7 py-8 text-white sm:px-10">
-        <div className="bg-grid pointer-events-none absolute inset-0 opacity-10" aria-hidden />
-        <p className="relative text-sm font-semibold tracking-wide text-[var(--gold)] uppercase">Before you start</p>
-        <h1 className="relative mt-1 text-3xl font-bold tracking-tight">{exam.title}</h1>
+    <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="relative border-b-4 border-[var(--gold)] bg-[var(--panel-1)] px-7 py-8 text-white sm:px-10">
+        <p className="relative text-sm font-semibold text-[var(--gold)]">Before you start</p>
+        <h1 className="relative mt-1 text-3xl font-bold">{exam.title}</h1>
       </div>
       <div className="p-7 sm:p-10">
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {facts.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="rounded-2xl bg-surface-2 p-4">
+            <div key={label} className="rounded-lg border border-border p-4">
               <dt className="flex items-center gap-1.5 text-xs font-semibold text-muted">
                 <Icon className="size-3.5" aria-hidden /> {label}
               </dt>

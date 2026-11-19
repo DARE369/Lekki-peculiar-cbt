@@ -213,3 +213,76 @@ describe("parseText", () => {
     expect(parseText("What?\nA. x\nB. y\nANSWER: A").questions).toHaveLength(1);
   });
 });
+
+describe("dropped-question regressions", () => {
+  it("keeps maths questions that differ only by an operator apart", async () => {
+    const { questionFingerprint } = await import("@/lib/import/questions");
+    const opts = [{ text: "8" }, { text: "15" }];
+    expect(questionFingerprint({ body: "What is 5 + 3?", options: opts })).not.toBe(questionFingerprint({ body: "What is 5 × 3?", options: opts }));
+    expect(questionFingerprint({ body: "Simplify 2x + 3x", options: opts })).not.toBe(questionFingerprint({ body: "Simplify 2x − 3x", options: opts }));
+  });
+
+  it("treats a shared stem with different options as different questions", async () => {
+    const { questionFingerprint } = await import("@/lib/import/questions");
+    const a = { body: "Which of the following is a noun?", options: [{ text: "run" }, { text: "table" }] };
+    const b = { body: "Which of the following is a noun?", options: [{ text: "quickly" }, { text: "Lagos" }] };
+    expect(questionFingerprint(a)).not.toBe(questionFingerprint(b));
+  });
+
+  it("still matches true duplicates despite case, spacing and punctuation", async () => {
+    const { questionFingerprint } = await import("@/lib/import/questions");
+    const a = { body: "What is the capital of Nigeria?", options: [{ text: "Abuja" }, { text: "Lagos" }] };
+    const b = { body: "  what is the capital of  Nigeria ", options: [{ text: "abuja." }, { text: "Lagos" }] };
+    expect(questionFingerprint(a)).toBe(questionFingerprint(b));
+    // but decimals keep their point
+    expect(questionFingerprint({ body: "x = 0.5", options: a.options })).not.toBe(questionFingerprint({ body: "x = 05", options: a.options }));
+  });
+
+  it("reads 'Ans B' without a colon and keeps the next question", () => {
+    const r = parseAiken("1. Capital of Nigeria?\nA. Lagos\nB. Abuja\nC. Kano\nD. Ibadan\nAns B\n2. Largest planet?\nA. Earth\nB. Jupiter\nC. Mars\nD. Venus\nANSWER: B");
+    expect(r.issues).toEqual([]);
+    expect(r.questions).toHaveLength(2);
+    expect(r.questions[0]).toMatchObject({ answer: "B" });
+    expect(r.questions[0].options[3].text).toBe("Ibadan");
+  });
+
+  it("never merges a question without an answer into the next one", () => {
+    const r = parseAiken("Capital of Nigeria?\nA. Lagos\nB. Abuja\nC. Kano\nD. Ibadan\nLargest planet?\nA. Earth\nB. Jupiter\nC. Mars\nD. Venus\nANSWER: B");
+    expect(r.questions).toHaveLength(1);
+    expect(r.questions[0].body).toBe("Largest planet?");
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]).toMatchObject({ code: "NO_ANSWER", excerpt: "Capital of Nigeria?" });
+  });
+
+  it("accepts other answer-line spellings", () => {
+    for (const line of ["Answer B", "Ans. (c)", "Correct: B", "Correct option - B", "Answer - B"]) {
+      const r = parseAiken(`Q?\nA. one\nB. two\nC. three\n${line}`);
+      expect(r.issues, line).toEqual([]);
+      expect(r.questions).toHaveLength(1);
+    }
+  });
+
+  it("flags an option that swallowed another question", async () => {
+    const { parseTable } = await import("@/lib/import/questions");
+    const r = parseTable([["Question", "A", "B", "Answer"], ["Q1?", "Lagos", "Ibadan Largest planet? A. Earth B. Jupiter", "A"]]);
+    expect(r.questions).toHaveLength(0);
+    expect(r.issues[0].code).toBe("SUSPECTED_MERGE");
+  });
+
+  it("uses Excel formula results and keeps questions whose image is a file name", async () => {
+    const { parseTable } = await import("@/lib/import/questions");
+    const r = parseTable([
+      ["Question", "Option A", "Option B", "Answer", "Image"],
+      [{ formula: "A1", result: "Real text" }, "x", "y", "A", "diagram1.png"],
+    ]);
+    expect(r.issues).toEqual([]);
+    expect(r.questions[0].body).toBe("Real text");
+    expect(r.questions[0].image_url).toBeNull();
+    expect(r.questions[0].warnings?.[0]).toMatch(/diagram1\.png/);
+  });
+
+  it("gives every issue a code", () => {
+    const r = parseCsv(["question,a,b,c,answer", "Q1,x,y,z,E", "Q3,x,,z,A", "Q4,only,,,A", "Q5,x,y,,"].join("\n"));
+    expect(r.issues.map((i) => i.code)).toEqual(["ANSWER_NOT_AN_OPTION", "OPTION_GAP", "TOO_FEW_OPTIONS", "NO_ANSWER"]);
+  });
+});

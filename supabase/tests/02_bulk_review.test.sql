@@ -120,21 +120,19 @@ begin
   if (select auto_start from public.exam_windows where id = w) then raise exception 'flagged test set to auto-start'; end if;
 end $$;
 
--- A teacher cannot clear a flag or tamper with the frozen paper, whatever they send.
+-- "Needs changes" on an approved paper opens it for the teacher straight away (nobody has sat it yet).
+do $$ begin
+  if not (select amending from public.assessments where id = (select v from ids where k = 'flag')) then raise exception 'flag did not open the paper for fixing'; end if;
+end $$;
+
+-- A teacher cannot clear a flag, stop the fix or tamper with the frozen paper, whatever they send.
 select pg_temp.act_as((select v from ids where k = 'dixon'));
-update public.assessments set flag_status = null, amending = true where id = (select v from ids where k = 'flag');
+update public.assessments set flag_status = null, amending = false where id = (select v from ids where k = 'flag');
 do $$ begin
   if (select flag_status from public.assessments where id = (select v from ids where k = 'flag')) <> 'open' then raise exception 'teacher cleared the flag'; end if;
-  if (select amending from public.assessments where id = (select v from ids where k = 'flag')) then raise exception 'teacher switched on amending'; end if;
+  if not (select amending from public.assessments where id = (select v from ids where k = 'flag')) then raise exception 'teacher switched off amending'; end if;
 end $$;
-select pg_temp.expect_error($q$
-  do $d$ begin
-    insert into public.assessment_questions (assessment_id, question_id, position)
-    select (select v from ids where k = 'flag'), id, 99 from public.questions where body = 'Broken';
-  end $d$
-$q$, 'row-level security');
-
--- Correct a flagged test: begin → edit → submit → the Head of Section accepts.
+-- Correct a flagged test: edit → send fix → the Head of Section accepts. (begin_amendment still works.)
 select public.begin_amendment((select v from ids where k = 'flag'));
 -- While correcting, a teacher still cannot clear the flag, drop the frozen paper or stop the amendment by direct update.
 update public.assessments set flag_status = null, paper = null, amending = false, status = 'draft'

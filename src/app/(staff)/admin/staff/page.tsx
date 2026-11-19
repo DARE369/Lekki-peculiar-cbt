@@ -67,7 +67,7 @@ export default async function StaffPage(props: PageProps<"/admin/staff">) {
             role="tab"
             aria-selected={filter === key}
             className={cn(
-              "rounded-full border px-3.5 py-1.5 text-sm font-semibold",
+              "rounded-md border px-3 py-1.5 text-sm font-medium",
               filter === key ? "border-brand bg-brand text-white" : "border-border hover:border-brand",
             )}
           >

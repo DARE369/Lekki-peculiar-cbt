@@ -19,7 +19,11 @@ export async function signInWithPassword(_: ActionResult, fd: FormData): Promise
 /** Supabase only sends one email per person a minute (and a few per hour overall). Say so plainly. */
 function emailError(message: string) {
   const wait = message.match(/after (\d+) seconds?/);
-  if (wait) return `An email was sent a moment ago. Please check your inbox (and spam folder), or try again in ${wait[1]} seconds.`;
+  if (wait) {
+    const secs = Number(wait[1]);
+    const when = secs > 1 ? `in ${secs} seconds` : "in a moment";
+    return `An email was sent a moment ago. Please check your inbox (and spam folder), or try again ${when}.`;
+  }
   if (/rate|limit|too many/i.test(message)) return "Too many emails have been sent just now. Please wait a few minutes and try again.";
   return message;
 }

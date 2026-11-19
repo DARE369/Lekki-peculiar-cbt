@@ -248,10 +248,10 @@ export function ExamRunner({
   if (blocked) {
     return (
       <Centered>
-        <span className="inline-flex size-16 items-center justify-center rounded-3xl bg-warning-soft text-warning">
+        <span className="inline-flex size-14 items-center justify-center rounded-full bg-warning-soft text-warning">
           <Hand className="size-8" aria-hidden />
         </span>
-        <h1 className="mt-5 text-3xl font-bold tracking-tight">Please call your supervisor</h1>
+        <h1 className="mt-5 text-3xl font-bold">Please call your supervisor</h1>
         <p className="mt-3 text-lg text-muted">{blocked}</p>
         <Button className="mt-8" size="lg" variant="secondary" onClick={onFinish}>
           Back to start
@@ -268,11 +268,11 @@ export function ExamRunner({
         {online ? (
           <span className="size-16 animate-spin rounded-full border-[6px] border-brand-soft border-t-brand" aria-hidden />
         ) : (
-          <span className="inline-flex size-16 items-center justify-center rounded-3xl bg-warning-soft text-warning">
+          <span className="inline-flex size-14 items-center justify-center rounded-full bg-warning-soft text-warning">
             <CloudOff className="size-8" aria-hidden />
           </span>
         )}
-        <h1 className="mt-6 text-3xl font-bold tracking-tight">{att.sealed.source === "timeout" ? "Time is up!" : "Submitting your exam…"}</h1>
+        <h1 className="mt-6 text-3xl font-bold">{att.sealed.source === "timeout" ? "Time is up!" : "Submitting your exam…"}</h1>
         {online ? (
           <p className="mt-3 text-lg text-muted">Sending your answers to the school server.</p>
         ) : (
@@ -289,7 +289,7 @@ export function ExamRunner({
     return (
       <Centered>
         <Avatar src={att.student.photo_url} name={att.student.name} size={112} />
-        <h1 className="mt-5 text-3xl font-bold tracking-tight">{att.student.name}</h1>
+        <h1 className="mt-5 text-3xl font-bold">{att.student.name}</h1>
         <p className="mt-1 text-lg text-muted">
           {att.assessment.subject} — {att.assessment.title}
         </p>
@@ -330,19 +330,19 @@ export function ExamRunner({
     <div className="flex min-h-screen flex-col bg-bg select-none">
       {/* Focus-leave penalty overlay */}
       {penaltySecsLeft !== null && penaltyMins > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm" aria-live="assertive">
-          <div className="mx-4 w-full max-w-sm rounded-3xl bg-surface p-8 text-center shadow-2xl">
-            <span className="inline-flex size-16 items-center justify-center rounded-3xl bg-warning-soft text-warning">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" aria-live="assertive">
+          <div className="mx-4 w-full max-w-sm rounded-xl bg-surface p-8 text-center shadow-float">
+            <span className="inline-flex size-14 items-center justify-center rounded-full bg-warning-soft text-warning">
               <EyeOff className="size-8" aria-hidden />
             </span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight">You left the exam screen</h2>
+            <h2 className="mt-4 text-2xl font-bold">You left the exam screen</h2>
             <p className="mt-2 text-muted">Please wait before you can continue.</p>
             <p className="mt-6 text-6xl font-bold tabular-nums text-warning">{fmt(penaltySecsLeft * 1000)}</p>
             <p className="mt-3 text-sm text-muted">Your exam timer is still running.</p>
           </div>
         </div>
       )}
-      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-border bg-surface/95">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Crest size={36} className="hidden sm:block" />
@@ -407,7 +407,7 @@ export function ExamRunner({
 
       <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <main className="flex flex-col">
-          <div className="flex-1 rounded-[28px] border border-border bg-surface p-6 shadow-card sm:p-9">
+          <div className="flex-1 rounded-xl border border-border bg-surface p-6 sm:p-9">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <p className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3.5 py-1.5 text-sm font-bold text-brand">
                 Question {att.current + 1} of {att.questions.length}
@@ -441,7 +441,7 @@ export function ExamRunner({
                     onClick={() => choose(o.key)}
                     className={cn(
                       "group flex w-full items-center gap-4 rounded-2xl border-2 p-4 text-left text-lg transition-all sm:p-5",
-                      selected ? "border-brand bg-brand-softer shadow-card" : "border-border hover:border-brand/50 hover:bg-surface-2/60",
+                      selected ? "border-brand bg-brand-softer" : "border-border hover:border-brand/50 hover:bg-surface-2/60",
                     )}
                   >
                     <span
@@ -479,7 +479,7 @@ export function ExamRunner({
         </main>
 
         <aside className="space-y-4">
-          <div className="rounded-[28px] border border-border bg-surface p-5 shadow-card">
+          <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex items-center justify-between">
               <p className="font-bold">Questions</p>
               <p className="text-sm font-semibold text-muted">
@@ -531,12 +531,12 @@ export function ExamRunner({
       </div>
 
       {reviewOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="review-title">
-          <div className="w-full max-w-lg rounded-[28px] bg-surface p-7 shadow-float">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="review-title">
+          <div className="w-full max-w-lg rounded-xl bg-surface p-7 shadow-float">
             <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand">
               <ClipboardCheck className="size-6" aria-hidden />
             </span>
-            <h2 id="review-title" className="mt-4 text-2xl font-bold tracking-tight">
+            <h2 id="review-title" className="mt-4 text-2xl font-bold">
               Ready to submit?
             </h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
@@ -663,10 +663,10 @@ function Finished({ att, onFinish }: { att: LocalAttempt; onFinish: () => void }
     <div className="bg-hero min-h-screen px-4 py-12">
       <div className="mx-auto max-w-3xl">
         <div className="rounded-[32px] border border-border bg-surface p-8 text-center shadow-float sm:p-12">
-          <span className="mx-auto inline-flex size-16 items-center justify-center rounded-3xl bg-success-soft text-success">
+          <span className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-success-soft text-success">
             <PartyPopper className="size-8" aria-hidden />
           </span>
-          <h1 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">{r.status === "voided" ? "This attempt was cancelled" : "Exam submitted"}</h1>
+          <h1 className="mt-5 text-3xl font-bold sm:text-4xl">{r.status === "voided" ? "This attempt was cancelled" : "Exam submitted"}</h1>
           <p className="mt-2 text-lg text-muted">
             Well done, {att.student.first_name}! {att.assessment.subject} — {att.assessment.title}
           </p>

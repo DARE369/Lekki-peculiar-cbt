@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { isConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import type { Permission, StaffRole } from "@/lib/types";
 import { PERMISSIONS } from "@/lib/types";
@@ -23,6 +24,9 @@ export interface StaffContext {
 
 /** The signed-in staff member for this request, or null. Cached per request. */
 export const getStaff = cache(async (): Promise<StaffContext | null> => {
+  // Missing Supabase settings (e.g. a Vercel Preview without its environment variables): send people to
+  // the home page, which says so, instead of crashing every staff page.
+  if (!isConfigured()) redirect("/?setup=missing");
   const supabase = await createClient();
   const {
     data: { user },

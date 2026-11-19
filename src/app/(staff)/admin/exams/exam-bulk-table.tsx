@@ -98,7 +98,7 @@ export function ExamBulkTable({
           aria-modal="true"
           aria-labelledby="bulk-start-title"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-float">
             <h2 id="bulk-start-title" className="text-base font-bold">
               Start {selectedStartable.length} exam{selectedStartable.length === 1 ? "" : "s"}?
             </h2>
@@ -217,7 +217,7 @@ export function ExamBulkTable({
 
       {/* Sticky selection bar */}
       {selectedStartable.length > 0 && (
-        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-xl">
+        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-float">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium">
               {selectedStartable.length} exam{selectedStartable.length === 1 ? "" : "s"} selected

@@ -40,6 +40,16 @@ The app runs on **Vercel** with **Supabase** (Postgres, Auth, Storage). Budget a
    (If you use Vercel's Supabase integration, the first three are filled in for you.)
 4. Deploy. Production deploys follow the repository's production branch (`main` by default) — merge the work branch into `main`, or deploy the branch as a Preview to try it first.
 
+   **Preview deployments (branches other than `main`).** Vercel only gives a deployment the variables ticked for
+   its environment. If the variables are ticked for *Production* only, a branch preview shows "This copy of the app
+   isn't connected to the school's database" and sign-in can't work. To test a branch:
+   - Vercel → Settings → Environment Variables → edit each variable above → tick **Preview** as well (or add
+     Preview-only values) → redeploy the branch (Deployments → ⋯ → Redeploy).
+   - Supabase → Authentication → URL Configuration → **Redirect URLs**: add
+     `https://*-dare369s-projects.vercel.app/**` so sign-in links and Google sign-in return to the preview.
+   - A preview uses the same database as production unless you point its variables at a separate Supabase
+     project. Apply any new migrations first.
+
 ## 3. First sign-in
 
 1. Open `https://<your-app>/setup`, enter the `SETUP_SECRET`, your name, school email and a password. This creates the **super admin**; the page then locks itself.

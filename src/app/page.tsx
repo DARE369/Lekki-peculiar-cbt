@@ -4,7 +4,7 @@ import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
 import { Alert } from "@/components/ui";
 import { brand } from "@/lib/brand";
-import { isConfigured } from "@/lib/env";
+import { envReport, isConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +28,20 @@ export default function Home() {
         {!configured ? (
           <div className="mt-6">
             <Alert tone="warning" title="This copy of the app isn't connected to the school's database">
-              Its Supabase settings (environment variables) are missing, so sign-in and staff pages can&apos;t work here. On
-              Vercel: Settings → Environment Variables → make sure each variable is ticked for this environment (Production
-              and/or Preview), then redeploy. See docs/DEPLOYMENT.md.
+              Sign-in and staff pages can&apos;t work until its Supabase settings are in place.
+              <ul className="mt-2 space-y-0.5 font-mono text-xs">
+                {envReport().map((v) => (
+                  <li key={v.name}>
+                    {v.atBuild ? "✓" : "✗"} {v.name}
+                    {!v.atBuild && v.now ? " — set now, but not when this copy was built: redeploy it" : !v.now ? " — missing" : ""}
+                  </li>
+                ))}
+              </ul>
+              <span className="mt-2 block">
+                Fix on Vercel: Settings → Environment Variables → tick the variable for this environment (Production
+                and/or Preview), then Deployments → ⋯ → Redeploy without the build cache. Values are fixed when the app is
+                built, so a redeploy is always needed after changing them.
+              </span>
             </Alert>
           </div>
         ) : null}

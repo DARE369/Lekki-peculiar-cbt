@@ -5,12 +5,20 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { fail, ok, bool, int, str, type ActionResult } from "@/lib/actions";
 import { applySubjectPicks } from "@/lib/assignments";
-import { getStructure } from "@/lib/data";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { roundOf } from "@/lib/rounds";
 import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import { OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
 import { DEFAULT_SETTINGS, TYPE_DEFAULTS, type AssessmentSettings, type AssessmentType } from "@/lib/types";
 import { lagosLocalToIso } from "@/lib/time";
+
+/** The round a label refers to (rounds are picked by label in forms). */
+async function roundIdFor(label: string | null | undefined): Promise<string | null> {
+  if (!label) return null;
+  const rounds = await getRoundConfigs();
+  return rounds.find((r) => r.label.toLowerCase() === label.toLowerCase())?.id ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Teaching assignments
@@ -371,7 +379,9 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
       settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(str(fd, "instructions") ? { instructions: str(fd, "instructions") } : {}) },
       class_ids: classIds,
       created_by: staff.id,
-      ...(str(fd, "sequence_label") ? { sequence_label: str(fd, "sequence_label").slice(0, 30) } : {}),
+      ...(str(fd, "sequence_label")
+        ? { sequence_label: str(fd, "sequence_label").slice(0, 30), round_id: await roundIdFor(str(fd, "sequence_label").slice(0, 30)) }
+        : {}),
     })
     .select("id")
     .single();
@@ -421,7 +431,7 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
   const sequenceLabel = str(fd, "sequence_label").slice(0, 30) || null;
   const { data, error } = await supabase
     .from("assessments")
-    .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}), sequence_label: sequenceLabel })
+    .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}), sequence_label: sequenceLabel, round_id: await roundIdFor(sequenceLabel) })
     .eq("id", id)
     .select("id");
   if (error) return fail(error);
@@ -456,6 +466,7 @@ export async function addAllBankQuestions(_: ActionResult, fd: FormData): Promis
   const id = str(fd, "assessment_id");
   const topicFilter = str(fd, "topic");
   const uploadFilter = str(fd, "upload");
+  const roundFilter = str(fd, "round");
   const supabase = await createClient();
   const { data: a } = await supabase.from("assessments").select("subject_id, year_id, created_by, status, amending").eq("id", id).maybeSingle();
   if (!a) return fail("Test not found.");
@@ -468,6 +479,8 @@ export async function addAllBankQuestions(_: ActionResult, fd: FormData): Promis
   if (topicFilter) qQuery = qQuery.eq("topic", topicFilter);
   if (uploadFilter === "none") qQuery = qQuery.is("upload_id", null);
   else if (uploadFilter) qQuery = qQuery.eq("upload_id", uploadFilter);
+  if (roundFilter === "none") qQuery = qQuery.is("round_id", null);
+  else if (roundFilter && roundFilter !== "all") qQuery = qQuery.eq("round_id", roundFilter);
   const { data: bank } = await qQuery.order("created_at").limit(1000);
   const toAdd = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
   if (toAdd.length === 0) return ok("All matching questions are already in this test.");
@@ -485,7 +498,7 @@ export async function autoFillAssessment(_: ActionResult, fd: FormData): Promise
   const staff = await requireStaff();
   const id = str(fd, "assessment_id");
   const supabase = await createClient();
-  const { data: a } = await supabase.from("assessments").select("subject_id, year_id, question_count, created_by, status").eq("id", id).maybeSingle();
+  const { data: a } = await supabase.from("assessments").select("subject_id, year_id, question_count, created_by, status, round_id, sequence_label").eq("id", id).maybeSingle();
   if (!a) return fail("Test not found.");
   if (a.created_by !== staff.id && !staff.isAdmin && !staff.isSuperAdmin) return fail("Not authorised.");
   if (!["draft", "changes_requested"].includes(a.status)) return fail("This test can't be edited right now.");
@@ -494,10 +507,16 @@ export async function autoFillAssessment(_: ActionResult, fd: FormData): Promise
   if (needed <= 0) return ok(`Already has ${current} questions — enough for this test.`);
   const { data: existing } = await supabase.from("assessment_questions").select("question_id").eq("assessment_id", id);
   const existingIds = new Set((existing ?? []).map((r) => r.question_id as string));
-  const { data: bank } = await supabase.from("questions").select("id").eq("subject_id", a.subject_id).eq("archived", false).or(`year_id.eq.${a.year_id},year_id.is.null`);
-  const available = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
+  const { data: bank } = await supabase.from("questions").select("id, round_id").eq("subject_id", a.subject_id).eq("archived", false).or(`year_id.eq.${a.year_id},year_id.is.null`);
+  // Never mix rounds: this test's round first, then questions not sorted into any round yet.
+  const paperRound = roundOf(a, await getRoundConfigs())?.id ?? null;
+  const fresh = (bank ?? []).filter((q) => !existingIds.has(q.id as string));
+  const shuffle = <T,>(xs: T[]) => xs.sort(() => Math.random() - 0.5);
+  const available = paperRound
+    ? [...shuffle(fresh.filter((q) => q.round_id === paperRound)), ...shuffle(fresh.filter((q) => !q.round_id))]
+    : shuffle(fresh);
   if (available.length === 0) return fail("No more questions in the bank for this subject.");
-  const shuffled = available.sort(() => Math.random() - 0.5).slice(0, needed);
+  const shuffled = available.slice(0, needed);
   const basePos = (current ?? 0) + 1;
   const { error } = await supabase.from("assessment_questions").upsert(
     shuffled.map((q, i) => ({ assessment_id: id, question_id: q.id, position: basePos + i })),
@@ -729,6 +748,8 @@ export async function createBatchAssessments(_: ActionResult, fd: FormData): Pro
   const s = await getStructure();
   const type = (str(fd, "type") || "test") as AssessmentType;
   if (!TYPE_DEFAULTS[type]) return fail("Choose a type.");
+  const batchLabel = str(fd, "sequence_label").slice(0, 30) || null;
+  const batchRound = await roundIdFor(batchLabel);
   const termId = s.currentTerm?.id;
   if (!termId) return fail("No current term is set — ask the super admin.");
   const instructions = str(fd, "instructions");
@@ -781,7 +802,7 @@ export async function createBatchAssessments(_: ActionResult, fd: FormData): Pro
         settings: { ...DEFAULT_SETTINGS, require_all_answered: type === "exam", ...(instructions ? { instructions } : {}) },
         class_ids: g.classIds,
         created_by: staff.id,
-        ...(str(fd, "sequence_label") ? { sequence_label: str(fd, "sequence_label").slice(0, 30) } : {}),
+        ...(batchLabel ? { sequence_label: batchLabel, round_id: batchRound } : {}),
       })
       .select("id")
       .single();
@@ -791,4 +812,100 @@ export async function createBatchAssessments(_: ActionResult, fd: FormData): Pro
   revalidatePath("/teach/assessments");
   if (created.length === 1) redirect(`/teach/assessments/${created[0]}`);
   redirect("/teach/assessments");
+}
+
+// ---------------------------------------------------------------------------
+// Rounds for questions
+// ---------------------------------------------------------------------------
+/** Moves the ticked questions into a round (only the teacher's own, or any in an admin's section — RLS decides). */
+export async function moveQuestionsToRound(ids: string[], roundId: string): Promise<ActionResult> {
+  await requireStaff();
+  if (!ids.length || ids.length > 1000) return fail("Tick the questions to move.");
+  const rounds = await getRoundConfigs();
+  const round = rounds.find((r) => r.id === roundId);
+  if (!round) return fail("Choose a round.");
+  const s = await getStructure();
+  const supabase = await createClient();
+  let moved = 0;
+  for (let i = 0; i < ids.length; i += 150) {
+    const part = ids.slice(i, i + 150);
+    const { error, count } = await supabase
+      .from("questions")
+      .update({ round_id: round.id, term_id: s.currentTerm?.id ?? null }, { count: "exact" })
+      .in("id", part);
+    if (error) return fail(error, "questions.move_round");
+    moved += count ?? 0;
+  }
+  revalidatePath("/teach/questions");
+  if (moved < ids.length) return ok(`${moved} moved to ${round.label}. ${ids.length - moved} weren't yours to move.`);
+  return ok(`${moved} question${moved === 1 ? "" : "s"} moved to ${round.label}.`);
+}
+
+/**
+ * Sorts a teacher's older questions (from before rounds) into rounds, but only when it's certain:
+ * a question used in tests of exactly one round goes to that round. Nothing else is touched.
+ */
+export async function autoSortIntoRounds(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const subjectId = str(fd, "subject_id");
+  const yearId = str(fd, "year_id");
+  const supabase = await createClient();
+  const rounds = await getRoundConfigs();
+
+  const unsorted: string[] = [];
+  for (let from = 0; ; from += 1000) {
+    let q = supabase.from("questions").select("id").eq("owner_id", staff.id).eq("subject_id", subjectId).eq("archived", false).is("round_id", null).range(from, from + 999);
+    if (yearId) q = q.or(`year_id.eq.${yearId},year_id.is.null`);
+    const { data } = await q;
+    unsorted.push(...(data ?? []).map((r) => r.id as string));
+    if (!data || data.length < 1000) break;
+  }
+  if (!unsorted.length) return ok("Everything is already in a round.");
+
+  const links: { question_id: string; assessment_id: string }[] = [];
+  for (let i = 0; i < unsorted.length; i += 150) {
+    const { data } = await supabase.from("assessment_questions").select("question_id, assessment_id").in("question_id", unsorted.slice(i, i + 150));
+    links.push(...((data ?? []) as typeof links));
+  }
+  const aIds = [...new Set(links.map((l) => l.assessment_id))];
+  const papers = new Map<string, { round: string | null; term: string }>();
+  for (let i = 0; i < aIds.length; i += 150) {
+    const { data } = await supabase.from("assessments").select("id, round_id, sequence_label, term_id").in("id", aIds.slice(i, i + 150));
+    for (const a of data ?? []) {
+      const r = a.round_id ? rounds.find((x) => x.id === a.round_id) : rounds.find((x) => x.label.toLowerCase() === String(a.sequence_label ?? "").toLowerCase());
+      papers.set(a.id as string, { round: r?.id ?? null, term: a.term_id as string });
+    }
+  }
+  // question → the single (round, term) all its papers agree on
+  const target = new Map<string, string>();
+  const byQ = new Map<string, Set<string>>();
+  for (const l of links) {
+    const p = papers.get(l.assessment_id);
+    const key = p?.round ? `${p.round}|${p.term}` : "?";
+    if (!byQ.has(l.question_id)) byQ.set(l.question_id, new Set());
+    byQ.get(l.question_id)!.add(key);
+  }
+  for (const [qid, keys] of byQ) if (keys.size === 1 && !keys.has("?")) target.set(qid, [...keys][0]);
+
+  const groups = new Map<string, string[]>();
+  for (const [qid, key] of target) {
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(qid);
+  }
+  let sorted = 0;
+  for (const [key, qids] of groups) {
+    const [round_id, term_id] = key.split("|");
+    for (let i = 0; i < qids.length; i += 150) {
+      const { error, count } = await supabase.from("questions").update({ round_id, term_id }, { count: "exact" }).in("id", qids.slice(i, i + 150));
+      if (error) return fail(error, "questions.auto_sort");
+      sorted += count ?? 0;
+    }
+  }
+  revalidatePath("/teach/questions");
+  const left = unsorted.length - sorted;
+  return ok(
+    sorted
+      ? `Sorted ${sorted} question${sorted === 1 ? "" : "s"} into the round of the test they're used in.${left ? ` ${left} weren't used in a test with a round — tick them and choose Move to round.` : ""}`
+      : `None of these are used in a test with a round, so they couldn't be sorted automatically. Tick them and choose Move to round.`,
+  );
 }

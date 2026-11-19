@@ -4,7 +4,10 @@ import Link from "next/link";
 import { Card, EmptyState, Input, LinkButton, PageHeader, Select, cn } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
 import { requireStaff } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { roundsForSection } from "@/lib/rounds";
+import { ActionForm, SubmitButton } from "@/components/forms";
+import { autoSortIntoRounds } from "../actions";
 import { teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
 import { QuestionBulkTable } from "./bulk-delete";
@@ -66,6 +69,8 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const topic = typeof sp.topic === "string" ? sp.topic : "";
   const uploadParam = typeof sp.upload === "string" ? sp.upload : "";
+  const roundParam = typeof sp.round === "string" ? sp.round : "";
+  const allRounds = await getRoundConfigs();
   const page = Math.max(1, Number(sp.page) || 1);
 
   let questions: QuestionRow[] = [];
@@ -74,12 +79,30 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
   let uploads: UploadInfo[] = [];
   let untrackedCount = 0;
   let allCount = 0;
+  const roundCounts = new Map<string, number>();
+  let unsortedCount = 0;
   if (active) {
     const yearFilter = `year_id.eq.${active.yearId},year_id.is.null`;
+    // How many questions are in each round (and how many aren't sorted yet).
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase
+        .from("questions")
+        .select("round_id")
+        .eq("owner_id", staff.id)
+        .eq("subject_id", active.subjectId)
+        .eq("archived", false)
+        .or(yearFilter)
+        .range(from, from + 999);
+      for (const r of data ?? []) {
+        if (r.round_id) roundCounts.set(r.round_id as string, (roundCounts.get(r.round_id as string) ?? 0) + 1);
+        else unsortedCount += 1;
+      }
+      if (!data || data.length < 1000) break;
+    }
     const [upRes, untrackedRes, allRes, tRows] = await Promise.all([
       supabase
         .from("question_uploads")
-        .select("id, label, created_at, file_name, assessment_id, found_count, imported_count, linked_count, duplicate_count, removed_count, unreadable_count, issues, questions(count)")
+        .select("id, label, created_at, file_name, assessment_id, round_id, found_count, imported_count, linked_count, duplicate_count, removed_count, unreadable_count, issues, questions(count)")
         .eq("owner_id", staff.id)
         .eq("subject_id", active.subjectId)
         .or(yearFilter)
@@ -116,6 +139,8 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
       .or(yearFilter)
       .order("created_at", { ascending: uploadParam !== "" && uploadParam !== "none" })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    if (roundParam === "none") qQuery = qQuery.is("round_id", null);
+    else if (roundParam) qQuery = qQuery.eq("round_id", roundParam);
     if (uploadParam === "none") qQuery = qQuery.is("upload_id", null);
     else if (uploadParam) qQuery = qQuery.eq("upload_id", uploadParam);
     if (q) qQuery = qQuery.ilike("body", `%${q.replace(/[%_]/g, "\\$&")}%`);
@@ -125,6 +150,8 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
     total = count ?? questions.length;
   }
   const selectedUpload = uploads.find((u) => u.id === uploadParam) ?? null;
+  const activeSection = active ? s.subjectById.get(active.subjectId)?.section_id : null;
+  const sectionRounds = roundsForSection(allRounds, activeSection, true).filter((r) => r.is_active || roundCounts.has(r.id));
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const base = active ? `/teach/questions?subject=${active.subjectId}&year=${active.yearId}` : "/teach/questions";
   const withParams = (extra: Record<string, string | number | undefined>) => {
@@ -133,7 +160,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
       p.set("subject", active.subjectId);
       p.set("year", active.yearId);
     }
-    const merged = { upload: uploadParam || undefined, q: q || undefined, topic: topic || undefined, ...extra };
+    const merged = { round: roundParam || undefined, upload: uploadParam || undefined, q: q || undefined, topic: topic || undefined, ...extra };
     for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== "") p.set(k, String(v));
     return `/teach/questions?${p.toString()}`;
   };
@@ -252,10 +279,38 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                     </p>
                   </div>
 
+                  {/* Rounds first: exam questions never mix with CA questions. */}
+                  <nav aria-label="Rounds" className="flex flex-wrap gap-x-5 gap-y-1 border-b border-border">
+                    <RoundTab href={withParams({ round: undefined, upload: undefined, page: undefined })} active={!roundParam} label="All rounds" count={allCount} />
+                    {sectionRounds.map((r) => (
+                      <RoundTab key={r.id} href={withParams({ round: r.id, upload: undefined, page: undefined })} active={roundParam === r.id} label={r.label} count={roundCounts.get(r.id) ?? 0} />
+                    ))}
+                    {unsortedCount ? (
+                      <RoundTab href={withParams({ round: "none", upload: undefined, page: undefined })} active={roundParam === "none"} label="Not sorted yet" count={unsortedCount} warn />
+                    ) : null}
+                  </nav>
+
+                  {roundParam === "none" && unsortedCount ? (
+                    <Card className="p-4 sm:p-5">
+                      <p className="font-medium">{unsortedCount} question{unsortedCount === 1 ? " isn't" : "s aren't"} in a round yet</p>
+                      <p className="mt-1 text-sm text-muted">
+                        These were added before rounds. <strong className="font-medium text-text">Sort automatically</strong> puts each question that&apos;s used in a test into that test&apos;s round. For the rest, tick them below and choose <strong className="font-medium text-text">Move to round</strong>. Nothing changes until you do.
+                      </p>
+                      <ActionForm action={autoSortIntoRounds} className="mt-3">
+                        <input type="hidden" name="subject_id" value={active.subjectId} />
+                        <input type="hidden" name="year_id" value={active.yearId} />
+                        <SubmitButton size="sm" variant="secondary">Sort automatically</SubmitButton>
+                      </ActionForm>
+                    </Card>
+                  ) : null}
+
                   {/* Uploads: every file or paste is its own set */}
                   <nav aria-label="Uploads" className="-mx-1 flex flex-wrap gap-1.5 px-1">
                     <UploadTab href={withParams({ upload: undefined, page: undefined })} active={!uploadParam} label="All questions" count={allCount} />
-                    {uploads.filter((u) => u.count > 0 || u.unreadable_count > 0 || u.id === uploadParam).map((u) => (
+                    {uploads
+                      .filter((u) => u.count > 0 || u.unreadable_count > 0 || u.id === uploadParam)
+                      .filter((u) => !roundParam || (roundParam === "none" ? !u.round_id : u.round_id === roundParam) || u.id === uploadParam)
+                      .map((u) => (
                       <UploadTab
                         key={u.id}
                         href={withParams({ upload: u.id, page: undefined })}
@@ -312,7 +367,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                         action={!q && !topic ? <LinkButton href={uploadHref}>Upload questions</LinkButton> : undefined}
                       />
                     ) : (
-                      <QuestionBulkTable key={`${uploadParam}:${page}:${q}:${topic}`} questions={questions} />
+                      <QuestionBulkTable key={`${roundParam}:${uploadParam}:${page}:${q}:${topic}`} questions={questions} rounds={sectionRounds.map((r) => ({ id: r.id, label: r.label }))} />
                     )}
                   </Card>
 
@@ -354,6 +409,22 @@ function UploadTab({ href, active, label, count, flag }: { href: string; active:
       <span className="truncate">{label}</span>
       <span className={cn("tabular-nums text-xs", active ? "text-brand" : "text-muted")}>{count}</span>
       {flag ? <span className="size-1.5 rounded-full bg-warning" title="Some questions in this upload couldn't be read" /> : null}
+    </Link>
+  );
+}
+
+function RoundTab({ href, active, label, count, warn }: { href: string; active: boolean; label: string; count: number; warn?: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "-mb-px inline-flex items-center gap-1.5 border-b-2 py-2 text-sm",
+        active ? "border-brand font-semibold text-text" : "border-transparent text-muted hover:text-text",
+      )}
+    >
+      {label}
+      <span className={cn("text-xs tabular-nums", warn ? "text-warning" : "text-subtle")}>{count}</span>
     </Link>
   );
 }

@@ -13,6 +13,7 @@ export interface UploadInfo {
   created_at: string;
   file_name: string | null;
   assessment_id: string | null;
+  round_id: string | null;
   testTitle: string | null;
   count: number;
   found_count: number;

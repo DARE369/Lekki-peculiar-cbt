@@ -7,6 +7,8 @@ import { Braces, Check, ClipboardCheck, ClipboardPaste, Copy, FileSpreadsheet, F
 import { Alert, Badge, Button, Card, CardHeader, Field, Input, LinkButton, Select, Textarea, cn } from "@/components/ui";
 import { OPTION_KEYS, looksLikeJson, parseCsv, parseText, questionFingerprint, type IssueCode, type ParseResult, type ParsedQuestion } from "@/lib/import/questions";
 import type { Subject, Year } from "@/lib/types";
+import type { RoundConfig } from "@/lib/data";
+import { roundsForSection } from "@/lib/rounds";
 import { checkImportDuplicates, commitImport, type BankMatch, type ImportReceipt } from "../../import-actions";
 
 type Draft = ParsedQuestion & { forceNew?: boolean };
@@ -132,6 +134,8 @@ export function ImportWizard({
   defaultYear,
   assessmentId,
   assessmentTitle,
+  rounds,
+  defaultRound,
 }: {
   subjects: Subject[];
   years: Year[];
@@ -139,11 +143,14 @@ export function ImportWizard({
   defaultYear?: string;
   assessmentId?: string;
   assessmentTitle?: string;
+  rounds: RoundConfig[];
+  defaultRound?: string;
 }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(defaultSubject ?? subjects[0]?.id ?? "");
   const [yearId, setYearId] = useState(defaultYear ?? "");
   const [label, setLabel] = useState(assessmentTitle ?? "");
+  const [roundId, setRoundId] = useState(defaultRound ?? "");
   const [removed, setRemoved] = useState(0);
   const [matches, setMatches] = useState<Map<string, BankMatch>>(new Map());
   const [checking, setChecking] = useState(false);
@@ -163,6 +170,8 @@ export function ImportWizard({
 
   const subject = subjects.find((s) => s.id === subjectId);
   const sectionYears = years.filter((y) => y.section_id === subject?.section_id);
+  const sectionRounds = roundsForSection(rounds, subject?.section_id, true).filter((r) => r.is_active || r.id === roundId);
+  const round = rounds.find((r) => r.id === roundId);
   const current = FORMATS.find((f) => f.id === format)!;
 
   function show(result: ParseResult, name: string) {
@@ -311,7 +320,8 @@ export function ImportWizard({
         subjectId,
         yearId: yearId || null,
         assessmentId: assessmentId ?? null,
-        label: label.trim(),
+        roundId: roundId || null,
+        label: label.trim() || (round ? `${round.label} — ${subject?.name ?? ""}`.trim() : ""),
         fileName: fileName === "pasted text" ? null : fileName,
         format: fileName ? formatOf(fileName) : null,
         questions: questions ?? [],
@@ -352,7 +362,7 @@ export function ImportWizard({
     <div className="space-y-6">
       <Card>
         <CardHeader title="1. Where do these questions belong?" />
-        <div className="grid gap-4 p-5 sm:grid-cols-3">
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
           <Field label="Subject">
             <Select
               value={subjectId}
@@ -381,12 +391,24 @@ export function ImportWizard({
               ))}
             </Select>
           </Field>
-          <Field label="Name this upload" hint="You'll find it by this name in the bank and when building tests.">
+          <Field label="Which round are these for?" hint={assessmentId ? "Set by the test you're uploading into." : "Keeps exam questions apart from CA questions."}>
+            <Select value={roundId} onChange={(e) => setRoundId(e.target.value)} disabled={Boolean(assessmentId)} required>
+              <option value="" disabled>
+                Choose a round…
+              </option>
+              {sectionRounds.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Name this upload" hint="Optional. You'll find it by this name in the bank.">
             <Input
               value={label}
               maxLength={80}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder={`e.g. 1st CA — ${subject?.name ?? "Maths"}`}
+              placeholder={round ? `${round.label} — ${subject?.name ?? ""}` : `e.g. 1st CA — ${subject?.name ?? "Maths"}`}
             />
           </Field>
         </div>
@@ -524,7 +546,7 @@ export function ImportWizard({
               </>
             }
             actions={
-              <Button onClick={save} disabled={pending || checking || questions.length === 0 || !subjectId}>
+              <Button onClick={save} disabled={pending || checking || questions.length === 0 || !subjectId || (!assessmentId && !roundId)}>
                 {pending ? "Saving…" : `Save ${questions.length} question${questions.length === 1 ? "" : "s"}`}
               </Button>
             }
@@ -561,6 +583,11 @@ export function ImportWizard({
                   </ul>
                 </Alert>
               ))}
+            </div>
+          ) : null}
+          {!assessmentId && !roundId ? (
+            <div className="px-5 pt-4">
+              <Alert tone="warning">Choose which round these questions are for in step 1, then save.</Alert>
             </div>
           ) : null}
           {firstProblem >= 0 ? (

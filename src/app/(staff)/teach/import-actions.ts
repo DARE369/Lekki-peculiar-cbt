@@ -1,10 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { roundOf } from "@/lib/rounds";
+import { logError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
 import { parsedQuestionSchema, questionFingerprint, type ParsedQuestion } from "@/lib/import/questions";
 
@@ -106,6 +107,8 @@ const commitSchema = z.object({
   subjectId: z.string().uuid(),
   yearId: z.string().uuid().nullable(),
   assessmentId: z.string().uuid().nullable(),
+  /** the round these questions are for (taken from the test when uploading into one) */
+  roundId: z.string().uuid().nullable(),
   label: z.string().trim().max(80),
   fileName: z.string().max(200).nullable(),
   format: z.enum(["paste", "word", "excel", "csv", "json", "text"]).nullable(),
@@ -135,14 +138,13 @@ export type CommitResult = { ok: true; receipt: ImportReceipt } | { ok: false; e
 
 /** Friendly message for a failed save, plus a reference code that is also written to the server log. */
 function saveFailed(err: unknown, context: Record<string, unknown>): CommitResult {
-  const ref = randomUUID().slice(0, 6).toUpperCase();
   const raw = err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
-  console.error(`[import ${ref}]`, raw, JSON.stringify(context));
   let error = "Your questions couldn't be saved. Nothing was saved, so you can safely try again.";
   if (raw.includes("can no longer be changed")) error = "This test has been submitted or approved, so questions can't be added to it. Nothing was saved.";
   else if (raw.includes("same section")) error = "That year group isn't in the same section as the subject. Choose the year group again. Nothing was saved.";
   else if (raw.includes("row-level security") || raw.includes("permission")) error = "You can only upload questions for subjects you teach (or have asked to teach). Nothing was saved.";
   else if (raw.includes("different subject")) error = "This test is for a different subject. Nothing was saved.";
+  const ref = logError({ area: "questions.import", error: err, shown: error, detail: context });
   return { ok: false, error, ref };
 }
 
@@ -164,6 +166,22 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
   if (questions.length === 0 && unreadable.length === 0) return { ok: false, error: "There are no questions to import." };
 
   const supabase = await createClient();
+
+  // Which round and term the questions belong to: the test's when uploading into one, else the teacher's choice.
+  const rounds = await getRoundConfigs();
+  let roundId = parsed.data.roundId;
+  let termId = s.currentTerm?.id ?? null;
+  if (assessmentId) {
+    const { data: a } = await supabase.from("assessments").select("round_id, sequence_label, term_id").eq("id", assessmentId).maybeSingle();
+    if (a) {
+      roundId = roundOf(a, rounds)?.id ?? roundId;
+      termId = a.term_id ?? termId;
+    }
+  } else if (!roundId) {
+    return { ok: false, error: "Choose which round these questions are for (for example 1st CA or Exam)." };
+  }
+  if (roundId && !rounds.some((r) => r.id === roundId)) return { ok: false, error: "That round no longer exists. Choose another." };
+
   let bank: Map<string, ExistingRow>;
   try {
     bank = await ownBank(supabase, staff.id, subjectId, yearId);
@@ -207,6 +225,8 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
       subject_id: subjectId,
       year_id: yearId,
       assessment_id: assessmentId,
+      round_id: roundId,
+      term_id: termId,
       label,
       file_name: fileName,
       source_format: format,

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Upload } from "lucide-react";
 import { Card, EmptyState, LinkButton, PageHeader } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { roundOf } from "@/lib/rounds";
 import { labelSubjects, teachableSubjects } from "@/lib/scope";
 import { createClient } from "@/lib/supabase/server";
 import { ImportWizard } from "./import-wizard";
@@ -17,13 +18,16 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
   let subjectId = typeof sp.subject === "string" ? sp.subject : undefined;
   let yearId = typeof sp.year === "string" ? sp.year : undefined;
   const assessmentId = typeof sp.assessment === "string" ? sp.assessment : undefined;
+  const rounds = await getRoundConfigs();
   let assessmentTitle: string | undefined;
+  let roundId = typeof sp.round === "string" ? sp.round : undefined;
   if (assessmentId) {
     const supabase = await createClient();
-    const { data } = await supabase.from("assessments").select("subject_id, year_id, title").eq("id", assessmentId).maybeSingle();
+    const { data } = await supabase.from("assessments").select("subject_id, year_id, title, round_id, sequence_label").eq("id", assessmentId).maybeSingle();
     subjectId = data?.subject_id ?? subjectId;
     yearId = data?.year_id ?? yearId;
     assessmentTitle = data?.title ?? undefined;
+    roundId = data ? (roundOf(data, rounds)?.id ?? roundId) : roundId;
   }
   return (
     <div>
@@ -45,6 +49,8 @@ export default async function ImportPage(props: PageProps<"/teach/questions/impo
           defaultYear={yearId}
           assessmentId={assessmentId}
           assessmentTitle={assessmentTitle}
+          rounds={rounds.filter((r) => r.is_active || r.id === roundId)}
+          defaultRound={roundId ?? rounds.find((r) => r.is_default && r.is_active)?.id}
         />
       )}
     </div>

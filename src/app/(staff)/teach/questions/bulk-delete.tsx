@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Table, Td, Th, cn } from "@/components/ui";
 import type { QuestionOption } from "@/lib/types";
-import { confirmBulkDelete, previewBulkDelete } from "../actions";
+import { confirmBulkDelete, moveQuestionsToRound, previewBulkDelete } from "../actions";
 
 type Question = {
   id: string;
@@ -20,7 +20,8 @@ type PreviewResult = Awaited<ReturnType<typeof previewBulkDelete>>;
 
 const DIFF = ["", "Easy", "Medium", "Hard"] as const;
 
-export function QuestionBulkTable({ questions }: { questions: Question[] }) {
+export function QuestionBulkTable({ questions, rounds = [] }: { questions: Question[]; rounds?: { id: string; label: string }[] }) {
+  const [moveTo, setMoveTo] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
@@ -73,6 +74,20 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
   }
 
   const dismissNotice = useCallback(() => setNotice(null), []);
+
+  function moveSelected() {
+    if (!moveTo || !selected.size) return;
+    startTransition(async () => {
+      const res = await moveQuestionsToRound([...selected], moveTo);
+      if (res?.ok) {
+        setNotice({ tone: "success", text: res.message ?? "Moved." });
+        setSelected(new Set());
+        router.refresh();
+      } else {
+        setNotice({ tone: "warning", text: res?.error ?? "Couldn't move them." });
+      }
+    });
+  }
 
   if (questions.length === 0) return null;
 
@@ -247,6 +262,30 @@ export function QuestionBulkTable({ questions }: { questions: Question[] }) {
             >
               Clear
             </button>
+            {rounds.length ? (
+              <span className="flex items-center gap-1.5">
+                <select
+                  value={moveTo}
+                  onChange={(e) => setMoveTo(e.target.value)}
+                  aria-label="Round to move the ticked questions to"
+                  className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm"
+                >
+                  <option value="">Move to round…</option>
+                  {rounds.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={moveSelected}
+                  disabled={pending || !moveTo}
+                  className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium hover:bg-surface-2 disabled:opacity-50"
+                >
+                  Move
+                </button>
+              </span>
+            ) : null}
             <button
               onClick={() => openPreview()}
               disabled={pending}

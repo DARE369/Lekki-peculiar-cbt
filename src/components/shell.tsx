@@ -24,6 +24,8 @@ import {
   type LucideIcon,
   ListChecks,
   Tag,
+  TriangleAlert,
+  LayoutGrid,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
@@ -46,6 +48,8 @@ const ICONS = {
   staff: UserCog,
   sessions: ShieldCheck,
   rounds: Tag,
+  problems: TriangleAlert,
+  papers: LayoutGrid,
 } satisfies Record<string, LucideIcon>;
 export type NavIcon = keyof typeof ICONS;
 

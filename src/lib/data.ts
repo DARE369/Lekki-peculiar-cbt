@@ -86,6 +86,14 @@ export interface RoundConfig {
   sort_order: number;
   is_active: boolean;
   is_default: boolean;
+  /** 'test' | 'exam'; null = guessed from the label (see lib/rounds) */
+  kind?: "test" | "exam" | null;
+  /** false for mocks/practice */
+  counts_to_result?: boolean;
+  /** sections this round is for; empty = all */
+  section_ids?: string[];
+  question_count?: number | null;
+  duration_minutes?: number | null;
 }
 
 /** Active CA round configs, ordered by sort_order. Cached per request. */

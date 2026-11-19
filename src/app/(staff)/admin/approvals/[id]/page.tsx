@@ -8,7 +8,7 @@ import { can, requireAdmin } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
+import { DEFAULT_SETTINGS, markingSummary, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
 import { reopenAssessment, reviewAssessment, scheduleClasses } from "../../actions";
 import { ScheduleFields } from "../schedule-fields";
 
@@ -108,6 +108,13 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
               <dd>{settings.require_all_answered ? "Yes" : "No"}</dd>
               <dt className="text-muted">Students see</dt>
               <dd>{{ none: "Nothing", score: "Score", full: "Score + corrections" }[settings.show_result]}</dd>
+              <dt className="text-muted">Marks</dt>
+              <dd>
+                {(() => {
+                  const m = markingSummary(settings, a.question_count);
+                  return m.mode === "total" ? `Out of ${m.outOf} (${m.perQuestion} per question)` : `${m.perQuestion} per question, out of ${m.outOf}`;
+                })()}
+              </dd>
               <dt className="text-muted">Pass mark</dt>
               <dd>{settings.pass_mark}%</dd>
             </dl>

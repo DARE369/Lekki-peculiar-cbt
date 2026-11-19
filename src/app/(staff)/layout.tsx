@@ -38,9 +38,9 @@ export default async function StaffLayout({ children }: { children: React.ReactN
           title: "Teaching",
           items: [
             { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+            { href: "/teach/questions", label: "Question bank", icon: "questions" },
             { href: "/teach/papers", label: "This term's papers", icon: "papers" },
             { href: "/teach/classes", label: "My classes", icon: "classes" },
-            { href: "/teach/questions", label: "Question bank", icon: "questions" },
             { href: "/teach/assessments", label: "Tests & exams", icon: "tests" },
             { href: "/reports", label: "Reports", icon: "reports" },
           ],

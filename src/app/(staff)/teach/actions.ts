@@ -146,7 +146,7 @@ export async function deleteQuestion(fd: FormData) {
     const active = ((wins ?? []) as unknown as WC[]).some((w) =>
       ["live", "paused", "awaiting_start", "scheduled"].includes(windowState(w)),
     );
-    if (active) return; // silently refuse; the bulk-delete UI explains why
+    if (active) return; // silently refuse; the bank delete dialog explains why
   }
 
   if (aIds.length > 0) {
@@ -163,7 +163,7 @@ type BulkPreview = {
 };
 
 /** Returns which questions can be safely deleted vs which are blocked by active/upcoming exams. */
-const MAX_DELETE = 1000;
+const MAX_DELETE = 5000;
 
 /** Splits long id lists so each request stays a sensible size. */
 function chunks<T>(list: T[], size = 150): T[][] {
@@ -403,9 +403,23 @@ export async function createAssessment(_: ActionResult, fd: FormData): Promise<A
   redirect(`/teach/assessments/${data.id}${added ? `?added=${added}` : ""}`);
 }
 
+/** Parses a decimal like "0.5" or "2,5"; null when empty or not a number. */
+function num(fd: FormData, key: string): number | null {
+  const raw = str(fd, key).replace(",", ".");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Saves the test's settings. Called by the settings panel as the teacher types (auto-save). */
 export async function updateAssessmentSettings(_: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireStaff();
   const id = str(fd, "id");
+  const marksMode = str(fd, "marks_mode") === "total" ? "total" : "per_question";
+  const perQ = num(fd, "marks_per_question") ?? 1;
+  const total = num(fd, "total_marks");
+  if (perQ < 0.1 || perQ > 100) return fail("Marks per question must be between 0.1 and 100.");
+  if (marksMode === "total" && (total === null || total < 1 || total > 1000)) return fail("Enter what the test is out of (between 1 and 1000).");
   const settings: AssessmentSettings = {
     shuffle_questions: bool(fd, "shuffle_questions"),
     shuffle_options: bool(fd, "shuffle_options"),
@@ -414,13 +428,15 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
     allow_back: bool(fd, "allow_back"),
     show_result: (["none", "score", "full"].includes(str(fd, "show_result")) ? str(fd, "show_result") : "score") as AssessmentSettings["show_result"],
     pass_mark: Math.min(100, Math.max(0, int(fd, "pass_mark", 50))),
-    marks_per_question: Math.min(10, Math.max(1, int(fd, "marks_per_question", 1))),
+    marks_mode: marksMode,
+    marks_per_question: Math.round(perQ * 10) / 10,
+    total_marks: marksMode === "total" && total !== null ? Math.round(total * 10) / 10 : null,
     instructions: str(fd, "instructions").slice(0, 3000),
   };
   const questionCount = int(fd, "question_count", 0);
   const duration = int(fd, "duration_minutes", 0);
   if (questionCount < 1 || questionCount > 200) return fail("Number of questions must be between 1 and 200.");
-  if (duration < 1 || duration > 600) return fail("Duration must be between 1 and 600 minutes.");
+  if (duration < 1 || duration > 600) return fail("Time must be between 1 and 600 minutes.");
   const title = str(fd, "title");
   if (!title) return fail("Give it a title.");
   const rawType = str(fd, "type") as AssessmentType;
@@ -434,10 +450,32 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
     .update({ title, topic, settings, question_count: questionCount, duration_minutes: duration, ...(type ? { type } : {}), sequence_label: sequenceLabel, round_id: await roundIdFor(sequenceLabel) })
     .eq("id", id)
     .select("id");
-  if (error) return fail(error);
-  if (!data?.length) return fail("This assessment can't be edited any more (it has been submitted or approved).");
+  if (error) return fail(error, "assessment.settings");
+  if (!data?.length) return fail("This test can't be edited any more (it has been submitted or approved).");
   revalidatePath(`/teach/assessments/${id}`);
-  return ok("Settings saved.");
+  return ok("Saved.");
+}
+
+export type PaperChecklist = { blockers: string[]; warnings: string[] };
+
+/** What must be fixed before a test can go for review, and what is worth a second look. */
+export async function paperChecklist(id: string): Promise<PaperChecklist> {
+  await requireStaff();
+  const supabase = await createClient();
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const problem = await paperProblems(supabase, id);
+  if (problem) blockers.push(problem);
+  const { data: a } = await supabase.from("assessments").select("topic, settings, question_count, duration_minutes").eq("id", id).maybeSingle();
+  if (a) {
+    const st = { ...DEFAULT_SETTINGS, ...(a.settings ?? {}) } as AssessmentSettings;
+    if (!st.instructions?.trim()) warnings.push("There are no instructions for students.");
+    if (!a.topic?.trim()) warnings.push("No topic is set. It helps the reviewer and appears in reports.");
+    if ((st.marks_mode ?? "per_question") === "per_question" && (st.marks_per_question ?? 1) === 1) {
+      warnings.push(`Marks are still the default: 1 mark per question, so the test is out of ${a.question_count}. Change this under Marks if it should be out of something else.`);
+    }
+  }
+  return { blockers, warnings };
 }
 
 export async function addQuestionsToAssessment(_: ActionResult, fd: FormData): Promise<ActionResult> {

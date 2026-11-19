@@ -21,7 +21,7 @@ export function RoundField({
 
   if (disabled) {
     return (
-      <Field label="CA round">
+      <Field label="Round">
         <input type="hidden" name="sequence_label" value={value} />
         <div className="flex flex-wrap gap-1.5">
           {presets.map((p) => (
@@ -45,8 +45,8 @@ export function RoundField({
 
   return (
     <Field
-      label="CA round"
-      hint={activeRounds.length > 0 ? "Groups this test with others in the same CA round." : "Groups this test with others of the same label this term."}
+      label="Round"
+      hint={activeRounds.length > 0 ? "Which round this test is for (1st CA, Exam…)." : "Groups this test with others of the same label this term."}
     >
       <input type="hidden" name="sequence_label" value={value} />
       <div className="flex flex-wrap gap-1.5">

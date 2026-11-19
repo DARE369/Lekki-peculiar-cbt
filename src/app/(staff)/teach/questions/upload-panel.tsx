@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Alert, Button, Card, Input, LinkButton } from "@/components/ui";
+import { Alert, Button, Card, Input } from "@/components/ui";
 import { confirmUploadDelete, previewUploadDelete, renameUpload } from "../actions";
+import { makeTestFromQuestions } from "../bank-actions";
 
 export interface UploadInfo {
   id: string;
@@ -14,6 +15,7 @@ export interface UploadInfo {
   file_name: string | null;
   assessment_id: string | null;
   round_id: string | null;
+  source_format?: string | null;
   testTitle: string | null;
   count: number;
   found_count: number;
@@ -27,7 +29,7 @@ export interface UploadInfo {
 
 type Preview = Awaited<ReturnType<typeof previewUploadDelete>>;
 
-export function UploadPanel({ upload: u, useHref, afterDeleteHref }: { upload: UploadInfo; useHref: string; afterDeleteHref: string }) {
+export function UploadPanel({ upload: u, subjectId, yearId, afterDeleteHref }: { upload: UploadInfo; subjectId: string; yearId: string; afterDeleteHref: string }) {
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -55,7 +57,7 @@ export function UploadPanel({ upload: u, useHref, afterDeleteHref }: { upload: U
           {renaming ? (
             <ActionForm action={renameUpload} className="flex flex-wrap items-center gap-2" hideSuccess>
               <input type="hidden" name="id" value={u.id} />
-              <Input name="label" defaultValue={u.label} maxLength={80} className="h-9 w-64" aria-label="Upload name" autoFocus />
+              <Input name="label" defaultValue={u.label} maxLength={80} className="h-9 w-64" aria-label="Bank name" autoFocus />
               <SubmitButton size="sm">Save</SubmitButton>
               <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(false)}>
                 Cancel
@@ -70,7 +72,7 @@ export function UploadPanel({ upload: u, useHref, afterDeleteHref }: { upload: U
             </h3>
           )}
           <p className="mt-1 text-sm text-muted">
-            {u.count} question{u.count === 1 ? "" : "s"} · uploaded {when}
+            {u.count} question{u.count === 1 ? "" : "s"} · {u.source_format === "manual" ? "made" : u.source_format === "earlier" ? "named" : "uploaded"} {when}
             {u.file_name ? ` from ${u.file_name}` : ""}
             {u.testTitle && u.assessment_id ? (
               <>
@@ -84,12 +86,21 @@ export function UploadPanel({ upload: u, useHref, afterDeleteHref }: { upload: U
         </div>
         <div className="flex flex-wrap gap-2">
           {u.count > 0 ? (
-            <LinkButton href={useHref} size="sm">
-              Make a test from these
-            </LinkButton>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const res = await makeTestFromQuestions({ bankId: u.id, subjectId, yearId });
+                  if (res && !res.ok) setError(res.error);
+                })
+              }
+            >
+              Make a test from this bank
+            </Button>
           ) : null}
           <Button size="sm" variant="ghost" onClick={askDelete} disabled={pending || u.count === 0} className="text-danger hover:text-danger">
-            Delete upload
+            Delete bank
           </Button>
         </div>
       </div>

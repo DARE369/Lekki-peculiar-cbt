@@ -195,9 +195,9 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
         </div>
         {!staff.isSuperAdmin ? (
           <div className="flex flex-wrap gap-2">
-            <LinkButton href="/teach/papers">This term&apos;s papers</LinkButton>
-            <LinkButton href="/teach/assessments/new" variant="secondary">
-              <FilePlus2 aria-hidden /> Other test
+            <LinkButton href="/teach/questions/import">Upload questions</LinkButton>
+            <LinkButton href="/teach/questions" variant="secondary">
+              Make a test from my questions
             </LinkButton>
           </div>
         ) : null}

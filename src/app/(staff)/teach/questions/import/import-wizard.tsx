@@ -9,6 +9,8 @@ import { OPTION_KEYS, looksLikeJson, parseCsv, parseText, questionFingerprint, t
 import type { Subject, Year } from "@/lib/types";
 import type { RoundConfig } from "@/lib/data";
 import { roundsForSection } from "@/lib/rounds";
+import { defaultBankName } from "@/lib/banks";
+import { makeTestFromQuestions } from "../../bank-actions";
 import { checkImportDuplicates, commitImport, type BankMatch, type ImportReceipt } from "../../import-actions";
 
 type Draft = ParsedQuestion & { forceNew?: boolean };
@@ -321,7 +323,7 @@ export function ImportWizard({
         yearId: yearId || null,
         assessmentId: assessmentId ?? null,
         roundId: roundId || null,
-        label: label.trim() || (round ? `${round.label} — ${subject?.name ?? ""}`.trim() : ""),
+        label: label.trim(),
         fileName: fileName === "pasted text" ? null : fileName,
         format: fileName ? formatOf(fileName) : null,
         questions: questions ?? [],
@@ -347,6 +349,8 @@ export function ImportWizard({
         receipt={receipt}
         issues={issues}
         assessmentId={assessmentId}
+        subjectId={subjectId}
+        yearId={yearId}
         bankHref={`/teach/questions?subject=${subjectId}${yearId ? `&year=${yearId}` : ""}&upload=${receipt.uploadId}`}
         onAgain={() => {
           setReceipt(null);
@@ -408,7 +412,7 @@ export function ImportWizard({
               value={label}
               maxLength={80}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder={round ? `${round.label} — ${subject?.name ?? ""}` : `e.g. 1st CA — ${subject?.name ?? "Maths"}`}
+              placeholder={defaultBankName(subject?.name ?? "", round?.label, new Date())}
             />
           </Field>
         </div>
@@ -682,12 +686,16 @@ function ImportReceiptCard({
   receipt: r,
   issues,
   assessmentId,
+  subjectId,
+  yearId,
   bankHref,
   onAgain,
 }: {
   receipt: ImportReceipt;
   issues: ParseResult["issues"];
   assessmentId?: string;
+  subjectId: string;
+  yearId: string;
   bankHref: string;
   onAgain: () => void;
 }) {
@@ -732,14 +740,39 @@ function ImportReceiptCard({
       ) : null}
       <div className="flex flex-wrap gap-2 border-t border-border p-5">
         {assessmentId ? <LinkButton href={`/teach/assessments/${assessmentId}`}>Back to the test</LinkButton> : null}
-        <LinkButton href={bankHref} variant={assessmentId ? "secondary" : "primary"}>
-          See this upload in the bank
+        {!assessmentId && yearId && r.imported + r.alreadyInBank + r.linked > 0 ? (
+          <MakeTestButton bankId={r.uploadId} subjectId={subjectId} yearId={yearId} />
+        ) : null}
+        <LinkButton href={bankHref} variant="secondary">
+          See this bank
         </LinkButton>
         <Button variant="ghost" onClick={onAgain}>
           Upload more
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** Upload first, then straight into a test made from what was just uploaded — no going back and forth. */
+function MakeTestButton({ bankId, subjectId, yearId }: { bankId: string; subjectId: string; yearId: string }) {
+  const [busy, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        disabled={busy}
+        onClick={() =>
+          start(async () => {
+            const res = await makeTestFromQuestions({ bankId, subjectId, yearId });
+            if (res && !res.ok) setError(res.error);
+          })
+        }
+      >
+        {busy ? "Making the test…" : "Make a test from these"}
+      </Button>
+      {error ? <p className="basis-full text-sm text-danger">{error}</p> : null}
+    </>
   );
 }
 

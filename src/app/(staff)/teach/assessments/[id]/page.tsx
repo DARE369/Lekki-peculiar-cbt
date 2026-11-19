@@ -8,21 +8,16 @@ import {
   Badge,
   Card,
   CardHeader,
-  Checkbox,
   EmptyState,
-  Field,
-  Input,
   LinkButton,
   PageHeader,
-  Select,
-  Textarea,
 } from "@/components/ui";
 import { NextSteps } from "@/components/next-steps";
 import { flagLabel } from "@/lib/readiness";
 import { requireStaff } from "@/lib/auth";
 import { formatDateTime, getStructure, getRoundConfigs } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
-import { roundOf, roundsForSection } from "@/lib/rounds";
+import { roundOf } from "@/lib/rounds";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentStatus, type AssessmentType, type QuestionOption } from "@/lib/types";
 import {
@@ -30,7 +25,6 @@ import {
   cancelCorrection,
   deleteAssessment,
   duplicateAssessment,
-  removeQuestionFromAssessment,
   submitCorrections,
   updateAssessmentClasses,
   withdrawSubmission,
@@ -38,7 +32,8 @@ import {
 import { SettingsPanel } from "./settings-panel";
 import { SendForReview } from "./send-for-review";
 import { ScheduleForm } from "./schedule-form";
-import { QuestionPicker } from "./question-picker";
+import { AddQuestions, type PoolBank, type PoolQuestion } from "./add-questions";
+import { TestQuestions } from "./test-questions";
 
 export const metadata: Metadata = { title: "Test" };
 
@@ -62,11 +57,8 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   const settings: AssessmentSettings = { ...DEFAULT_SETTINGS, ...(a.settings ?? {}) };
   const amending = a.status === "approved" && Boolean(a.amending);
   const editable = (a.status === "draft" || a.status === "changes_requested" || amending) && (a.created_by === staff.id || staff.isAdmin);
-  const topicFilter = typeof sp.topic === "string" ? sp.topic : "";
-  const uploadFilter = typeof sp.upload === "string" ? sp.upload : "";
   // The picker shows this paper's own round by default; other rounds only when asked for (deliberate reuse).
   const paperRound = roundOf(a, rounds);
-  const roundFilter = typeof sp.round === "string" ? sp.round : (paperRound?.id ?? "");
 
   let selected: Q[] = [];
   if (a.paper && !amending) {
@@ -81,43 +73,56 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
   }
   const selectedIds = new Set(selected.map((q) => q.id));
 
-  let bank: Q[] = [];
-  let topics: string[] = [];
-  let uploadOptions: { id: string; label: string; count: number }[] = [];
-  const roundAvailable = new Map<string, number>();
+  // What can be added: every question for this subject and year that isn't in the test yet, grouped by bank.
+  let pool: PoolQuestion[] = [];
+  let poolBanks: PoolBank[] = [];
   if (editable) {
-    type BankRow = Q & { year_id: string | null; upload_id: string | null; round_id: string | null };
+    type BankRow = { id: string; body: string; answer: string; topic: string | null; upload_id: string | null; round_id: string | null; created_at: string };
     const all: BankRow[] = [];
     for (let from = 0; from < 5000; from += 1000) {
       const { data } = await supabase
         .from("questions")
-        .select("id, body, options, answer, topic, year_id, upload_id, round_id")
+        .select("id, body, answer, topic, upload_id, round_id, created_at")
         .eq("subject_id", a.subject_id)
         .eq("archived", false)
         .or(`year_id.eq.${a.year_id},year_id.is.null`)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: true })
         .range(from, from + 999);
       all.push(...((data ?? []) as BankRow[]));
       if (!data || data.length < 1000) break;
     }
-    topics = [...new Set(all.map((q) => q.topic).filter((t): t is string => Boolean(t)))].sort();
     const available = all.filter((q) => !selectedIds.has(q.id));
-    const perUpload = new Map<string, number>();
-    for (const q of available) if (q.upload_id) perUpload.set(q.upload_id, (perUpload.get(q.upload_id) ?? 0) + 1);
-    if (perUpload.size) {
-      const { data: ups } = await supabase
-        .from("question_uploads")
-        .select("id, label, created_at")
-        .in("id", [...perUpload.keys()])
-        .order("created_at", { ascending: false });
-      uploadOptions = (ups ?? []).map((u) => ({ id: u.id as string, label: u.label as string, count: perUpload.get(u.id as string) ?? 0 }));
+    const uploadIds = [...new Set(available.map((q) => q.upload_id).filter((x): x is string => Boolean(x)))];
+    const labels = new Map<string, { label: string; round_id: string | null }>();
+    for (let i = 0; i < uploadIds.length; i += 150) {
+      const { data: ups } = await supabase.from("question_uploads").select("id, label, round_id").in("id", uploadIds.slice(i, i + 150));
+      for (const u of ups ?? []) labels.set(u.id as string, { label: u.label as string, round_id: (u.round_id as string | null) ?? null });
     }
-    for (const q of available) roundAvailable.set(q.round_id ?? "none", (roundAvailable.get(q.round_id ?? "none") ?? 0) + 1);
-    bank = available
-      .filter((q) => !roundFilter || roundFilter === "all" || (roundFilter === "none" ? !q.round_id : q.round_id === roundFilter))
-      .filter((q) => !topicFilter || q.topic === topicFilter)
-      .filter((q) => !uploadFilter || (uploadFilter === "none" ? !q.upload_id : q.upload_id === uploadFilter));
+    const counts = new Map<string, { n: number; rounds: Set<string | null> }>();
+    for (const q of available) {
+      const key = q.upload_id ?? "none";
+      if (!counts.has(key)) counts.set(key, { n: 0, rounds: new Set() });
+      const c = counts.get(key)!;
+      c.n += 1;
+      c.rounds.add(q.round_id);
+    }
+    const roundName = (id: string | null) => (id ? rounds.find((r) => r.id === id)?.label ?? null : null);
+    poolBanks = [...counts.entries()]
+      .map(([id, c]) => {
+        const roundId = id === "none" ? (c.rounds.size === 1 ? [...c.rounds][0] : null) : (labels.get(id)?.round_id ?? (c.rounds.size === 1 ? [...c.rounds][0] : null));
+        return {
+          id,
+          label: id === "none" ? "Earlier questions not in a named bank" : (labels.get(id)?.label ?? "Bank"),
+          round: roundName(roundId),
+          count: c.n,
+          sameRound: Boolean(paperRound && roundId === paperRound.id),
+        };
+      })
+      .sort((x, y) => Number(y.sameRound) - Number(x.sameRound) || (x.id === "none" ? 1 : y.id === "none" ? -1 : x.label.localeCompare(y.label)));
+    pool = available.map((q) => ({ id: q.id, body: q.body.slice(0, 240), answer: q.answer, topic: q.topic, bank: q.upload_id ?? "none" }));
   }
+  const fromBank = typeof sp.bank === "string" ? sp.bank : "";
+  const defaultBank = poolBanks.find((b) => b.id === fromBank)?.id ?? poolBanks[0]?.id ?? "";
 
   const [{ data: windows }, classesResult, assignedResult] = await Promise.all([
     supabase.from("exam_windows").select("id, class_id, starts_at, ends_at, status, auto_start").eq("assessment_id", id).order("starts_at"),
@@ -182,7 +187,11 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
       />
       {sp.added ? (
         <NextSteps
-          title={`Added ${Number(sp.added)} question${Number(sp.added) === 1 ? "" : "s"} to this test.`}
+          title={
+            sp.from === "bank"
+              ? `Test made from ${Number(sp.added)} question${Number(sp.added) === 1 ? "" : "s"}. Set the time, marks and instructions on the right; they save by themselves.`
+              : `Added ${Number(sp.added)} question${Number(sp.added) === 1 ? "" : "s"} to this test.`
+          }
           steps={[{ href: `/teach/questions/import?assessment=${a.id}`, label: "Add more questions" }]}
         >
           {a.status === "draft" || a.status === "rejected"
@@ -293,95 +302,21 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
             {selected.length === 0 ? (
               <EmptyState title="No questions yet">Upload a file, write questions, or pick from the bank below.</EmptyState>
             ) : (
-              <ol className="divide-y divide-border">
-                {selected.map((q, i) => (
-                  <li key={q.id} className="flex gap-4 px-5 py-3">
-                    <span className="w-6 shrink-0 text-sm text-muted tabular-nums">{i + 1}.</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm whitespace-pre-wrap">{q.body}</p>
-                      <div className="mt-1 grid gap-x-4 text-xs text-muted sm:grid-cols-2">
-                        {q.options.map((o) => (
-                          <span key={o.key} className={o.key === q.answer ? "font-semibold text-success" : ""}>
-                            {o.key}. {o.text}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    {editable ? (
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <Link href={`/teach/questions/${q.id}?assessment=${a.id}`} className="text-xs font-semibold text-brand hover:underline">
-                          Edit
-                        </Link>
-                        <form action={removeQuestionFromAssessment}>
-                          <input type="hidden" name="assessment_id" value={a.id} />
-                          <input type="hidden" name="question_id" value={q.id} />
-                          <button className="text-xs text-muted hover:text-danger">Remove</button>
-                        </form>
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
+              <TestQuestions assessmentId={a.id} questions={selected} editable={editable} />
             )}
           </Card>
 
           {editable ? (
-            <Card>
+            <Card id="add-questions">
               <CardHeader
-                title="Add from the question bank"
-                description={`${bank.length} available for ${s.subjectById.get(a.subject_id)?.name}`}
-                actions={
-                  topics.length || uploadOptions.length || roundAvailable.size ? (
-                    <form className="flex flex-wrap gap-2">
-                      <Select name="round" defaultValue={roundFilter || "all"} aria-label="From round" className="h-8 w-44 text-xs">
-                        {roundsForSection(rounds, s.subjectById.get(a.subject_id)?.section_id, true)
-                          .filter((r) => r.id === paperRound?.id || roundAvailable.has(r.id))
-                          .map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.label}
-                              {r.id === paperRound?.id ? " (this test)" : ""} ({roundAvailable.get(r.id) ?? 0})
-                            </option>
-                          ))}
-                        {roundAvailable.has("none") ? <option value="none">Not sorted yet ({roundAvailable.get("none")})</option> : null}
-                        <option value="all">Every round</option>
-                      </Select>
-                      {uploadOptions.length ? (
-                        <Select name="upload" defaultValue={uploadFilter} aria-label="From upload" className="h-8 w-52 text-xs">
-                          <option value="">From any upload</option>
-                          {uploadOptions.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.label} ({u.count})
-                            </option>
-                          ))}
-                          <option value="none">Added earlier</option>
-                        </Select>
-                      ) : null}
-                      {topics.length ? (
-                        <Select name="topic" defaultValue={topicFilter} aria-label="Topic" className="h-8 w-40 text-xs">
-                          <option value="">All topics</option>
-                          {topics.map((t) => (
-                            <option key={t}>{t}</option>
-                          ))}
-                        </Select>
-                      ) : null}
-                      <button className="h-8 rounded-lg border border-border px-3 text-xs font-medium hover:bg-surface-2">Show</button>
-                    </form>
-                  ) : null
+                title="Add questions"
+                description={
+                  enough
+                    ? "This test has enough questions. Adding more gives each student a random set."
+                    : `${a.question_count - selected.length} more needed. Choose a bank, then tick questions, select all, or take some at random.`
                 }
               />
-              {bank.length === 0 ? (
-                <EmptyState title="Nothing else in the bank" />
-              ) : (
-                <QuestionPicker
-                  assessmentId={a.id}
-                  bank={bank}
-                  needed={Math.max(0, a.question_count - selected.length)}
-                  topic={topicFilter}
-                  upload={uploadFilter}
-                  round={roundFilter}
-                  uploadLabel={uploadOptions.find((u) => u.id === uploadFilter)?.label}
-                />
-              )}
+              <AddQuestions assessmentId={a.id} banks={poolBanks} pool={pool} needed={Math.max(0, a.question_count - selected.length)} defaultBank={defaultBank} />
             </Card>
           ) : null}
         </div>

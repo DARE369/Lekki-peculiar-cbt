@@ -146,7 +146,7 @@ export async function deleteQuestion(fd: FormData) {
     const active = ((wins ?? []) as unknown as WC[]).some((w) =>
       ["live", "paused", "awaiting_start", "scheduled"].includes(windowState(w)),
     );
-    if (active) return; // silently refuse; the bulk-delete UI explains why
+    if (active) return; // silently refuse; the bank delete dialog explains why
   }
 
   if (aIds.length > 0) {
@@ -163,7 +163,7 @@ type BulkPreview = {
 };
 
 /** Returns which questions can be safely deleted vs which are blocked by active/upcoming exams. */
-const MAX_DELETE = 1000;
+const MAX_DELETE = 5000;
 
 /** Splits long id lists so each request stays a sensible size. */
 function chunks<T>(list: T[], size = 150): T[][] {

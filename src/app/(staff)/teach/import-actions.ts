@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
 import { getRoundConfigs, getStructure } from "@/lib/data";
 import { roundOf } from "@/lib/rounds";
+import { defaultBankName } from "@/lib/banks";
 import { logError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
 import { parsedQuestionSchema, questionFingerprint, type ParsedQuestion } from "@/lib/import/questions";
@@ -217,9 +218,7 @@ export async function commitImport(input: CommitInput): Promise<CommitResult> {
   }
 
   const found = questions.length + removedCount + unreadable.length;
-  const label =
-    parsed.data.label ||
-    `${subject.name} — ${new Date().toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}`;
+  const label = parsed.data.label || defaultBankName(subject.name, rounds.find((r) => r.id === roundId)?.label, new Date());
   const { data, error } = await supabase.rpc("import_questions", {
     p_upload: {
       subject_id: subjectId,

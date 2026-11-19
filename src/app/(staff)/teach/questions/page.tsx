@@ -306,7 +306,12 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
 
                   {/* Uploads: every file or paste is its own set */}
                   <nav aria-label="Uploads" className="-mx-1 flex flex-wrap gap-1.5 px-1">
-                    <UploadTab href={withParams({ upload: undefined, page: undefined })} active={!uploadParam} label="All questions" count={allCount} />
+                    <UploadTab
+                      href={withParams({ upload: undefined, page: undefined })}
+                      active={!uploadParam}
+                      label={roundParam ? "All in this round" : "All questions"}
+                      count={!roundParam ? allCount : roundParam === "none" ? unsortedCount : (roundCounts.get(roundParam) ?? 0)}
+                    />
                     {uploads
                       .filter((u) => u.count > 0 || u.unreadable_count > 0 || u.id === uploadParam)
                       .filter((u) => !roundParam || (roundParam === "none" ? !u.round_id : u.round_id === roundParam) || u.id === uploadParam)
@@ -320,7 +325,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
                         flag={u.unreadable_count > 0}
                       />
                     ))}
-                    {untrackedCount ? (
+                    {untrackedCount && (!roundParam || roundParam === "none") ? (
                       <UploadTab href={withParams({ upload: "none", page: undefined })} active={uploadParam === "none"} label="Added earlier" count={untrackedCount} />
                     ) : null}
                   </nav>

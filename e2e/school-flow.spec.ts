@@ -253,6 +253,9 @@ test("HOD approves, schedules and creates a lab registration code", async ({ bro
   const later = new Date(now.getTime() + 3 * 3600_000);
   await page.getByLabel("Opens (Lagos time)").fill(now.toISOString().slice(0, 16));
   await page.getByLabel("Closes (no new starts after this)").fill(later.toISOString().slice(0, 16));
+  // Exams start by themselves by default; this one is set to wait for an administrator.
+  await expect(page.getByLabel("Start automatically at the opening time")).toBeChecked();
+  await page.getByLabel("Start automatically at the opening time").uncheck();
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Approve & schedule" }).click();
   await expect(page).toHaveURL(/\/admin\/exams/);
@@ -940,7 +943,8 @@ test("bulk approval: review by class, approve, flag and send back; teacher corre
   const card = teacher.locator("li", { has: teacher.getByText("Bulk Warn", { exact: true }) });
   await expect(card.getByText("Typing or formatting mistakes")).toBeVisible();
   await expect(card.getByText("Fix the typo in question 3")).toBeVisible();
-  await card.getByRole("button", { name: "Correct this test" }).click();
+  // "Needs changes" already opened it for fixing: one click to the test, edit, send.
+  await card.getByRole("link", { name: "Fix this test" }).click();
   await expect(teacher.getByText("You are correcting this test")).toBeVisible();
   await expect(teacher.getByText("Questions (12)")).toBeVisible();
   await teacher.getByRole("button", { name: /^Remove/ }).first().click();
@@ -972,4 +976,51 @@ test("bulk approval: review by class, approve, flag and send back; teacher corre
   await expect(owner.getByText("Awaiting approval", { exact: true }).first()).toBeVisible();
   await expect(owner.getByText("Year 4 Gold").first()).toBeVisible();
   await shot(owner, "21-school-dashboard");
+});
+
+test("rounds: a teacher starts a paper from the term grid, uploads into it, and finds it under its round", async ({ browser }) => {
+  const page = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await page.goto("/teach/papers");
+  await expect(page.getByRole("heading", { name: "This term's papers" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "2nd CA" })).toBeVisible();
+  const row = page.getByRole("row", { name: /Basic Science/ });
+  await row.getByRole("button", { name: "Start paper" }).first().click();
+  await expect(page.getByRole("heading", { name: /Basic Science — 2nd CA/ })).toBeVisible();
+  await shot(page, "22-paper-from-grid");
+
+  await page.getByRole("link", { name: "Upload into this test" }).click();
+  // The round comes from the paper and can't be changed here.
+  await expect(page.getByLabel("Which round are these for?")).toBeDisabled();
+  const text = ["Second CA question one?\nA. yes\nB. no\nANSWER: A", "Second CA question two?\nA. yes\nB. no\nANSWER: B"].join("\n\n");
+  await page.getByLabel("Paste your questions").fill(text);
+  await page.getByRole("button", { name: "Save 2 questions" }).click();
+  await page.locator("#import-receipt").getByRole("link", { name: "Back to the test" }).click();
+  await expect(page.getByText("Questions (2)")).toBeVisible();
+
+  // In the bank they sit under 2nd CA, apart from the 1st CA questions.
+  await page.goto("/teach/questions");
+  await page.getByRole("navigation", { name: "Rounds" }).getByRole("link", { name: /2nd CA/ }).click();
+  await expect(page.getByText("Second CA question one?")).toBeVisible();
+  await expect(page.getByText("Question number 1?")).toHaveCount(0);
+  await shot(page, "23-bank-by-round");
+
+  // Back on the grid, the cell shows the paper's progress.
+  await page.goto("/teach/papers");
+  await expect(page.getByRole("row", { name: /Basic Science/ }).getByText(/2 of \d+ questions/)).toBeVisible();
+});
+
+test("Heads of Section manage their rounds and can look up problems by reference", async ({ browser }) => {
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/rounds");
+  await expect(hod.getByRole("heading", { name: "Rounds", level: 1 })).toBeVisible();
+  await hod.getByLabel("Name", { exact: true }).fill("Elementary quiz");
+  await hod.getByRole("button", { name: "Add round" }).click();
+  await expect(hod.getByText('"Elementary quiz" added.')).toBeVisible();
+  await expect(hod.getByText(/Elementary quiz/).first()).toBeVisible();
+
+  await hod.goto("/admin/problems");
+  await expect(hod.getByRole("heading", { name: "Problems" })).toBeVisible();
+  await hod.getByLabel("Find a reference code").fill("ZZZZZZ");
+  await hod.getByRole("button", { name: "Find" }).click();
+  await expect(hod.getByText("No error with reference ZZZZZZ")).toBeVisible();
 });

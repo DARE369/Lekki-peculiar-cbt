@@ -1,6 +1,10 @@
 # Question bank, rounds & upload reliability — plan
 
-> Status: **Phase 1 built** (section 4), plus **uploads as named sets** in the bank (§4b). Phases 2–4 not built.
+> Status: **all four phases built** on branch `claude/stoic-cannon-2lb7sj`: Phase 1 (§4), uploads as named sets (§4b),
+> Phase 2 error log + Problems page (§5), Phase 3 rounds (§2), Phase 4 term grid "This term's papers" (§3).
+> Rounds are shared by Elementary and College and configurable by super admins and Heads of Section.
+> Existing questions are **not** moved automatically: they show as "Not sorted yet" until a teacher presses
+> "Sort automatically" or uses "Move to round".
 > Decisions in §7 were accepted as recommended. Covers three linked problems:
 > 1. Exam questions and test questions end up mixed in one bank.
 > 2. Assessment types (test / exam / mock / practice), "rounds" (1st CA, Exam…) and topics overlap and confuse people.

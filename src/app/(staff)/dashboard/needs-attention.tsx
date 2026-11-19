@@ -39,7 +39,7 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                 <p className="text-sm text-muted">You sent your corrections. Your Head of Section will accept them.</p>
               ) : i.amending ? (
                 <Link href={`/teach/assessments/${i.id}`} className={buttonClass("primary", "md", "max-sm:w-full")}>
-                  Continue correcting
+                  Fix this test
                 </Link>
               ) : (
                 <form action={beginCorrection}>

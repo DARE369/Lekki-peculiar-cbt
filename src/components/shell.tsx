@@ -25,7 +25,7 @@ import {
   ListChecks,
   Tag,
   TriangleAlert,
-  LayoutGrid,
+  ClipboardList,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ThemeSwitcher } from "@/components/theme";
@@ -49,7 +49,7 @@ const ICONS = {
   sessions: ShieldCheck,
   rounds: Tag,
   problems: TriangleAlert,
-  papers: LayoutGrid,
+  papers: ClipboardList,
 } satisfies Record<string, LucideIcon>;
 export type NavIcon = keyof typeof ICONS;
 

@@ -1,6 +1,9 @@
 # Approval workflow — plan to simplify
 
-> Status: **proposal, not built.** Builds on the Rounds model in [QUESTION-BANK-PLAN.md](QUESTION-BANK-PLAN.md) §2.
+> Status: **§5 step 1 (quick wins) built**, plus approve-with-note and auto-start by default. Decisions (§6):
+> exams start automatically at the set time, and an admin can start earlier or later; one person lets a student
+> continue; Heads of Section set who teaches what; topic is optional.
+> Still to build: §5 steps 2–4 (round calendar that schedules on approval, HOD-set teaching assignments, unified inbox).
 
 ## 1. What a single test goes through today
 

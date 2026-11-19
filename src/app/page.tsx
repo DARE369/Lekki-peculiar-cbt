@@ -27,8 +27,10 @@ export default function Home() {
 
         {!configured ? (
           <div className="mt-6">
-            <Alert tone="warning" title="Not configured yet">
-              Supabase environment variables are missing. Follow docs/DEPLOYMENT.md to finish setup.
+            <Alert tone="warning" title="This copy of the app isn't connected to the school's database">
+              Its Supabase settings (environment variables) are missing, so sign-in and staff pages can&apos;t work here. On
+              Vercel: Settings → Environment Variables → make sure each variable is ticked for this environment (Production
+              and/or Preview), then redeploy. See docs/DEPLOYMENT.md.
             </Alert>
           </div>
         ) : null}

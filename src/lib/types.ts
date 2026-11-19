@@ -75,7 +75,10 @@ export interface AssessmentSettings {
   allow_back: boolean;
   show_result: "none" | "score" | "full";
   pass_mark: number;
+  /** "per_question": each question is worth marks_per_question; "total": the whole test is out of total_marks */
+  marks_mode?: "per_question" | "total";
   marks_per_question: number;
+  total_marks?: number | null;
   instructions: string;
 }
 
@@ -87,7 +90,9 @@ export const DEFAULT_SETTINGS: AssessmentSettings = {
   allow_back: true,
   show_result: "score",
   pass_mark: 50,
+  marks_mode: "per_question",
   marks_per_question: 1,
+  total_marks: null,
   instructions: "Answer all questions.",
 };
 
@@ -102,4 +107,14 @@ export const TYPE_DEFAULTS: Record<AssessmentType, { questions: number; minutes:
 export interface QuestionOption {
   key: string;
   text: string;
+}
+
+/** What a test is marked out of, and what each question is worth (for display; grading uses the same rule). */
+export function markingSummary(settings: Pick<AssessmentSettings, "marks_mode" | "marks_per_question" | "total_marks">, questions: number) {
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  if (settings.marks_mode === "total" && settings.total_marks) {
+    return { outOf: round1(settings.total_marks), perQuestion: questions ? round1(settings.total_marks / questions) : 0, mode: "total" as const };
+  }
+  const per = settings.marks_per_question || 1;
+  return { outOf: round1(per * questions), perQuestion: per, mode: "per_question" as const };
 }

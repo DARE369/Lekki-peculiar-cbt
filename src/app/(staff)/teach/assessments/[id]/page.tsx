@@ -32,13 +32,11 @@ import {
   duplicateAssessment,
   removeQuestionFromAssessment,
   submitCorrections,
-  submitForApproval,
   updateAssessmentClasses,
-  updateAssessmentSettings,
   withdrawSubmission,
 } from "../../actions";
-import { TopicField } from "./topic-field";
-import { RoundField } from "./round-field";
+import { SettingsPanel } from "./settings-panel";
+import { SendForReview } from "./send-for-review";
 import { ScheduleForm } from "./schedule-form";
 import { QuestionPicker } from "./question-picker";
 
@@ -189,7 +187,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         >
           {a.status === "draft" || a.status === "rejected"
             ? enough
-              ? "You have enough questions. Check them below, then press Submit for approval."
+              ? "You have enough questions. Check them below, then press Send for review."
               : `This test needs ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"}. Upload more, or pick some from your question bank below.`
             : null}
         </NextSteps>
@@ -260,22 +258,16 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         </Card>
       ) : editable ? (
         <Card>
-          <ActionForm action={submitForApproval} className="p-5 space-y-4">
-            <input type="hidden" name="id" value={a.id} />
-            <div>
-              <p className="text-base font-semibold">Ready to submit?</p>
-              <p className="mt-0.5 text-sm text-muted">
-                {enough
-                  ? selected.length > a.question_count
-                    ? `You have ${selected.length} questions for a ${a.question_count}-question test. Each student gets a random ${a.question_count} of them — this makes copying harder.`
-                    : `You have exactly ${a.question_count} questions.`
-                  : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} (you have ${selected.length} of ${a.question_count}).`}
-              </p>
-            </div>
-            <SubmitButton pendingText="Submitting…" confirm="Submit for approval? You won't be able to edit it while it's being reviewed.">
-              Submit for approval
-            </SubmitButton>
-          </ActionForm>
+          <SendForReview
+            id={a.id}
+            summary={
+              enough
+                ? selected.length > a.question_count
+                  ? `You have ${selected.length} questions for a ${a.question_count}-question test. Each student gets a random ${a.question_count} of them, which makes copying harder.`
+                  : `You have exactly ${a.question_count} questions.`
+                : `Add ${a.question_count - selected.length} more question${a.question_count - selected.length === 1 ? "" : "s"} (you have ${selected.length} of ${a.question_count}).`
+            }
+          />
         </Card>
       ) : null}
 
@@ -397,76 +389,22 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         <div className="space-y-6">
           <Card>
             <CardHeader title="Settings" description={amending ? "Settings stay as approved while you correct the questions." : editable ? undefined : "Locked while submitted or approved."} />
-            <ActionForm action={updateAssessmentSettings} className="space-y-4 p-5">
-              <input type="hidden" name="id" value={a.id} />
-              <fieldset disabled={!editable || amending} className="space-y-4">
-                <Field label="Title">
-                  <Input name="title" defaultValue={a.title} required />
-                </Field>
-                <RoundField
-                  rounds={rounds}
-                  defaultValue={(a as { sequence_label?: string | null }).sequence_label ?? null}
-                  disabled={!editable || amending}
-                />
-                <TopicField
-                  defaultValue={(a as { topic?: string | null }).topic ?? ""}
-                  subjectName={s.subjectById.get(a.subject_id)?.name ?? ""}
-                  editable={editable && !amending}
-                />
-                <Field label="Type">
-                  <Select name="type" defaultValue={a.type}>
-                    <optgroup label="Live">
-                      <option value="test">Test</option>
-                      <option value="exam">Exam</option>
-                    </optgroup>
-                    <optgroup label="Mock">
-                      <option value="mock_test">Test mock</option>
-                      <option value="mock">Exam mock</option>
-                    </optgroup>
-                    {a.type === "practice" ? <option value="practice">Practice</option> : null}
-                  </Select>
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Questions per student">
-                    <Input name="question_count" type="number" min={1} max={200} defaultValue={a.question_count} />
-                  </Field>
-                  <Field label="Minutes">
-                    <Input name="duration_minutes" type="number" min={1} max={600} defaultValue={a.duration_minutes} />
-                  </Field>
-                </div>
-                <div className="space-y-3 rounded-lg bg-surface-2 p-3">
-                  <Checkbox name="shuffle_questions" label="Shuffle question order" defaultChecked={settings.shuffle_questions} />
-                  <Checkbox name="shuffle_options" label="Shuffle options (A–D)" defaultChecked={settings.shuffle_options} />
-                  <Checkbox
-                    name="require_all_answered"
-                    label="Must answer every question before submitting"
-                    hint="When time runs out the test submits anyway."
-                    defaultChecked={settings.require_all_answered}
-                  />
-                  <Checkbox name="allow_flag" label="Allow flagging questions for review" defaultChecked={settings.allow_flag} />
-                  <Checkbox name="allow_back" label="Allow going back to earlier questions" defaultChecked={settings.allow_back} />
-                </div>
-                <Field label="After submitting, students see">
-                  <Select name="show_result" defaultValue={settings.show_result}>
-                    <option value="none">Nothing (just “submitted”)</option>
-                    <option value="score">Their score</option>
-                    <option value="full">Score and corrections</option>
-                  </Select>
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Pass mark (%)">
-                    <Input name="pass_mark" type="number" min={0} max={100} defaultValue={settings.pass_mark} />
-                  </Field>
-                  <Field label="Marks per question">
-                    <Input name="marks_per_question" type="number" min={1} max={10} defaultValue={settings.marks_per_question} />
-                  </Field>
-                </div>
-                <Field label="Instructions for students" hint="Shown on the start screen.">
-                  <Textarea name="instructions" rows={3} defaultValue={settings.instructions} placeholder="Answer all questions. Each question carries equal marks." />
-                </Field>
-                {editable ? <SubmitButton>Save settings</SubmitButton> : null}
-              </fieldset>
-            </ActionForm>
+            <SettingsPanel
+              key={`${a.id}:${editable && !amending}`}
+              values={{
+                id: a.id,
+                title: a.title,
+                sequence_label: (a as { sequence_label?: string | null }).sequence_label ?? null,
+                topic: (a as { topic?: string | null }).topic ?? null,
+                type: a.type as AssessmentType,
+                question_count: a.question_count,
+                duration_minutes: a.duration_minutes,
+                settings,
+              }}
+              rounds={rounds}
+              subjectName={s.subjectById.get(a.subject_id)?.name ?? ""}
+              editable={editable && !amending}
+            />
           </Card>
 
           <Card>

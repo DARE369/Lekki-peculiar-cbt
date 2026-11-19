@@ -182,6 +182,77 @@ end $$;
 grant execute on function public.bulk_review(jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- 4a. Finished attempts stay immutable, except when one of the two audited "continue" functions reopens
+--     one. (Before this, the resume feature could never work: this guard refused every reopen.)
+-- ---------------------------------------------------------------------------
+create or replace function public.guard_attempts()
+returns trigger language plpgsql as $$
+begin
+  if old.status <> 'in_progress' then
+    -- Set (for this transaction only) by approve_resume / let_student_continue.
+    if current_setting('cbt.reopen_attempt', true) = old.id::text and new.status = 'in_progress'
+       and new.student_id = old.student_id and new.window_id = old.window_id
+       and new.started_at = old.started_at and new.question_order = old.question_order then
+      return new;
+    end if;
+    if new.status = 'in_progress' then
+      raise exception 'a finished attempt cannot be reopened' using errcode = 'P0001';
+    end if;
+    if new.student_id <> old.student_id or new.window_id <> old.window_id
+       or new.started_at <> old.started_at or new.submitted_at is distinct from old.submitted_at
+       or new.question_order <> old.question_order then
+      raise exception 'finished attempts are immutable' using errcode = 'P0001';
+    end if;
+  end if;
+  return new;
+end $$;
+
+-- Same as before, plus the guard permission above.
+create or replace function public.approve_resume(p_request uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  r            public.resume_requests;
+  w            public.exam_windows;
+  new_deadline timestamptz;
+begin
+  select * into r from public.resume_requests where id = p_request for update;
+  perform public._require(found, 'request not found');
+  perform public._require(r.status = 'pending', 'already processed');
+
+  select * into w from public.exam_windows where id = r.window_id;
+  perform public._require(
+    public.admin_of_section(public.section_of_class(w.class_id)) and public.has_perm('exam.start'),
+    'permission denied');
+
+  new_deadline := now() + make_interval(mins => r.extra_minutes);
+
+  perform set_config('cbt.reopen_attempt', r.attempt_id::text, true);
+  update public.attempts
+     set status = 'in_progress', deadline = new_deadline, submitted_at = null, submit_source = null,
+         score = null, max_score = null, answered_count = null, correct_count = null,
+         login_method = 'resume', terminal_id = null
+   where id = r.attempt_id;
+  perform set_config('cbt.reopen_attempt', '', true);
+
+  insert into public.exam_exceptions (window_id, student_id, kind, reason, granted_by)
+  values (r.window_id, r.student_id, 'relogin_unlock', 'Resume approved', auth.uid());
+
+  update public.exam_windows
+     set ends_at = greatest(ends_at, new_deadline + interval '5 minutes'),
+         status  = case when status = 'closed' then 'live' else status end
+   where id = r.window_id;
+
+  update public.resume_requests
+     set status = 'approved', approved_by = auth.uid(), approved_at = now()
+   where id = p_request;
+
+  perform public.log_audit('resume.approved', 'exam_window', w.id::text,
+    jsonb_build_object('student_id', r.student_id, 'extra_minutes', r.extra_minutes, 'new_deadline', new_deadline));
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 4. Let a student continue after running out of time: one action by one person with the
 --    extra-time permission (replaces allocate → request → approve). Everything is audited.
 -- ---------------------------------------------------------------------------
@@ -212,11 +283,13 @@ begin
   insert into public.exam_exceptions (window_id, student_id, kind, extra_minutes, reason, granted_by)
   values (p_window, p_student, 'extra_time', p_minutes, trim(p_reason), auth.uid());
 
+  perform set_config('cbt.reopen_attempt', t.id::text, true);
   update public.attempts
      set status = 'in_progress', deadline = new_deadline, submitted_at = null, submit_source = null,
          score = null, max_score = null, answered_count = null, correct_count = null,
          login_method = 'resume', terminal_id = null
    where id = t.id;
+  perform set_config('cbt.reopen_attempt', '', true);
 
   -- may log in on any lab computer
   insert into public.exam_exceptions (window_id, student_id, kind, reason, granted_by)

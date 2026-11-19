@@ -6,7 +6,7 @@ import { requireStaff } from "@/lib/auth";
 import { fail, ok, bool, int, str, type ActionResult } from "@/lib/actions";
 import { applySubjectPicks } from "@/lib/assignments";
 import { getRoundConfigs, getStructure } from "@/lib/data";
-import { roundOf } from "@/lib/rounds";
+import { roundDefaults, roundOf } from "@/lib/rounds";
 import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import { OPTION_KEYS, parsedQuestionSchema, type ParsedQuestion } from "@/lib/import/questions";
@@ -535,6 +535,26 @@ export async function removeQuestionFromAssessment(fd: FormData) {
   revalidatePath(`/teach/assessments/${id}`);
 }
 
+/** What would stop a paper being sent for review, in words a teacher can act on (null = ready). */
+async function paperProblems(supabase: Awaited<ReturnType<typeof createClient>>, id: string): Promise<string | null> {
+  const { data: a } = await supabase.from("assessments").select("question_count, class_ids").eq("id", id).maybeSingle();
+  if (!a) return "This test can't be found.";
+  if (!((a.class_ids ?? []) as string[]).length) return "Choose which classes this test is for (Classes, on the right).";
+  const { data: rows } = await supabase
+    .from("assessment_questions")
+    .select("position, questions(body, options, answer)")
+    .eq("assessment_id", id)
+    .order("position");
+  const qs = (rows ?? []).map((r) => r.questions as unknown as { body: string; options: { key: string; text: string }[]; answer: string } | null);
+  const broken = qs.findIndex((q) => !q || !Array.isArray(q.options) || q.options.length < 2 || !q.options.some((o) => o.key === q.answer));
+  if (broken >= 0) return `Question ${broken + 1} has no valid correct answer. Edit it, choose the correct option, then send again.`;
+  if (qs.length < (a.question_count as number)) {
+    const short = (a.question_count as number) - qs.length;
+    return `This test needs ${short} more question${short === 1 ? "" : "s"} (it has ${qs.length} of ${a.question_count}). Add more, or lower the number of questions in Settings.`;
+  }
+  return null;
+}
+
 export async function submitForApproval(_: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireStaff();
   const id = str(fd, "id");
@@ -546,9 +566,10 @@ export async function submitForApproval(_: ActionResult, fd: FormData): Promise<
     await supabase.from("assessments").update({ topic: topicFromForm }).eq("id", id);
   }
 
-  // Topic is required before submission so reviewers and reports have context.
-  const { data: a } = await supabase.from("assessments").select("topic").eq("id", id).maybeSingle();
-  if (!a?.topic?.trim()) return fail("Add a topic before submitting — it helps the reviewer and shows up in reports. Open Settings and fill in the Topic field.");
+  // The machine checks, people judge: anything we can verify is checked here, with a message that
+  // says exactly what to fix, before it ever reaches the Head of Section. (Topic is optional.)
+  const problem = await paperProblems(supabase, id);
+  if (problem) return fail(problem);
   const { error } = await supabase.rpc("submit_assessment", { p_assessment: id });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);
@@ -733,7 +754,7 @@ export async function scheduleAssessmentWindow(_: ActionResult, fd: FormData): P
     p_class: classId,
     p_starts: startsIso,
     p_ends: endsIso,
-    p_auto_start: false,
+    p_auto_start: !bool(fd, "manual_start"),
   });
   if (error) return fail(error);
   revalidatePath(`/teach/assessments/${id}`);
@@ -908,4 +929,79 @@ export async function autoSortIntoRounds(_: ActionResult, fd: FormData): Promise
       ? `Sorted ${sorted} question${sorted === 1 ? "" : "s"} into the round of the test they're used in.${left ? ` ${left} weren't used in a test with a round — tick them and choose Move to round.` : ""}`
       : `None of these are used in a test with a round, so they couldn't be sorted automatically. Tick them and choose Move to round.`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// This term's papers: one paper per subject × year group × round (a second one only for other arms)
+// ---------------------------------------------------------------------------
+export async function openPaperForRound(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  const staff = await requireStaff();
+  const s = await getStructure();
+  const subjectId = str(fd, "subject_id");
+  const yearId = str(fd, "year_id");
+  const subject = s.subjectById.get(subjectId);
+  const year = s.yearById.get(yearId);
+  const round = (await getRoundConfigs()).find((r) => r.id === str(fd, "round_id"));
+  const termId = s.currentTerm?.id;
+  if (!subject || !year || !round) return fail("That paper can't be found. Refresh the page and try again.");
+  if (!termId) return fail("No current term is set. Ask the super admin.");
+  const supabase = await createClient();
+
+  // My classes for this subject and year (all the year's classes for its Head of Section).
+  const adminHere = staff.isSuperAdmin || (staff.isAdmin && staff.sectionIds.includes(subject.section_id));
+  let mine: string[];
+  if (adminHere) {
+    mine = s.classes.filter((c) => c.active && c.year_id === yearId).map((c) => c.id);
+  } else {
+    const { data } = await supabase
+      .from("teaching_assignments")
+      .select("class_id")
+      .eq("teacher_id", staff.id)
+      .eq("subject_id", subjectId)
+      .eq("session_id", s.currentSessionId ?? "")
+      .eq("status", "approved");
+    mine = (data ?? []).map((r) => r.class_id as string).filter((c) => s.classById.get(c)?.year_id === yearId);
+  }
+  if (mine.length === 0) {
+    return fail("Your classes for this subject haven't been approved yet. You can still upload questions for this round meanwhile.");
+  }
+
+  // Already a paper for this subject, year and round? Use it if it covers my classes.
+  const { data: existing } = await supabase
+    .from("assessments")
+    .select("id, class_ids, round_id, sequence_label")
+    .eq("subject_id", subjectId)
+    .eq("year_id", yearId)
+    .eq("term_id", termId);
+  const rounds = await getRoundConfigs();
+  const same = (existing ?? []).filter((a) => roundOf(a, rounds)?.id === round.id);
+  const covered = new Set(same.flatMap((a) => (a.class_ids ?? []) as string[]));
+  const ownPaper = same.find((a) => mine.some((c) => ((a.class_ids ?? []) as string[]).includes(c)));
+  const uncovered = mine.filter((c) => !covered.has(c));
+  if (ownPaper && uncovered.length === 0) redirect(`/teach/assessments/${ownPaper.id}`);
+
+  const d = roundDefaults(round);
+  const forClasses = ownPaper ? uncovered : mine;
+  const arms = ownPaper ? ` (${forClasses.map((c) => s.classById.get(c)?.name).join(", ")})` : "";
+  const { data, error } = await supabase
+    .from("assessments")
+    .insert({
+      subject_id: subjectId,
+      year_id: yearId,
+      term_id: termId,
+      type: d.type,
+      title: `${subject.name} — ${round.label}${arms}`.slice(0, 200),
+      question_count: d.questions,
+      duration_minutes: d.minutes,
+      settings: { ...DEFAULT_SETTINGS, require_all_answered: d.type === "exam" || d.type === "mock" },
+      class_ids: forClasses,
+      created_by: staff.id,
+      sequence_label: round.label,
+      round_id: round.id,
+    })
+    .select("id")
+    .single();
+  if (error) return fail(error, "papers.create");
+  revalidatePath("/teach/papers");
+  redirect(`/teach/assessments/${data.id}?new=1`);
 }

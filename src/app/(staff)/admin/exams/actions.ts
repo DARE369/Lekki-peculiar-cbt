@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { fail, ok, str, type ActionResult } from "@/lib/actions";
+import { bool, fail, ok, str, type ActionResult } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
 import { lagosLocalToIso } from "@/lib/time";
 
@@ -26,7 +26,7 @@ export async function scheduleFromExamsPage(_prev: ActionResult | undefined, fd:
       p_class: classId,
       p_starts: starts,
       p_ends: ends,
-      p_auto_start: false,
+      p_auto_start: !bool(fd, "manual_start"),
     });
     if (error) return fail(`Could not schedule for one class: ${error.message}`);
   }
@@ -57,7 +57,7 @@ export async function bulkScheduleBySubject(_prev: ActionResult | undefined, fd:
       p_class: classId,
       p_starts: starts,
       p_ends: ends,
-      p_auto_start: false,
+      p_auto_start: !bool(fd, "manual_start"),
     });
     if (error) return fail(`Could not schedule for one class: ${error.message}`);
   }

@@ -42,8 +42,9 @@ export function ScheduleFields({ classes, scheduled, preferred }: { classes: Cla
       </div>
       <Checkbox
         name="auto_start"
+        defaultChecked
         label="Start automatically at the opening time"
-        hint="Leave unticked to press Start yourself on the day (recommended — you confirm everyone is seated first)."
+        hint="An administrator can still press Start earlier, or start it later if the class isn't ready. Untick to always press Start yourself."
       />
     </div>
   );

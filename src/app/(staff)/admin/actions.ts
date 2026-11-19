@@ -256,6 +256,36 @@ export async function requestResumes(windowId: string, studentIds: string[]): Pr
   return ok(`Resume requested for ${created} student${created === 1 ? "" : "s"}${suffix}`);
 }
 
+/** One step: give the ticked students extra minutes and let them carry on (needs the extra-time permission). */
+export async function letStudentsContinue(windowId: string, studentIds: string[], minutes: number, reason: string): Promise<ActionResult> {
+  if (!studentIds.length || studentIds.length > 60) return fail("Tick the students who should continue.");
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 180) return fail("Give between 1 and 180 minutes.");
+  if (!reason.trim()) return fail("Say why, for the record (for example: power cut at 10:20).");
+  await requireAdmin();
+  const supabase = await createClient();
+  let done = 0;
+  const errors: string[] = [];
+  for (const sid of studentIds) {
+    const { error } = await supabase.rpc("let_student_continue", {
+      p_window: windowId,
+      p_student: sid,
+      p_minutes: minutes,
+      p_reason: reason.trim().slice(0, 300),
+    });
+    if (error) {
+      const r = fail(error, "exam.let_continue");
+      errors.push(r && !r.ok ? r.error : "Couldn't let this student continue.");
+    } else done++;
+  }
+  revalidatePath(`/admin/exams/${windowId}`);
+  if (done === 0) return fail(errors[0] || "Nobody could be let back in.");
+  return ok(
+    `${done} student${done === 1 ? "" : "s"} can continue now, with ${minutes} minute${minutes === 1 ? "" : "s"}. They can sign in on any lab computer.${
+      errors.length ? ` ${errors.length} couldn't: ${errors[0]}` : ""
+    }`,
+  );
+}
+
 export async function approveResumes(windowId: string, requestIds: string[]): Promise<ActionResult> {
   if (!requestIds.length || requestIds.length > 50) return fail("Invalid request.");
   await requireAdmin();

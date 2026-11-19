@@ -754,10 +754,18 @@ function TestRow({
               Approve
             </option>
             <option value="flag" disabled={t.verdict === "blocked"}>
-              Approve, but flag for a second look
+              Approve, but it needs a fix before the exam
             </option>
-            <option value="send_back">Send back for changes</option>
+            <option value="send_back">Needs changes — send back</option>
           </Select>
+          {decision.action === "approve" ? (
+            <Input
+              value={decision.note}
+              onChange={(e) => onChange({ note: e.target.value })}
+              placeholder="Note for the teacher (optional — no changes needed)"
+              aria-label={`Approval note for ${t.title}`}
+            />
+          ) : null}
           {decision.action === "flag" ? (
             <div className="grid gap-2 sm:grid-cols-[16rem_1fr]">
               <Select

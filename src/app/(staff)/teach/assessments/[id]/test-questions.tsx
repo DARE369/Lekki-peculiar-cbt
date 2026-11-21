@@ -5,12 +5,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import type { QuestionOption } from "@/lib/types";
-import { removeFromTest } from "../../bank-actions";
+import { removeFromTest, setCommentFixed } from "../../bank-actions";
 
 type Q = { id: string; body: string; options: QuestionOption[]; answer: string };
+export type QComment = { id: string; body: string; resolved_at: string | null };
 
 /** The questions in this test. Tick to remove several at once (they stay in the bank). */
-export function TestQuestions({ assessmentId, questions, editable }: { assessmentId: string; questions: Q[]; editable: boolean }) {
+export function TestQuestions({
+  assessmentId,
+  questions,
+  editable,
+  comments = {},
+}: {
+  assessmentId: string;
+  questions: Q[];
+  editable: boolean;
+  /** The Head of Section's comments, by question id. */
+  comments?: Record<string, QComment[]>;
+}) {
   const router = useRouter();
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string | null>(null);
@@ -43,7 +55,11 @@ export function TestQuestions({ assessmentId, questions, editable }: { assessmen
       ) : null}
       <ol className="divide-y divide-border">
         {questions.map((q, i) => (
-          <li key={q.id} className="flex gap-3 px-5 py-3">
+          <li
+            key={q.id}
+            id={`q-${q.id}`}
+            className={`flex gap-3 px-5 py-3 ${(comments[q.id] ?? []).some((c) => !c.resolved_at) ? "bg-warning-soft/60" : ""}`}
+          >
             {editable ? (
               <input
                 type="checkbox"
@@ -70,6 +86,27 @@ export function TestQuestions({ assessmentId, questions, editable }: { assessmen
                   </span>
                 ))}
               </div>
+              {(comments[q.id] ?? []).map((c) => (
+                <div
+                  key={c.id}
+                  className={`mt-2 flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-xs ${c.resolved_at ? "border-border text-muted" : "border-warning/40 bg-surface text-warning"}`}
+                >
+                  <span className={c.resolved_at ? "line-through" : "font-medium"}>Head of Section: {c.body}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      start(async () => {
+                        await setCommentFixed(c.id, !c.resolved_at);
+                        router.refresh();
+                      })
+                    }
+                    className="ml-auto font-semibold text-brand hover:underline"
+                  >
+                    {c.resolved_at ? "Reopen" : "Mark fixed"}
+                  </button>
+                </div>
+              ))}
             </div>
             {editable ? (
               <div className="flex shrink-0 flex-col items-end gap-1.5">

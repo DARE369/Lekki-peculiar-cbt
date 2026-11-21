@@ -33,7 +33,8 @@ import { SettingsPanel } from "./settings-panel";
 import { SendForReview } from "./send-for-review";
 import { ScheduleForm } from "./schedule-form";
 import { AddQuestions, type PoolBank, type PoolQuestion } from "./add-questions";
-import { TestQuestions } from "./test-questions";
+import { TestQuestions, type QComment } from "./test-questions";
+import { ProgressLine } from "./progress-line";
 
 export const metadata: Metadata = { title: "Test" };
 
@@ -72,6 +73,14 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
     selected = (data ?? []).map((r) => r.questions as unknown as Q).filter(Boolean);
   }
   const selectedIds = new Set(selected.map((q) => q.id));
+  const { data: commentRows } = await supabase
+    .from("review_comments")
+    .select("id, question_id, body, resolved_at")
+    .eq("assessment_id", id)
+    .order("created_at");
+  const comments: Record<string, QComment[]> = {};
+  for (const c of commentRows ?? []) if (c.question_id) (comments[c.question_id as string] ??= []).push(c as QComment);
+  const openComments = (commentRows ?? []).filter((c) => !c.resolved_at && c.question_id && selectedIds.has(c.question_id as string)).length;
 
   // What can be added: every question for this subject and year that isn't in the test yet, grouped by bank.
   let pool: PoolQuestion[] = [];
@@ -202,9 +211,16 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
         </NextSteps>
       ) : null}
 
-      {a.status === "changes_requested" && a.review_note ? (
+      <ProgressLine status={a.status as AssessmentStatus} windows={windows ?? []} />
+
+      {a.status === "changes_requested" && (a.review_note || openComments) ? (
         <Alert tone="danger" title="Your Head of Section asked for changes">
-          {a.review_note}
+          {/^See the \d+ comments? on specific questions\.$/.test(a.review_note ?? "") ? null : a.review_note}
+          {openComments ? (
+            <span className="mt-1 block">
+              {openComments} question{openComments === 1 ? " has a comment" : "s have comments"} (highlighted below). Fix each one and press Mark fixed, then send the test again.
+            </span>
+          ) : null}
         </Alert>
       ) : null}
       {a.status === "pending_approval" ? (
@@ -302,7 +318,7 @@ export default async function AssessmentPage(props: PageProps<"/teach/assessment
             {selected.length === 0 ? (
               <EmptyState title="No questions yet">Upload a file, write questions, or pick from the bank below.</EmptyState>
             ) : (
-              <TestQuestions assessmentId={a.id} questions={selected} editable={editable} />
+              <TestQuestions assessmentId={a.id} questions={selected} editable={editable} comments={comments} />
             )}
           </Card>
 

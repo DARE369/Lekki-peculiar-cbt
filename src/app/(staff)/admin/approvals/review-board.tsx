@@ -24,7 +24,8 @@ import {
   type BulkReviewResult,
 } from "../actions";
 
-type Action = "none" | "approve" | "flag" | "send_back";
+// "flag" stays for tests flagged earlier; new reviews choose Approve, Approve with a note, or Needs changes.
+type Action = "none" | "approve" | "approve_note" | "flag" | "send_back";
 interface Decision {
   action: Action;
   category: string;
@@ -184,7 +185,7 @@ export function ReviewBoard({
 
   const chosen = (a: Action) =>
     pendingTests.filter((t) => decisions[t.id]?.action === a);
-  const approving = chosen("approve");
+  const approving = [...chosen("approve"), ...chosen("approve_note")];
   const flagging = chosen("flag");
   const sendingBack = chosen("send_back");
   const later =
@@ -202,8 +203,10 @@ export function ReviewBoard({
       return "Choose a reason for the flag.";
     if (d.action === "send_back" && !d.note.trim())
       return "Say what the teacher needs to change.";
+    if (d.action === "approve_note" && !d.note.trim())
+      return "Write the note for the teacher, or choose Approve.";
     if (
-      (d.action === "approve" || d.action === "flag") &&
+      (d.action === "approve" || d.action === "approve_note" || d.action === "flag") &&
       t.verdict === "blocked"
     )
       return "This test can't be approved until it is fixed.";
@@ -231,7 +234,7 @@ export function ReviewBoard({
       .filter((t) => decisions[t.id]?.action !== "none")
       .map((t) => ({
         id: t.id,
-        action: decisions[t.id].action as "approve" | "flag" | "send_back",
+        action: (decisions[t.id].action === "approve_note" ? "approve" : decisions[t.id].action) as "approve" | "flag" | "send_back",
         category: decisions[t.id].category || undefined,
         note: decisions[t.id].note || undefined,
       }));
@@ -302,15 +305,14 @@ export function ReviewBoard({
     return (
       <div className="space-y-4">
         <Alert tone="info" title="Check before you finish">
-          Teachers will each get one email. Approved tests are locked. Flagged
-          tests are approved too, but the teacher is asked to correct them, and
-          they can&apos;t start by themselves.
+          Teachers will each get one email, with your notes. Approved tests are locked
+          {" "}and dated from the exam calendar where it has dates.
         </Alert>
         {[
           {
             title: `Approve (${approving.length})`,
             list: approving,
-            extra: () => undefined,
+            extra: (t: ReviewTest) => (decisions[t.id].note && decisions[t.id].action === "approve_note" ? `Note: ${decisions[t.id].note}` : undefined),
             tone: "text-success",
           },
           {
@@ -666,9 +668,11 @@ function TestRow({
                   ? `${warnings} warning${warnings === 1 ? "" : "s"}`
                   : "No problems found"
               : "Class readiness"}
-            <span className="ml-1 font-normal text-muted">
-              · {classesReady} of {t.live.length} classes ready
-            </span>
+            {classesReady < t.live.length ? (
+              <span className="ml-1 font-normal text-warning">
+                · {t.live.length - classesReady} class{t.live.length - classesReady === 1 ? " needs" : "es need"} attention
+              </span>
+            ) : null}
           </summary>
           <div className="mt-2 space-y-3 text-sm">
             {t.issues.length ? (
@@ -697,7 +701,7 @@ function TestRow({
               </p>
             ) : null}
             <ul className="space-y-1">
-              {t.live.map((c) => (
+              {t.live.filter((c) => !c.ready).map((c) => (
                 <li key={c.classId} className="flex gap-2">
                   {c.ready ? (
                     <CheckCircle2
@@ -726,11 +730,35 @@ function TestRow({
               href={`/admin/approvals/${t.id}`}
               className="inline-block font-semibold text-brand hover:underline"
             >
-              {t.status === "approved"
-                ? "Open the test and set dates →"
-                : "Open the full test →"}
+              {t.status === "approved" ? "Open the test and set dates →" : "Open to comment on specific questions →"}
             </Link>
           </div>
+        </details>
+      ) : null}
+
+      {pending && t.preview.length ? (
+        <details className="group mt-2">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-brand">
+            <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+            Show the {t.preview.length} question{t.preview.length === 1 ? "" : "s"}
+          </summary>
+          <ol className="mt-2 max-h-[420px] space-y-3 overflow-y-auto rounded-md border border-border p-3 text-sm">
+            {t.preview.map((q, i) => (
+              <li key={q.id}>
+                <p className="whitespace-pre-wrap">
+                  <span className="text-muted tabular-nums">{i + 1}.</span> {q.body}
+                </p>
+                <p className="mt-0.5 grid gap-x-4 pl-5 text-xs text-muted sm:grid-cols-2">
+                  {q.options.map((o) => (
+                    <span key={o.key} className={o.key === q.answer ? "font-semibold text-success" : ""}>
+                      {o.key}. {o.text}
+                      {o.key === q.answer ? " ✓" : ""}
+                    </span>
+                  ))}
+                </p>
+              </li>
+            ))}
+          </ol>
         </details>
       ) : null}
 
@@ -753,16 +781,16 @@ function TestRow({
             <option value="approve" disabled={t.verdict === "blocked"}>
               Approve
             </option>
-            <option value="flag" disabled={t.verdict === "blocked"}>
-              Approve, but it needs a fix before the exam
+            <option value="approve_note" disabled={t.verdict === "blocked"}>
+              Approve with a note (no changes needed)
             </option>
-            <option value="send_back">Needs changes — send back</option>
+            <option value="send_back">Needs changes</option>
           </Select>
-          {decision.action === "approve" ? (
+          {decision.action === "approve_note" ? (
             <Input
               value={decision.note}
               onChange={(e) => onChange({ note: e.target.value })}
-              placeholder="Note for the teacher (optional — no changes needed)"
+              placeholder="Note for the teacher, e.g. Good work, check Q4's wording next time"
               aria-label={`Approval note for ${t.title}`}
             />
           ) : null}

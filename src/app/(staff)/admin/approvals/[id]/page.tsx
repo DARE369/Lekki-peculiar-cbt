@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Alert, Badge, Card, CardHeader, Field, PageHeader, Textarea } from "@/components/ui";
+import { calendarSlot } from "@/lib/calendar";
 import { can, requireAdmin } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { STATUS_LABEL, TYPE_LABEL, WINDOW_LABEL, windowState } from "@/lib/labels";
@@ -48,6 +49,24 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
   const scheduled = new Set((windows ?? []).map((w) => w.class_id as string));
   const preferred = new Set<string>(a.class_ids ?? []);
   const canApprove = can(staff, "exam.approve");
+  const pending = a.status === "pending_approval" && canApprove;
+  const sp = await props.searchParams;
+  const slot = a.status === "pending_approval" || a.status === "approved" ? await calendarSlot(supabase, a) : null;
+  const { data: commentRows } = await supabase
+    .from("review_comments")
+    .select("id, question_id, body, created_at, resolved_at")
+    .eq("assessment_id", id)
+    .order("created_at");
+  const comments = new Map<string, { id: string; body: string; resolved_at: string | null }[]>();
+  for (const c of commentRows ?? []) {
+    const k = (c.question_id as string | null) ?? "";
+    comments.set(k, [...(comments.get(k) ?? []), c as { id: string; body: string; resolved_at: string | null }]);
+  }
+  const { count: othersWaiting } = await supabase
+    .from("assessments")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending_approval")
+    .neq("id", id);
   const [statusLabel, statusTone] = STATUS_LABEL[a.status as AssessmentStatus];
 
   return (
@@ -63,6 +82,7 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
         description={`${s.subjectById.get(a.subject_id)?.name} · ${s.yearById.get(a.year_id)?.name} · ${TYPE_LABEL[a.type as AssessmentType]} by ${(a.staff as { full_name: string } | null)?.full_name}`}
       />
 
+      {sp.next ? <Alert tone="success">Done. Here is the next test waiting for you.</Alert> : null}
       <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
         <Card>
           <CardHeader
@@ -87,6 +107,26 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
                     ))}
                   </div>
                   {q.topic ? <p className="mt-1 text-xs text-muted">Topic: {q.topic}</p> : null}
+                  {(comments.get(q.id) ?? []).map((c) => (
+                    <p key={c.id} className={`mt-2 rounded-md px-3 py-1.5 text-xs ${c.resolved_at ? "bg-surface-2 text-muted line-through" : "bg-warning-soft text-warning"}`}>
+                      Your comment: {c.body}
+                      {c.resolved_at ? " (teacher marked fixed)" : ""}
+                    </p>
+                  ))}
+                  {pending ? (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs font-medium text-brand">Comment on this question</summary>
+                      <Textarea
+                        form="review-form"
+                        name={`comment_${q.id}`}
+                        rows={2}
+                        maxLength={1000}
+                        aria-label={`Comment on question ${i + 1}`}
+                        placeholder="e.g. The answer should be C"
+                        className="mt-1"
+                      />
+                    </details>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -125,19 +165,31 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
             <Alert tone="warning">You don&apos;t have permission to approve or schedule exams. Ask the super admin.</Alert>
           ) : a.status === "pending_approval" ? (
             <Card>
-              <CardHeader title="Approve and schedule" />
-              <ActionForm action={reviewAssessment} className="space-y-5 p-5">
+              <CardHeader
+                title="Approve"
+                description={
+                  slot
+                    ? `Dates are filled in from the exam calendar: ${formatDateTime(slot.starts_at)} – ${formatDateTime(slot.ends_at)}.`
+                    : "Tick classes and set dates now, or untick them all to approve and date it later."
+                }
+              />
+              <ActionForm id="review-form" action={reviewAssessment} className="space-y-5 p-5">
                 <input type="hidden" name="id" value={a.id} />
-                <ScheduleFields classes={yearClasses} scheduled={scheduled} preferred={preferred} />
-                <Field label="Note to the teacher (required if asking for changes)">
+                <ScheduleFields classes={yearClasses} scheduled={scheduled} preferred={preferred} slot={slot} />
+                <Field label="Note to the teacher (needed if asking for changes, unless you commented on questions)">
                   <Textarea name="note" rows={2} />
                 </Field>
                 <div className="flex flex-wrap gap-2">
                   <SubmitButton name="decision" value="approve" confirm="Approve? The questions will be locked.">
-                    Approve &amp; schedule
+                    Approve
                   </SubmitButton>
+                  {othersWaiting ? (
+                    <SubmitButton name="decision" value="approve_next" variant="secondary" confirm="Approve? The questions will be locked.">
+                      Approve &amp; next ({othersWaiting} waiting)
+                    </SubmitButton>
+                  ) : null}
                   <SubmitButton name="decision" value="changes" variant="secondary">
-                    Ask for changes
+                    Needs changes
                   </SubmitButton>
                 </div>
               </ActionForm>

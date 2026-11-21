@@ -1,7 +1,7 @@
 import "server-only";
 import type { Structure } from "@/lib/data";
 import { homeSectionOf, setHomeSection } from "@/lib/sections";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 
 export type PickerSection = {
   id: string;
@@ -38,8 +38,8 @@ export async function myPicks(teacherId: string, s: Structure) {
 }
 
 /**
- * Saves the picker: new choices become requests for the Head of Section; pending choices that were
- * unticked are withdrawn. Approved ones are never touched. Returns an error message or null.
+ * Saves the picker: new choices are approved at once when no other teacher has them, otherwise they
+ * become requests for the Head of Section; pending choices that were unticked are withdrawn. Approved ones are never touched. Returns an error message or null.
  */
 export async function applySubjectPicks(teacherId: string, s: Structure, picksRaw: string[]): Promise<string | null> {
   if (!s.currentSessionId) return "The school year hasn't been set up yet. Please contact the school office.";
@@ -75,6 +75,45 @@ export async function applySubjectPicks(teacherId: string, s: Structure, picksRa
     );
     if (error) return error.message;
     if (!home && only) await setHomeSection(teacherId, only);
+    await autoApproveUnclaimed(teacherId, s.currentSessionId);
   }
   return null;
+}
+
+/**
+ * A request nobody else could be confused with is approved straight away: if no other teacher has
+ * (or has asked for) that subject in that class this session, there is nothing for the Head of
+ * Section to decide. Clashes stay as requests. Auto-approvals are marked by decided_by being empty,
+ * and the Head of Section sees them in Approvals, where they can be undone.
+ */
+export async function autoApproveUnclaimed(teacherId: string, sessionId: string) {
+  try {
+    const admin = createAdminClient();
+    const { data: mine } = await admin
+      .from("teaching_assignments")
+      .select("id, subject_id, class_id")
+      .eq("teacher_id", teacherId)
+      .eq("session_id", sessionId)
+      .eq("status", "requested");
+    if (!mine?.length) return 0;
+    const { data: others } = await admin
+      .from("teaching_assignments")
+      .select("subject_id, class_id")
+      .eq("session_id", sessionId)
+      .neq("teacher_id", teacherId)
+      .in("status", ["requested", "approved"])
+      .in("subject_id", [...new Set(mine.map((r) => r.subject_id as string))]);
+    const taken = new Set((others ?? []).map((r) => `${r.subject_id}:${r.class_id}`));
+    const free = mine.filter((r) => !taken.has(`${r.subject_id}:${r.class_id}`)).map((r) => r.id as string);
+    if (!free.length) return 0;
+    await admin
+      .from("teaching_assignments")
+      .update({ status: "approved", decided_by: null, decided_at: new Date().toISOString() })
+      .in("id", free)
+      .eq("status", "requested");
+    return free.length;
+  } catch (e) {
+    console.error("autoApproveUnclaimed failed:", e);
+    return 0;
+  }
 }

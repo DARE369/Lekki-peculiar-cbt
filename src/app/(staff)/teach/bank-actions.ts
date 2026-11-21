@@ -231,3 +231,19 @@ export async function removeFromTest(assessmentId: string, ids: string[]): Promi
   revalidatePath(`/teach/assessments/${assessmentId}`);
   return ok(`Removed ${done} question${done === 1 ? "" : "s"} from this test. They're still in your bank.`);
 }
+
+/** The teacher marks a reviewer's comment on a question as fixed (or reopens it). */
+export async function setCommentFixed(commentId: string, fixed: boolean): Promise<ActionResult> {
+  await requireStaff();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("review_comments")
+    .update({ resolved_at: fixed ? new Date().toISOString() : null })
+    .eq("id", commentId)
+    .select("assessment_id")
+    .maybeSingle();
+  if (error) return fail(error, "review.comment_fixed");
+  if (!data) return fail("That comment couldn't be changed.");
+  revalidatePath(`/teach/assessments/${data.assessment_id}`);
+  return ok(fixed ? "Marked fixed." : "Reopened.");
+}

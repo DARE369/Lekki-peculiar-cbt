@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useRef, useState } from "react";
 import {
+  CalendarDays,
   BarChart3,
   BookOpenCheck,
   CalendarClock,
@@ -48,6 +49,7 @@ const ICONS = {
   staff: UserCog,
   sessions: ShieldCheck,
   rounds: Tag,
+  calendar: CalendarDays,
   problems: TriangleAlert,
   papers: ClipboardList,
 } satisfies Record<string, LucideIcon>;
@@ -55,7 +57,7 @@ export type NavIcon = keyof typeof ICONS;
 
 export interface NavGroup {
   title: string;
-  items: { href: string; label: string; icon: NavIcon; badge?: number }[];
+  items: { href: string; label: string; icon: NavIcon; badge?: number; /** other paths that count as this item */ also?: string[] }[];
 }
 
 export interface ShellUser {
@@ -118,7 +120,7 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
           <p className="mb-1 px-2.5 text-xs font-medium text-subtle">{g.title}</p>
           <ul className="space-y-px">
             {g.items.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = isActive(pathname, item.href) || (item.also ?? []).some((h) => isActive(pathname, h));
               const Icon = ICONS[item.icon];
               return (
                 <li key={item.href}>

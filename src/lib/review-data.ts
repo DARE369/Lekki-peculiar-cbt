@@ -33,6 +33,8 @@ export interface ReviewTest {
   issues: Issue[];
   live: ClassReadiness[];
   windows: { classId: string; startsAt: string }[];
+  /** The questions, for reading on the board without opening the test (pending tests only). */
+  preview: { id: string; body: string; options: { key: string; text: string }[]; answer: string }[];
 }
 
 /** PostgREST returns at most 1000 rows per request, so read big tables page by page. */
@@ -159,6 +161,13 @@ export async function loadReviewTests(s: Structure): Promise<ReviewTest[]> {
     let verdict: Verdict | null = null;
     let issues: Issue[] = [];
     const qids = byTest.get(t.id) ?? [];
+    const preview =
+      t.status === "pending_approval"
+        ? qids
+            .map((id) => question.get(id))
+            .filter((q): q is QuestionFacts => Boolean(q))
+            .map((q) => ({ id: q.id, body: q.body, options: q.options as { key: string; text: string }[], answer: q.answer }))
+        : [];
     if (t.status === "pending_approval") {
       const others = new Set<string>();
       for (const o of tests) {
@@ -198,6 +207,7 @@ export async function loadReviewTests(s: Structure): Promise<ReviewTest[]> {
       issues,
       live,
       windows: mine.map((w) => ({ classId: w.class_id, startsAt: w.starts_at })),
+      preview,
     };
   });
 }

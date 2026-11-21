@@ -48,16 +48,24 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       ];
   if (staff.isAdmin) {
     const admin: NavGroup = { title: "Administration", items: [] };
-    if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/approvals", label: "Approvals", icon: "approvals", badge: pendingApprovals });
+    // One inbox: tests to review and teaching requests, with one count.
+    if (can(staff, "exam.approve") || can(staff, "teachers.manage"))
+      admin.items.push({
+        href: can(staff, "exam.approve") ? "/admin/approvals" : "/admin/assignments",
+        label: "Approvals",
+        icon: "approvals",
+        badge: pendingApprovals + pendingAssignments,
+        also: ["/admin/assignments"],
+      });
     admin.items.push({ href: "/teach/assessments?scope=all", label: "Tests & exams", icon: "tests" });
     admin.items.push({ href: "/admin/exams", label: "Exams & live monitor", icon: "exams" });
     admin.items.push({ href: "/admin/students", label: "Students", icon: "students" });
-    admin.items.push({ href: "/admin/assignments", label: "Class assignments", icon: "assignments", badge: pendingAssignments });
     admin.items.push({ href: "/admin/progress", label: "Staff progress", icon: "progress" });
     if (!staff.isSuperAdmin) admin.items.push({ href: "/admin/team", label: "My staff", icon: "staff" });
     admin.items.push({ href: "/admin/classes", label: "Classes & subjects", icon: "structure" });
     if (can(staff, "terminals.manage")) admin.items.push({ href: "/admin/terminals", label: "Lab computers", icon: "terminals" });
     admin.items.push({ href: "/admin/rounds", label: "Rounds", icon: "rounds" });
+    if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/calendar", label: "Exam calendar", icon: "calendar" });
     admin.items.push({ href: "/admin/problems", label: "Problems", icon: "problems" });
     admin.items.push({ href: "/admin/audit", label: "Audit log", icon: "audit" });
     groups.push(admin);

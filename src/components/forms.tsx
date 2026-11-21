@@ -67,7 +67,9 @@ export function ActionForm({
   className,
   resetOnSuccess = false,
   hideSuccess = false,
+  id,
 }: {
+  id?: string;
   action: (prev: ActionResult, fd: FormData) => Promise<ActionResult>;
   children: ReactNode;
   className?: string;
@@ -82,6 +84,7 @@ export function ActionForm({
   return (
     <form
       ref={ref}
+      id={id}
       className={className}
       onSubmit={(e) => {
         e.preventDefault();

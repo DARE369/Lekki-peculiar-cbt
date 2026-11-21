@@ -7,6 +7,7 @@ import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { assignTeacher, decideAssignment, removeAssignment } from "../actions";
 import { RemoveButton } from "./remove-button";
+import { InboxTabs } from "../inbox-tabs";
 
 export const metadata: Metadata = { title: "Class assignments" };
 
@@ -19,7 +20,7 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
   const [{ data: rows }, { data: teachers }, { data: testRows }] = await Promise.all([
     supabase
       .from("teaching_assignments")
-      .select("id, teacher_id, subject_id, class_id, status, staff:teacher_id(full_name)")
+      .select("id, teacher_id, subject_id, class_id, status, decided_by, decided_at, staff:teacher_id(full_name)")
       .eq("session_id", s.currentSessionId ?? ""),
     supabase.from("staff").select("id, full_name").eq("active", true).order("full_name"),
     supabase
@@ -34,10 +35,15 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
   const myClasses = s.classes.filter((c) => c.active && mySections.has(s.sectionOfClass(c.id)?.id ?? ""));
   const mySubjects = s.subjects.filter((x) => x.active && mySections.has(x.section_id));
 
-  type Row = { id: string; teacher_id: string; subject_id: string; class_id: string; status: string; staff: { full_name: string } | null };
+  type Row = {
+    id: string; teacher_id: string; subject_id: string; class_id: string; status: string;
+    decided_by: string | null; decided_at: string | null; staff: { full_name: string } | null;
+  };
   const all = (rows ?? []) as unknown as Row[];
   const requested = all.filter((r) => r.status === "requested");
   const approved = all.filter((r) => r.status === "approved");
+  // Approved by the system (no clash) in the last two weeks: shown so the Head of Section knows, and can undo.
+  const auto = approved.filter((r) => !r.decided_by && r.decided_at && isRecent(r.decided_at, 14));
 
   // Build test lookup: key = "teacher:subject:year"
   type TestRow = { id: string; created_by: string; subject_id: string; year_id: string; status: string; title: string; created_at: string };
@@ -72,16 +78,17 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
     <div className="space-y-6">
       <PageHeader
         icon={Users}
-        title="Class assignments"
-        description={`Who teaches what in ${s.currentTerm?.session_name ?? "this session"}. Teachers only see students and results for their approved classes.`}
+        title="Approvals"
+        description={`Teaching requests, and who teaches what in ${s.currentTerm?.session_name ?? "this session"}. A request is approved by itself when no other teacher has that subject in that class; only clashes wait for you.`}
       />
+      <InboxTabs staff={staff} active="requests" />
       {!manage ? <Alert tone="warning">You can view assignments but need the &quot;Approve teaching assignments&quot; permission to change them.</Alert> : null}
 
       {/* Pending requests */}
       <Card>
-        <CardHeader title={`Pending requests (${requested.length})`} />
+        <CardHeader title={`Waiting for you (${requested.length})`} description={requested.length ? "Usually because another teacher has, or asked for, the same subject in that class." : undefined} />
         {requested.length === 0 ? (
-          <EmptyState title="No requests waiting" />
+          <EmptyState title="No requests waiting">Requests without a clash are approved by themselves.</EmptyState>
         ) : (
           <form action={decideAssignment}>
             <Table stack>
@@ -115,6 +122,25 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
           </form>
         )}
       </Card>
+
+      {auto.length ? (
+        <Card>
+          <CardHeader
+            title={`Approved automatically (${auto.length})`}
+            description="No other teacher had these, so they were approved straight away. Remove any that are wrong."
+          />
+          <ul className="divide-y divide-border">
+            {auto.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
+                <span>
+                  <span className="font-medium">{r.staff?.full_name}</span> · {s.subjectById.get(r.subject_id)?.name} · {s.className(r.class_id)}
+                </span>
+                {manage ? <RemoveButton id={r.id} label={`${r.staff?.full_name} from ${s.className(r.class_id)}`} action={removeAssignment} /> : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       {/* Assign directly */}
       {manage ? (
@@ -295,4 +321,8 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
       </Card>
     </div>
   );
+}
+
+function isRecent(iso: string, days: number) {
+  return Date.parse(iso) > Date.now() - days * 86400_000;
 }

@@ -37,6 +37,8 @@ export interface Section {
   sort: number;
   /** Overrides the school's question deadline for this section's subjects. */
   question_deadline: string | null;
+  /** Approve teaching requests that clash with no one straight away (default on). */
+  auto_approve_requests?: boolean;
 }
 export interface Year {
   id: string;

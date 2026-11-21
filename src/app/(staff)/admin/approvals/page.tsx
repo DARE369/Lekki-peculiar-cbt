@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ClipboardCheck } from "lucide-react";
 import Link from "next/link";
-import { Alert, Badge, Card, EmptyState, PageHeader, Table, Td, Th, cn } from "@/components/ui";
+import { Alert, Badge, Card, EmptyState, PageHeader, Table, Td, Th } from "@/components/ui";
 import { can, requireAdmin } from "@/lib/auth";
 import { formatDateTime, getStructure } from "@/lib/data";
 import { TYPE_LABEL } from "@/lib/labels";
@@ -9,6 +9,7 @@ import { loadReviewTests } from "@/lib/review-data";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { ReviewBoard } from "./review-board";
+import { InboxTabs } from "../inbox-tabs";
 
 export const metadata: Metadata = { title: "Approvals" };
 
@@ -32,22 +33,13 @@ export default async function Approvals(props: PageProps<"/admin/approvals">) {
       <PageHeader
         icon={ClipboardCheck}
         title="Approvals"
-        description="Review every test set for your classes in one place. Approve the good ones together, flag the ones that need a second look, and send back the rest."
+        description="Tests sent for review and teaching requests, in one place. Approve the good ones together, add a note where it helps, and send back only what needs changes."
       />
       {typeof sp.error === "string" ? <Alert tone="danger">{sp.error}</Alert> : null}
       {sp.settled ? <Alert tone="success">Done.</Alert> : null}
 
-      <div className="flex gap-1 rounded-lg border border-border bg-surface p-1 text-sm" role="tablist">
-        {(["pending", "approved"] as const).map((v) => (
-          <Link
-            key={v}
-            href={`/admin/approvals?tab=${v}`}
-            className={cn("rounded-md px-4 py-1.5 capitalize", v === tab ? "bg-brand text-brand-ink" : "hover:bg-surface-2")}
-          >
-            {v === "pending" ? "Pending review" : "Approved"}
-          </Link>
-        ))}
-      </div>
+      <InboxTabs staff={staff} active={tab === "pending" ? "tests" : "approved"} />
+      {sp.done ? <Alert tone="success">That was the last one. Nothing else is waiting for you.</Alert> : null}
 
       {tab === "pending" ? (
         <PendingTab s={s} names={names} canDecide={can(staff, "exam.approve")} />

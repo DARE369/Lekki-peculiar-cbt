@@ -51,7 +51,7 @@ export default async function ClassPage(props: PageProps<"/teach/classes/[classI
       <Card>
         <CardHeader title="Students" description="Photos help you confirm who is who during exams." />
         {(students ?? []).length === 0 ? (
-          <EmptyState title="No students in this class yet" />
+          <EmptyState title="No students in this class yet">Your Head of Section adds students. Ask them if this looks wrong.</EmptyState>
         ) : (
           <Table stack>
             <thead>

@@ -94,7 +94,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
 
       {attempts.length === 0 ? (
         <Card>
-          <EmptyState title="Nobody has submitted this test yet" />
+          <EmptyState title="Nobody has submitted this test yet">Results appear here as soon as students finish.</EmptyState>
         </Card>
       ) : tab === "results" ? (
         <div className="grid gap-6 xl:grid-cols-[1fr_340px]">

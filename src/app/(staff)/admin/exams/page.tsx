@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { CalendarClock } from "lucide-react";
 import Link from "next/link";
-import { Badge, Card, EmptyState, PageHeader, cn } from "@/components/ui";
+import { Alert, Badge, Card, EmptyState, LinkButton, PageHeader, cn } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
-import { TYPE_LABEL } from "@/lib/labels";
+import { TYPE_LABEL, windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { bulkScheduleBySubject, scheduleFromExamsPage } from "./actions";
@@ -199,6 +199,8 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   if (view === "past") q = q.lt("ends_at", dayStart.toISOString()).order("starts_at", { ascending: false });
   const { data } = await q;
   rows = (data ?? []) as unknown as WindowRow[];
+  const waiting = view === "today" ? rows.filter((w) => windowState(w) === "awaiting_start") : [];
+  const { data: resumeRows } = await supabase.from("resume_requests").select("window_id").eq("status", "pending").limit(50);
 
   const emptyMessages = {
     today: "No exams today",
@@ -219,6 +221,29 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
         actions={view === "today" ? <AutoRefresh seconds={20} /> : undefined}
       />
       <ViewTabs view={view} draftsCount={draftsCount} />
+      {waiting.length ? (
+        <div className="animate-enter">
+          <Alert tone="danger" title={`${waiting.length} exam${waiting.length === 1 ? " is" : "s are"} waiting for you to press Start`}>
+            Students can&apos;t begin until it is started.
+            <span className="mt-2 flex flex-wrap gap-2">
+              {waiting.slice(0, 6).map((w) => (
+                <LinkButton key={w.id} href={`/admin/exams/${w.id}`} size="sm">
+                  Start {w.assessments?.title ?? "exam"} · {classNames[w.class_id] ?? ""}
+                </LinkButton>
+              ))}
+            </span>
+          </Alert>
+        </div>
+      ) : null}
+      {(resumeRows ?? []).length ? (
+        <div className="animate-enter">
+          <Alert tone="warning" title={`${resumeRows!.length} student${resumeRows!.length === 1 ? " is" : "s are"} asking to continue an exam`}>
+            <Link href={`/admin/exams/${resumeRows![0].window_id}`} className="font-semibold underline">
+              Open and respond
+            </Link>
+          </Alert>
+        </div>
+      ) : null}
       <Card>
         {rows.length === 0 ? (
           <EmptyState title={emptyMessages[view]}>

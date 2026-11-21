@@ -93,7 +93,7 @@ export default async function StaffProgressDetail(props: { params: Promise<{ id:
 
       {bySubject.size === 0 ? (
         <Card>
-          <EmptyState title="No subjects yet" />
+          <EmptyState title="No subjects yet">They will show here once this person picks what they teach.</EmptyState>
         </Card>
       ) : (
         [...bySubject.entries()].map(([subjectId, rows]) => {

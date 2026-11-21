@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, CardHeader, EmptyState, Field, Input, PageHeader, Stat, Table, Td, Th, cn } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, Stat, Table, Td, Th, cn } from "@/components/ui";
 import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { getQuestionSettings, getUploadProgress, type ProgressRow } from "@/lib/onboarding";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { staffSectionMap } from "@/lib/sections";
 import { SectionBadges } from "@/components/section-badges";
-import { resendInvite, saveDeadlines } from "./actions";
+import { resendInvite } from "./actions";
 import { Readiness } from "./readiness";
 
 export const metadata: Metadata = { title: "Staff progress" };
@@ -113,28 +113,15 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
         <Stat label="Tests sent for approval" value={`${teachers.filter((r) => r.stage === "done").length} / ${teachers.length}`} hint="teachers with a test for every subject & year" />
       </div>
 
-      <Card>
-        <CardHeader
-          icon={CalendarClock}
-          title="Deadlines"
-          description={`The date teachers should have their questions uploaded and tests sent for approval. A section date overrides the school date for that section.${me.isSuperAdmin ? "" : " You can set the date for your section."}`}
-        />
-        <ActionForm action={saveDeadlines} className="space-y-4 p-5">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {me.isSuperAdmin ? (
-              <Field label="Whole school">
-                <Input name="school_deadline" type="date" defaultValue={settings.defaultDeadline ?? ""} />
-              </Field>
-            ) : null}
-            {cbtSections.map((sec) => (
-              <Field key={sec.id} label={sec.name} hint={me.isSuperAdmin ? "Leave empty to use the school date." : undefined}>
-                <Input name={`section_${sec.id}`} type="date" defaultValue={sec.question_deadline ?? ""} />
-              </Field>
-            ))}
-          </div>
-          <SubmitButton variant="secondary">Save deadlines</SubmitButton>
-        </ActionForm>
-      </Card>
+      <p className="text-sm text-muted">
+        {(() => {
+          const dates = cbtSections.map((x) => `${x.name}: ${x.question_deadline ?? settings.defaultDeadline ?? "not set"}`);
+          return `Question deadlines — ${dates.join(" · ") || "not set"}. `;
+        })()}
+        <Link href="/admin/settings/deadlines" className="font-semibold text-brand hover:underline">
+          Change in Settings
+        </Link>
+      </p>
 
       <Card>
         <div className="space-y-3 border-b border-border p-4">
@@ -174,7 +161,7 @@ export default async function ProgressPage(props: PageProps<"/admin/progress">) 
           </div>
         </div>
         {shown.length === 0 ? (
-          <EmptyState title="Nobody here" />
+          <EmptyState title="Nobody here">Nobody matches this filter. Try Everyone.</EmptyState>
         ) : (
           <Table stack>
             <thead>

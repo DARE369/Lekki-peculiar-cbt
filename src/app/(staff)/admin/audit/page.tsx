@@ -54,7 +54,7 @@ export default async function AuditPage(props: PageProps<"/admin/audit">) {
       />
       <Card>
         {(data ?? []).length === 0 ? (
-          <EmptyState title="Nothing recorded" />
+          <EmptyState title="Nothing recorded">Changes people make (approvals, schedules, settings) are listed here as they happen.</EmptyState>
         ) : (
           <Table stack>
             <thead>

@@ -93,18 +93,18 @@ export interface ClassReadiness {
   notes: string[];
 }
 
-/** Could each class arm actually sit it? Advisory only: nothing here blocks approval. */
+/**
+ * Could each class arm actually sit it? Only real problems are reported here. Missing photos and "no date
+ * yet" are not about the test (photos only help a student find their name; dates come from the calendar),
+ * so they live on the Students and Exams pages instead of raising false alarms during review.
+ */
 export function checkLive(classes: ClassFacts[], teacherApprovedFor: Set<string>): ClassReadiness[] {
   return classes.map((c) => {
     const notes: string[] = [];
     if (c.students === 0) notes.push("No students in this class yet");
-    if (c.studentsWithoutPhoto > 0 && c.students > 0) notes.push(`${c.studentsWithoutPhoto} of ${c.students} students have no photo`);
     if (!teacherApprovedFor.has(c.id)) notes.push("The teacher isn't approved for this class");
     if (c.scheduledDay && c.otherWindowsThatDay >= 2) notes.push(`${c.otherWindowsThatDay + 1} exams that day`);
-    if (!c.scheduledDay) notes.push("No date set yet");
-    // "No date set yet" is normal before scheduling, so it doesn't make a class "not ready" on its own.
-    const blocking = notes.filter((n) => n !== "No date set yet");
-    return { classId: c.id, name: c.name, ready: blocking.length === 0, notes };
+    return { classId: c.id, name: c.name, ready: notes.length === 0, notes };
   });
 }
 

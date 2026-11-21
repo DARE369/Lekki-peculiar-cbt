@@ -85,13 +85,12 @@ export async function SchoolOverview({ s }: { s: Structure }) {
   const rank: Record<Cell, number> = { scheduled: 3, approved: 2, pending: 1, none: 0 };
   const cellFor = (subjectId: string, classId: string): { state: Cell; href: string | null } => {
     let best: Cell = "none";
-    let bestTestId: string | null = null;
     let bestWindowId: string | null = null;
     for (const t of tests) {
       if (t.subjectId !== subjectId || !t.classIds.includes(classId)) continue;
       const w = windows.find((x) => x.assessment_id === t.id && x.class_id === classId);
       const c: Cell = t.status === "approved" ? (w ? "scheduled" : "approved") : t.status === "pending_approval" ? "pending" : "none";
-      if (rank[c] > rank[best]) { best = c; bestTestId = t.id; bestWindowId = w?.id ?? null; }
+      if (rank[c] > rank[best]) { best = c; bestWindowId = w?.id ?? null; }
     }
     const href =
       best === "scheduled" ? `/admin/exams/${bestWindowId}` :
@@ -165,7 +164,7 @@ export async function SchoolOverview({ s }: { s: Structure }) {
         <Card>
           <CardHeader icon={Radio} title="Live and next up" />
           {live.length + waiting.length + thisWeek.length === 0 ? (
-            <EmptyState title="No exams running or scheduled this week" />
+            <EmptyState title="No exams running or scheduled this week">Approved tests get their dates from the exam calendar, or from Exams → Needs a date.</EmptyState>
           ) : (
             <ul className="divide-y divide-border border-t border-border">
               {[...live.map((w) => ({ w, label: "Live", tone: "success" as const })), ...waiting.map((w) => ({ w, label: "Waiting to start", tone: "warning" as const })), ...thisWeek.slice(0, 6).map((w) => ({ w, label: "Scheduled", tone: "info" as const }))].slice(0, 8).map(({ w, label, tone }) => (

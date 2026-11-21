@@ -50,6 +50,7 @@ export function QuestionTable({
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [working, setWorking] = useState<"test" | "delete" | null>(null);
   const head = useRef<HTMLInputElement>(null);
 
   const pageIds = questions.map((q) => q.id);
@@ -189,7 +190,11 @@ export function QuestionTable({
             <Button
               size="sm"
               disabled={pending}
-              onClick={() => start(async () => after(await makeTestFromQuestions({ ids: ids(), subjectId, yearId })))}
+              loading={pending && working === "test"}
+              onClick={() => {
+                setWorking("test");
+                start(async () => after(await makeTestFromQuestions({ ids: ids(), subjectId, yearId })));
+              }}
             >
               Make a test from these
             </Button>
@@ -204,7 +209,10 @@ export function QuestionTable({
             <Button size="sm" variant={mode === "topic" ? "soft" : "secondary"} onClick={() => setMode(mode === "topic" ? null : "topic")}>
               Set topic
             </Button>
-            <Button size="sm" variant="ghost" className="text-danger hover:text-danger" disabled={pending} onClick={() => start(async () => setPreview(await previewBulkDelete(ids())))}>
+            <Button size="sm" variant="ghost" className="text-danger hover:text-danger" disabled={pending} loading={pending && working === "delete"} onClick={() => {
+                setWorking("delete");
+                start(async () => setPreview(await previewBulkDelete(ids())));
+              }}>
               Delete
             </Button>
             <Button size="sm" variant="ghost" onClick={clear}>
@@ -305,8 +313,8 @@ function TopicPicker({ topics, busy, onPick }: { topics: string[]; busy: boolean
 
 function DeleteDialog({ preview, busy, onCancel, onConfirm }: { preview: PreviewResult; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="del-title">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 shadow-float">
+    <div className="fixed inset-0 z-50 flex items-end justify-center animate-fade bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="del-title">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 shadow-float animate-rise">
         <h2 id="del-title" className="text-base font-semibold">
           Delete {preview.safe.length + preview.blocked.length} question{preview.safe.length + preview.blocked.length === 1 ? "" : "s"}?
         </h2>

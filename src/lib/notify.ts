@@ -80,13 +80,27 @@ export async function notifyAssessmentReview(assessmentId: string, approved: boo
     if (!a?.staff?.email) return;
     const site = await siteOrigin();
     const title = approved ? `“${a.title}” is approved` : `Changes requested on “${a.title}”`;
+    // Comments on specific questions, numbered as in the test.
+    const [{ data: cs }, { data: order }] = await Promise.all([
+      admin.from("review_comments").select("question_id, body, questions(body)").eq("assessment_id", assessmentId).is("resolved_at", null).order("created_at"),
+      admin.from("assessment_questions").select("question_id, position").eq("assessment_id", assessmentId).order("position"),
+    ]);
+    const num = new Map((order ?? []).map((r, i) => [r.question_id as string, i + 1]));
+    const commentList = ((cs ?? []) as unknown as { question_id: string | null; body: string; questions: { body: string } | null }[])
+      .map((c) => {
+        const n = c.question_id ? num.get(c.question_id) : undefined;
+        const q = c.questions?.body ? ` <span style="color:#667085">(“${esc(c.questions.body.slice(0, 80))}${c.questions.body.length > 80 ? "…" : ""}”)</span>` : "";
+        return `<li style="margin:0 0 6px"><strong>${n ? `Question ${n}` : "General"}</strong>${q}: ${esc(c.body)}</li>`;
+      })
+      .join("");
     const body =
       `<p style="margin:0 0 14px">Dear ${esc(a.staff.full_name)},</p>` +
       (approved
         ? `<p style="margin:0">Your test <strong>${esc(a.title)}</strong> has been <strong>approved</strong>. It is now locked and will be scheduled for your classes.</p>`
         : `<p style="margin:0">Your Head of Section has asked for some changes to <strong>${esc(a.title)}</strong> before it can be approved.</p>`) +
       (note ? `<p style="margin:14px 0 0;padding:12px 16px;background:#f6f8fc;border-left:4px solid #1d3f9a;border-radius:0 8px 8px 0"><strong>Note:</strong> ${esc(note)}</p>` : "") +
-      (approved ? "" : `<p style="margin:14px 0 0">Make the changes, then press <strong>Submit for approval</strong> again.</p>`);
+      (commentList ? `<p style="margin:14px 0 6px"><strong>Comments on specific questions:</strong></p><ul style="margin:0;padding-left:20px">${commentList}</ul>` : "") +
+      (approved ? "" : `<p style="margin:14px 0 0">Make the changes, then press <strong>Send for review</strong> again. The questions with comments are highlighted on the test page.</p>`);
     await sendMail(
       a.staff.email,
       `${approved ? "Test approved" : "Changes requested"}: ${a.title} — Peculiar CBT`,
@@ -139,7 +153,7 @@ export async function notifyBulkReview(decisions: BulkDecision[]) {
       const flagged = items.filter((i) => i.d.action === "flag");
       const back = items.filter((i) => i.d.action === "send_back");
       let body = `<p style="margin:0 0 14px">Dear ${esc(who.full_name)},</p>`;
-      if (approved.length) body += `<p style="margin:0">These tests are <strong>approved</strong>:</p>${list(approved, () => "")}`;
+      if (approved.length) body += `<p style="margin:0">These tests are <strong>approved</strong>:</p>${list(approved, (d) => (d.note ? `<br><span style="color:#475467">Note: ${esc(d.note)}</span>` : ""))}`;
       if (flagged.length) {
         body += `<p style="margin:${approved.length ? "18px" : "0"} 0 0">These are <strong>approved, but need a second look</strong>. Please open each one and correct what is mentioned:</p>${list(
           flagged,

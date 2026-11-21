@@ -4,6 +4,7 @@ import { can, needsOnboarding, requireStaff } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
+import { SETTINGS_PATHS } from "./admin/settings/sections";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff();
@@ -13,13 +14,27 @@ export default async function StaffLayout({ children }: { children: React.ReactN
 
   let pendingApprovals = 0;
   let pendingAssignments = 0;
+  let waitingToStart = 0;
+  let resumeRequests = 0;
   if (staff.isAdmin) {
-    const [a, t] = await Promise.all([
+    const nowIso = new Date().toISOString();
+    const [a, t, w, r] = await Promise.all([
       supabase.from("assessments").select("id", { count: "exact", head: true }).eq("status", "pending_approval"),
       supabase.from("teaching_assignments").select("id", { count: "exact", head: true }).eq("status", "requested"),
+      // Exams whose time has come but that wait for someone to press Start.
+      supabase
+        .from("exam_windows")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "scheduled")
+        .eq("auto_start", false)
+        .lte("starts_at", nowIso)
+        .gt("ends_at", nowIso),
+      supabase.from("resume_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
     ]);
     pendingApprovals = can(staff, "exam.approve") ? (a.count ?? 0) : 0;
     pendingAssignments = can(staff, "teachers.manage") ? (t.count ?? 0) : 0;
+    waitingToStart = can(staff, "exam.start") ? (w.count ?? 0) : 0;
+    resumeRequests = r.count ?? 0;
   }
 
   // The super admin runs the school rather than teaching, so they get no Teaching menu.
@@ -47,27 +62,33 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         },
       ];
   if (staff.isAdmin) {
-    const admin: NavGroup = { title: "Administration", items: [] };
-    if (can(staff, "exam.approve")) admin.items.push({ href: "/admin/approvals", label: "Approvals", icon: "approvals", badge: pendingApprovals });
-    admin.items.push({ href: "/teach/assessments?scope=all", label: "Tests & exams", icon: "tests" });
-    admin.items.push({ href: "/admin/exams", label: "Exams & live monitor", icon: "exams" });
-    admin.items.push({ href: "/admin/students", label: "Students", icon: "students" });
-    admin.items.push({ href: "/admin/assignments", label: "Class assignments", icon: "assignments", badge: pendingAssignments });
-    admin.items.push({ href: "/admin/progress", label: "Staff progress", icon: "progress" });
-    if (!staff.isSuperAdmin) admin.items.push({ href: "/admin/team", label: "My staff", icon: "staff" });
-    admin.items.push({ href: "/admin/classes", label: "Classes & subjects", icon: "structure" });
-    if (can(staff, "terminals.manage")) admin.items.push({ href: "/admin/terminals", label: "Lab computers", icon: "terminals" });
-    admin.items.push({ href: "/admin/rounds", label: "Rounds", icon: "rounds" });
-    admin.items.push({ href: "/admin/problems", label: "Problems", icon: "problems" });
-    admin.items.push({ href: "/admin/audit", label: "Audit log", icon: "audit" });
-    groups.push(admin);
-  }
-  if (staff.isSuperAdmin) {
+    // Things that need someone today, with counts that stand out.
+    const today: NavGroup = { title: "Needs you", items: [] };
+    if (can(staff, "exam.approve") || can(staff, "teachers.manage"))
+      today.items.push({
+        href: can(staff, "exam.approve") ? "/admin/approvals" : "/admin/assignments",
+        label: "Approvals",
+        icon: "approvals",
+        badge: pendingApprovals + pendingAssignments,
+        also: ["/admin/assignments"],
+      });
+    today.items.push({ href: "/admin/exams", label: "Exams & live monitor", icon: "exams", badge: waitingToStart + resumeRequests, urgent: true });
+    groups.push(today);
+
+    const school: NavGroup = { title: "School", items: [] };
+    school.items.push({ href: "/teach/assessments?scope=all", label: "All tests & exams", icon: "tests" });
+    school.items.push({ href: "/admin/students", label: "Students", icon: "students" });
+    school.items.push({ href: "/admin/progress", label: "Staff progress", icon: "progress" });
+    if (staff.isSuperAdmin) school.items.push({ href: "/admin/staff", label: "Staff & permissions", icon: "staff" });
+    else school.items.push({ href: "/admin/team", label: "My staff", icon: "staff" });
+    groups.push(school);
+
     groups.push({
-      title: "Super admin",
+      title: "Setup",
       items: [
-        { href: "/admin/staff", label: "Staff & permissions", icon: "staff" },
-        { href: "/admin/school", label: "Sessions & terms", icon: "sessions" },
+        { href: "/admin/settings", label: "Settings", icon: "settings", also: SETTINGS_PATHS },
+        { href: "/admin/problems", label: "Problems", icon: "problems" },
+        { href: "/admin/audit", label: "Audit log", icon: "audit" },
       ],
     });
   }

@@ -5,11 +5,12 @@ import { Badge, Card, CardHeader, Checkbox, Field, Input, PageHeader } from "@/c
 import { requireSuperAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createSession, setCurrentTerm, updateSection } from "../staff/actions";
+import { SettingsNav } from "../settings/settings-nav";
 
 export const metadata: Metadata = { title: "Sessions & terms" };
 
 export default async function SchoolPage() {
-  await requireSuperAdmin();
+  const staff = await requireSuperAdmin();
   const s = await getStructure();
   const sessions = [...new Set(s.terms.map((t) => t.session_name))];
   return (
@@ -19,6 +20,7 @@ export default async function SchoolPage() {
         title="Sessions, terms & sections"
         description="Every test belongs to a term, so reports stay organised year after year. Switch the current term at the start of each term."
       />
+      <SettingsNav staff={staff} active="school" />
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Terms" />

@@ -78,7 +78,7 @@ export default async function StudentsPage(props: PageProps<"/admin/students">) 
 
       <Card>
         {(students ?? []).length === 0 ? (
-          <EmptyState title="No students found" />
+          <EmptyState title="No students found">Check the search or class filter, or add students with Import.</EmptyState>
         ) : (
           <ActionForm action={moveStudents}>
             <Table stack>

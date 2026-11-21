@@ -9,30 +9,48 @@ import { bool, fail, int, ok, str, type ActionResult } from "@/lib/actions";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { notifyAssessmentReview, notifyAssignmentDecisions, notifyBulkReview, type BulkDecision } from "@/lib/notify";
 import { lagosLocalToIso } from "@/lib/time";
+import { scheduleFromCalendar } from "@/lib/calendar";
 
 // ---------------------------------------------------------------------------
 // Approvals & scheduling
 // ---------------------------------------------------------------------------
 export async function reviewAssessment(_: ActionResult, fd: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  const staff = await requireAdmin();
   const id = str(fd, "id");
   const decision = str(fd, "decision");
-  const note = str(fd, "note") || null;
+  let note = str(fd, "note") || null;
   const supabase = await createClient();
 
+  // Comments on specific questions ("comment_<question id>").
+  const comments: { question_id: string; body: string }[] = [];
+  for (const [k, v] of fd.entries()) {
+    if (k.startsWith("comment_") && typeof v === "string" && v.trim()) comments.push({ question_id: k.slice(8), body: v.trim().slice(0, 1000) });
+  }
+  async function saveComments() {
+    if (!comments.length) return null;
+    const { error } = await supabase.from("review_comments").insert(comments.map((c) => ({ ...c, assessment_id: id, author_id: staff.id })));
+    return error;
+  }
+
   if (decision === "changes") {
-    if (!note) return fail("Tell the teacher what to change.");
+    if (!note && !comments.length) return fail("Tell the teacher what to change: write a note, or comment on the questions.");
+    const ce = await saveComments();
+    if (ce) return fail(ce, "review.comments");
+    if (!note) note = `See the ${comments.length} comment${comments.length === 1 ? "" : "s"} on specific questions.`;
     const { error } = await supabase.rpc("review_assessment", { p_assessment: id, p_approve: false, p_note: note });
     if (error) return fail(error);
-    after(() => notifyAssessmentReview(id, false, note));
+    const n = note;
+    after(() => notifyAssessmentReview(id, false, n));
     revalidatePath("/admin/approvals");
-    redirect("/admin/approvals");
+    redirect(await nextPendingHref(supabase, id));
   }
 
   // Validate every scheduled class row before approving, so we don't approve and then fail.
   const rows = collectScheduleRows(fd);
   if (typeof rows === "string") return fail(rows);
 
+  const ce = await saveComments();
+  if (ce) return fail(ce, "review.comments");
   const { error } = await supabase.rpc("review_assessment", { p_assessment: id, p_approve: true, p_note: note });
   if (error) return fail(error);
   after(() => notifyAssessmentReview(id, true, note));
@@ -46,9 +64,24 @@ export async function reviewAssessment(_: ActionResult, fd: FormData): Promise<A
     });
     if (e) return fail(`Approved, but scheduling failed: ${e.message}`);
   }
+  // No dates chosen: use the exam calendar's dates for this round, if set.
+  if (!rows.length) await scheduleFromCalendar(supabase, id);
   revalidatePath("/admin/approvals");
   revalidatePath("/admin/exams");
+  if (decision === "approve_next") redirect(await nextPendingHref(supabase, id));
   redirect(rows.length ? "/admin/exams" : `/admin/approvals/${id}`);
+}
+
+/** The next test waiting for this reviewer, or the inbox when there are none. */
+async function nextPendingHref(supabase: Awaited<ReturnType<typeof createClient>>, skip: string) {
+  const { data } = await supabase
+    .from("assessments")
+    .select("id")
+    .eq("status", "pending_approval")
+    .neq("id", skip)
+    .order("submitted_at", { ascending: true, nullsFirst: false })
+    .limit(1);
+  return data?.[0] ? `/admin/approvals/${data[0].id}?next=1` : "/admin/approvals?done=1";
 }
 
 function collectScheduleRows(fd: FormData) {
@@ -102,10 +135,13 @@ export async function bulkReviewAction(items: BulkDecision[]): Promise<{ results
     if (!i || typeof i.id !== "string" || !["approve", "flag", "send_back"].includes(i.action)) return { error: "That request was not valid." };
     clean.push({ id: i.id, action: i.action, category: i.category?.slice(0, 40), note: i.note?.trim().slice(0, 1000) });
   }
-  const { data, error } = await (await createClient()).rpc("bulk_review", { p_items: clean });
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("bulk_review", { p_items: clean });
   if (error) return { error: error.message };
   const results = (data ?? []) as BulkReviewResult[];
   const done = new Set(results.filter((r) => r.ok).map((r) => r.id));
+  // Approved tests take their dates from the exam calendar, when it has them.
+  for (const c of clean) if (c.action !== "send_back" && done.has(c.id)) await scheduleFromCalendar(supabase, c.id);
   after(() => notifyBulkReview(clean.filter((c) => done.has(c.id))));
   revalidatePath("/admin/approvals");
   revalidatePath("/dashboard");

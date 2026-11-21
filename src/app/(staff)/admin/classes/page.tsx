@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { addClasses, addSubject, addYearClasses, restoreSubjects, toggleSubject, updateClass } from "../actions";
+import { SettingsNav } from "../settings/settings-nav";
 
 export const metadata: Metadata = { title: "Classes & subjects" };
 
@@ -23,6 +24,7 @@ export default async function ClassesPage() {
     <div className="space-y-8">
       <PageHeader
         icon={School} title="Classes & subjects" description="Year groups are fixed (Year 1–6 Elementary, Year 7–12 College). Add the arms/classes and subjects for your section." />
+      <SettingsNav staff={staff} active="classes" />
       {sections.map((sec) => {
         const years = s.years.filter((y) => y.section_id === sec.id);
         const subjects = s.subjects.filter((x) => x.section_id === sec.id);

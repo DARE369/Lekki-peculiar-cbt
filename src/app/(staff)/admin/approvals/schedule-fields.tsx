@@ -3,12 +3,23 @@ import type { ClassRow } from "@/lib/types";
 import { isoToLagosLocal } from "@/lib/time";
 
 /** `preferred`: the classes the teacher made the test for; pre-ticked when given. */
-export function ScheduleFields({ classes, scheduled, preferred }: { classes: ClassRow[]; scheduled: Set<string>; preferred?: Set<string> }) {
+export function ScheduleFields({
+  classes,
+  scheduled,
+  preferred,
+  slot,
+}: {
+  classes: ClassRow[];
+  scheduled: Set<string>;
+  preferred?: Set<string>;
+  /** The exam calendar's dates for this round, used as the default. */
+  slot?: { starts_at: string; ends_at: string } | null;
+}) {
   const tomorrow9 = new Date();
   tomorrow9.setUTCDate(tomorrow9.getUTCDate() + 1);
   tomorrow9.setUTCHours(8, 0, 0, 0); // 09:00 Lagos
-  const start = isoToLagosLocal(tomorrow9);
-  const end = isoToLagosLocal(new Date(tomorrow9.getTime() + 2 * 3600_000));
+  const start = slot ? isoToLagosLocal(slot.starts_at) : isoToLagosLocal(tomorrow9);
+  const end = slot ? isoToLagosLocal(slot.ends_at) : isoToLagosLocal(new Date(tomorrow9.getTime() + 2 * 3600_000));
   return (
     <div className="space-y-4">
       <fieldset>

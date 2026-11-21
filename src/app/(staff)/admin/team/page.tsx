@@ -55,7 +55,7 @@ export default async function TeamPage(props: PageProps<"/admin/team">) {
       ) : null}
       <Card>
         {shown.length === 0 ? (
-          <EmptyState title="No staff in your section yet" />
+          <EmptyState title="No staff in your section yet">Staff appear here once the super admin adds them to your section.</EmptyState>
         ) : (
           <Table stack>
             <thead>

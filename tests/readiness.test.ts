@@ -58,11 +58,15 @@ describe("checkLive", () => {
   it("is ready when the class has students and the teacher is approved, even before a date is set", () => {
     const [r] = checkLive([cls()], new Set(["c1"]));
     expect(r.ready).toBe(true);
-    expect(r.notes).toEqual(["No date set yet"]);
+    expect(r.notes).toEqual([]);
   });
-  it("flags empty classes, missing photos, unapproved teachers and busy days", () => {
+  it("does not raise false alarms about photos or a missing date", () => {
+    const [r] = checkLive([cls({ studentsWithoutPhoto: 20 })], new Set(["c1"]));
+    expect(r.ready).toBe(true);
+    expect(r.notes).toEqual([]);
+  });
+  it("flags empty classes, unapproved teachers and busy days", () => {
     expect(checkLive([cls({ students: 0 })], new Set(["c1"]))[0].ready).toBe(false);
-    expect(checkLive([cls({ studentsWithoutPhoto: 5 })], new Set(["c1"]))[0].notes.join()).toMatch(/5 of 20 students have no photo/);
     expect(checkLive([cls()], new Set())[0].ready).toBe(false);
     expect(checkLive([cls({ scheduledDay: "2026-10-10", otherWindowsThatDay: 2 })], new Set(["c1"]))[0].notes.join()).toMatch(/3 exams that day/);
   });

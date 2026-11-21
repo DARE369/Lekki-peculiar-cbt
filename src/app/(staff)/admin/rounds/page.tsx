@@ -7,6 +7,7 @@ import { canManageRound, roundDefaults, roundKind } from "@/lib/rounds";
 import { createAdminClient } from "@/lib/supabase/server";
 import { TYPE_DEFAULTS } from "@/lib/types";
 import { createRound, deleteRound, moveRound, setDefaultRound, toggleRoundActive, updateRound } from "./actions";
+import { SettingsNav } from "../settings/settings-nav";
 
 export const metadata: Metadata = { title: "Rounds" };
 
@@ -31,6 +32,7 @@ export default async function RoundsPage() {
         title="Rounds"
         description="Every test and every uploaded question belongs to a round, so exam questions stay apart from CA questions. Teachers pick from this list."
       />
+      <SettingsNav staff={staff} active="rounds" />
 
       <Card>
         <CardHeader

@@ -56,7 +56,8 @@ export function ExamBulkTable({
     if (!startableSet.has(id)) return;
     setSelected((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   }
@@ -93,12 +94,12 @@ export function ExamBulkTable({
       {/* Confirmation dialog */}
       {showConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center animate-fade bg-black/60 p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="bulk-start-title"
         >
-          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-float">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-float animate-rise">
             <h2 id="bulk-start-title" className="text-base font-bold">
               Start {selectedStartable.length} exam{selectedStartable.length === 1 ? "" : "s"}?
             </h2>
@@ -217,7 +218,7 @@ export function ExamBulkTable({
 
       {/* Sticky selection bar */}
       {selectedStartable.length > 0 && (
-        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-float">
+        <div className="sticky bottom-4 left-0 z-10 mx-auto w-fit rounded-2xl border border-border bg-surface px-5 py-3 shadow-float animate-rise">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium">
               {selectedStartable.length} exam{selectedStartable.length === 1 ? "" : "s"} selected

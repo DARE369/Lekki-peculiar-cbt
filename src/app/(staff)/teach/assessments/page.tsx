@@ -163,7 +163,7 @@ export default async function AssessmentsPage(props: PageProps<"/teach/assessmen
       {showGrouped ? (
         assessments.length === 0 ? (
           <Card>
-            <EmptyState title="No tests found" />
+            <EmptyState title="No tests found">Try another filter, or make a test from your question bank.</EmptyState>
           </Card>
         ) : (
           <div className="space-y-8">

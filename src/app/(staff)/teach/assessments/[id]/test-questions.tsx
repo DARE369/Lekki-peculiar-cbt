@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, Spinner } from "@/components/ui";
 import type { QuestionOption } from "@/lib/types";
 import { removeFromTest, setCommentFixed } from "../../bank-actions";
 
@@ -26,11 +27,11 @@ export function TestQuestions({
   const router = useRouter();
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string | null>(null);
-  const [busy, start] = useTransition();
+  const { pending: busy, running, run } = useAction();
   const all = questions.length > 0 && ticked.size === questions.length;
 
-  function remove(ids: string[]) {
-    start(async () => {
+  function remove(ids: string[], key = "bulk") {
+    run(key, async () => {
       const res = await removeFromTest(assessmentId, ids);
       setMsg(res?.ok ? (res.message ?? "Removed.") : res && !res.ok ? res.error : "That didn't work.");
       setTicked(new Set());
@@ -46,7 +47,7 @@ export function TestQuestions({
             {all ? "Deselect all" : `Select all ${questions.length}`}
           </button>
           {ticked.size ? (
-            <Button size="sm" variant="ghost" className="text-danger hover:text-danger" disabled={busy} onClick={() => remove([...ticked])}>
+            <Button size="sm" variant="ghost" className="text-danger hover:text-danger" disabled={busy} loading={running("bulk")} onClick={() => remove([...ticked])}>
               Remove {ticked.size} from this test
             </Button>
           ) : null}
@@ -96,14 +97,15 @@ export function TestQuestions({
                     type="button"
                     disabled={busy}
                     onClick={() =>
-                      start(async () => {
+                      run(c.id, async () => {
                         await setCommentFixed(c.id, !c.resolved_at);
                         router.refresh();
                       })
                     }
-                    className="ml-auto font-semibold text-brand hover:underline"
+                    className="ml-auto inline-flex items-center font-semibold text-brand hover:underline"
                   >
-                    {c.resolved_at ? "Reopen" : "Mark fixed"}
+                    {running(c.id) ? <Spinner className="mr-1 size-3" /> : null}
+                    {running(c.id) ? "Saving…" : c.resolved_at ? "Reopen" : "Mark fixed"}
                   </button>
                 </div>
               ))}
@@ -113,8 +115,9 @@ export function TestQuestions({
                 <Link href={`/teach/questions/${q.id}?assessment=${assessmentId}`} className="text-xs font-semibold text-brand hover:underline">
                   Edit
                 </Link>
-                <button type="button" disabled={busy} onClick={() => remove([q.id])} className="text-xs text-muted hover:text-danger">
-                  Remove
+                <button type="button" disabled={busy} onClick={() => remove([q.id], q.id)} className="inline-flex items-center text-xs text-muted hover:text-danger">
+                  {running(q.id) ? <Spinner className="mr-1 size-3" /> : null}
+                  {running(q.id) ? "Removing…" : "Remove"}
                 </button>
               </div>
             ) : null}

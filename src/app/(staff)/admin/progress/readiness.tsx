@@ -47,7 +47,7 @@ export async function Readiness({ s, schoolDeadline }: { s: Structure; schoolDea
       fix: `${noSection} teacher${noSection === 1 ? " has" : "s have"} no section yet, so no Head of Section can see ${noSection === 1 ? "them" : "them"}. Choose one on the Staff page.`,
       href: "/admin/staff?section=none",
     },
-    { ok: noDeadline.length === 0, label: "Question deadline set", fix: `Set a whole-school date or a date for ${list(noDeadline)} below.` },
+    { ok: noDeadline.length === 0, label: "Question deadline set", fix: `Set a whole-school date or a date for ${list(noDeadline)}.`, href: "/admin/settings/deadlines" },
     {
       ok: mailConfigured(),
       label: "App emails (approvals and test reviews)",

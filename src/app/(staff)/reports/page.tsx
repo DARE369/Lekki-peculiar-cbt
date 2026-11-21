@@ -116,7 +116,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
       <Card>
         <CardHeader title="Class broadsheets" description="Every student in a class against every subject you can see — the combined view." />
         {classes.length === 0 ? (
-          <EmptyState title="No classes yet" />
+          <EmptyState title="No classes yet">Classes you teach (or oversee) will show here once they are approved.</EmptyState>
         ) : (
           <div className="flex flex-wrap gap-2 p-5">
             {classes.map((c) => (
@@ -135,7 +135,7 @@ export default async function ReportsHome(props: PageProps<"/reports">) {
       <Card>
         <CardHeader title="Tests & exams this term" description="Scores for all students, plus which questions they missed." />
         {rows.length === 0 ? (
-          <EmptyState title="No approved tests in this term yet" />
+          <EmptyState title="No approved tests in this term yet">Reports fill in once tests are approved and students sit them.</EmptyState>
         ) : (
           <Table stack>
             <thead>

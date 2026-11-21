@@ -6,6 +6,7 @@ import { can, requireAdmin } from "@/lib/auth";
 import { formatDateTime } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { createTerminalCode, updateTerminal } from "../actions";
+import { SettingsNav } from "../settings/settings-nav";
 
 export const metadata: Metadata = { title: "Lab computers" };
 
@@ -21,6 +22,7 @@ export default async function TerminalsPage() {
         title="Lab computers"
         description="Only registered computers can open the student exam screen. This keeps exams in the lab and stops logins from home."
       />
+      <SettingsNav staff={staff} active="terminals" />
       <Card>
         <CardHeader title="Register computers" />
         <div className="grid gap-6 p-5 lg:grid-cols-2">
@@ -46,7 +48,7 @@ export default async function TerminalsPage() {
       <Card>
         <CardHeader title={`Registered computers (${(terminals ?? []).length})`} />
         {(terminals ?? []).length === 0 ? (
-          <EmptyState title="None yet" />
+          <EmptyState title="No lab computers registered yet">Create a registration code, then enter it on each lab computer once. Only registered computers can open exams.</EmptyState>
         ) : (
           <Table stack>
             <thead>

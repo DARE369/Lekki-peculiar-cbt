@@ -7,6 +7,7 @@ import { getRoundConfigs, getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { isoToLagosLocal } from "@/lib/time";
 import { saveRoundCalendar } from "./actions";
+import { SettingsNav } from "../settings/settings-nav";
 
 export const metadata: Metadata = { title: "Exam calendar" };
 
@@ -37,6 +38,7 @@ export default async function CalendarPage() {
         title="Exam calendar"
         description={`When each round runs for each year group${s.currentTerm ? ` this term (${s.currentTerm.name})` : ""}. Set it once: when you approve a test, it is dated from here and starts on its own.`}
       />
+      <SettingsNav staff={staff} active="calendar" />
       {!s.currentTerm ? <Alert tone="warning">No current term is set. Ask the super admin.</Alert> : null}
       {!editable ? <Alert tone="info">Only staff who can approve exams can change the calendar.</Alert> : null}
 

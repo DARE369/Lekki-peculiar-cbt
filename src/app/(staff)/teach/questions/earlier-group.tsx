@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Card, Input } from "@/components/ui";
 import { makeTestFromQuestions, nameEarlierGroup } from "../bank-actions";
@@ -27,7 +28,7 @@ export function EarlierGroupPanel({
   const router = useRouter();
   const [name, setName] = useState(suggestedName);
   const [error, setError] = useState<string | null>(null);
-  const [busy, start] = useTransition();
+  const { pending: busy, running, run } = useAction();
   const when = new Date(from).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" });
   return (
     <Card className="p-4 sm:p-5">
@@ -43,8 +44,9 @@ export function EarlierGroupPanel({
         <Button
           size="md"
           disabled={busy || !name.trim()}
+          loading={running("name")}
           onClick={() =>
-            start(async () => {
+            run("name", async () => {
               const res = await nameEarlierGroup({ ids, name, subjectId, yearId });
               if (res?.ok) {
                 router.push(namedHref);
@@ -59,8 +61,9 @@ export function EarlierGroupPanel({
           size="md"
           variant="secondary"
           disabled={busy}
+          loading={running("test")}
           onClick={() =>
-            start(async () => {
+            run("test", async () => {
               const res = await makeTestFromQuestions({ ids, subjectId, yearId });
               if (res && !res.ok) setError(res.error);
             })

@@ -79,16 +79,16 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
       <PageHeader
         icon={Users}
         title="Approvals"
-        description={`Teaching requests, and who teaches what in ${s.currentTerm?.session_name ?? "this session"}. A request is approved by itself when no other teacher has that subject in that class; only clashes wait for you.`}
+        description={`Teaching requests, and who teaches what in ${s.currentTerm?.session_name ?? "this session"}. Requests without a clash can be approved by themselves (Settings → Approval rules); clashes always wait for you.`}
       />
       <InboxTabs staff={staff} active="requests" />
       {!manage ? <Alert tone="warning">You can view assignments but need the &quot;Approve teaching assignments&quot; permission to change them.</Alert> : null}
 
       {/* Pending requests */}
       <Card>
-        <CardHeader title={`Waiting for you (${requested.length})`} description={requested.length ? "Usually because another teacher has, or asked for, the same subject in that class." : undefined} />
+        <CardHeader title={`Waiting for you (${requested.length})`} description={requested.length ? "Approve or decline. Where another teacher has the same subject in that class, it says who." : undefined} />
         {requested.length === 0 ? (
-          <EmptyState title="No requests waiting">Requests without a clash are approved by themselves.</EmptyState>
+          <EmptyState title="No requests waiting">You are all caught up.</EmptyState>
         ) : (
           <form action={decideAssignment}>
             <Table stack>
@@ -108,7 +108,17 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
                     </Td>
                     <Td className="font-medium">{r.staff?.full_name}</Td>
                     <Td label="Subject">{s.subjectById.get(r.subject_id)?.name}</Td>
-                    <Td label="Class">{s.className(r.class_id)}</Td>
+                    <Td label="Class">
+                      {s.className(r.class_id)}
+                      {(() => {
+                        const others = all.filter((o) => o.id !== r.id && o.subject_id === r.subject_id && o.class_id === r.class_id && o.status !== "rejected");
+                        return others.length ? (
+                          <span className="ml-2">
+                            <Badge tone="warning">Also: {others.map((o) => o.staff?.full_name).join(", ")}</Badge>
+                          </span>
+                        ) : null;
+                      })()}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -199,7 +209,7 @@ export default async function AssignmentsPage(props: PageProps<"/admin/assignmen
           }
         />
         {approved.length === 0 ? (
-          <EmptyState title="No approved assignments yet" />
+          <EmptyState title="No approved assignments yet">When teachers pick their subjects and classes, or you assign them above, they appear here.</EmptyState>
         ) : view === "class" ? (
           // By class: one section per class
           <div className="divide-y divide-border">

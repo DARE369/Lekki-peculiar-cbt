@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
+import { useAction } from "@/components/use-action";
 import { useRouter } from "next/navigation";
 import { Button, Input, cn } from "@/components/ui";
 import { addQuestionsToAssessment } from "../../actions";
@@ -33,7 +34,7 @@ export function AddQuestions({
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [random, setRandom] = useState(String(Math.max(1, needed || 5)));
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
-  const [busy, start] = useTransition();
+  const { pending: busy, running, run } = useAction();
 
   const list = useMemo(() => pool.filter((q) => q.bank === bank), [pool, bank]);
   const all = list.length > 0 && list.every((q) => ticked.has(q.id));
@@ -53,7 +54,7 @@ export function AddQuestions({
     const fd = new FormData();
     fd.set("assessment_id", assessmentId);
     for (const id of ticked) fd.append("question_id", id);
-    start(async () => done(await addQuestionsToAssessment(null, fd)));
+    run("ticked", async () => done(await addQuestionsToAssessment(null, fd)));
   }
 
   if (!banks.length) {
@@ -98,7 +99,7 @@ export function AddQuestions({
       {notice ? <p className={cn("text-sm", notice.tone === "success" ? "text-success" : "text-danger")}>{notice.text}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface-2 p-2 text-sm">
-        <Button size="sm" disabled={busy || ticked.size === 0} onClick={addTicked}>
+        <Button size="sm" disabled={busy || ticked.size === 0} loading={running("ticked")} onClick={addTicked}>
           Add {ticked.size || ""} ticked
         </Button>
         <span className="text-muted">or add</span>
@@ -107,7 +108,8 @@ export function AddQuestions({
           size="sm"
           variant="secondary"
           disabled={busy || !Number(random) || !current}
-          onClick={() => start(async () => done(await addRandomFromBank({ assessmentId, bankId: bank, count: Number(random) })))}
+          loading={running("random")}
+          onClick={() => run("random", async () => done(await addRandomFromBank({ assessmentId, bankId: bank, count: Number(random) })))}
         >
           at random
         </Button>

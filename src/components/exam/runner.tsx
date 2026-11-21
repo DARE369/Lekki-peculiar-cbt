@@ -331,7 +331,7 @@ export function ExamRunner({
       {/* Focus-leave penalty overlay */}
       {penaltySecsLeft !== null && penaltyMins > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" aria-live="assertive">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-surface p-8 text-center shadow-float">
+          <div className="mx-4 w-full max-w-sm rounded-xl bg-surface p-8 text-center shadow-float animate-rise">
             <span className="inline-flex size-14 items-center justify-center rounded-full bg-warning-soft text-warning">
               <EyeOff className="size-8" aria-hidden />
             </span>
@@ -531,8 +531,8 @@ export function ExamRunner({
       </div>
 
       {reviewOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="review-title">
-          <div className="w-full max-w-lg rounded-xl bg-surface p-7 shadow-float">
+        <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="review-title">
+          <div className="w-full max-w-lg rounded-xl bg-surface p-7 shadow-float animate-rise">
             <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-brand-soft text-brand">
               <ClipboardCheck className="size-6" aria-hidden />
             </span>
@@ -619,7 +619,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-hero flex min-h-screen items-center justify-center p-6">
-      <div className="flex max-w-xl flex-col items-center rounded-[32px] border border-border bg-surface p-10 text-center shadow-float">{children}</div>
+      <div className="flex max-w-xl flex-col items-center rounded-[32px] border border-border bg-surface p-10 text-center shadow-float animate-rise">{children}</div>
     </div>
   );
 }

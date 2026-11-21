@@ -44,6 +44,14 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
   const showChecklist =
     !staff.isSuperAdmin && (staff.role === "teacher" || myProgress.length > 0);
 
+  const [requests, resumes] = staff.isAdmin
+    ? await Promise.all([
+        can(staff, "teachers.manage")
+          ? supabase.from("teaching_assignments").select("id", { count: "exact", head: true }).eq("status", "requested")
+          : Promise.resolve({ count: 0 }),
+        supabase.from("resume_requests").select("id, window_id").eq("status", "pending").limit(50),
+      ])
+    : [{ count: 0 }, { data: [] as { id: string; window_id: string }[] }];
   const [assignments, mine, windows, pending] = await Promise.all([
     supabase
       .from("teaching_assignments")
@@ -146,9 +154,9 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
             { href: "/teach/classes", label: "Change my subjects" },
           ]}
         >
-          Your Head of Section has been asked to approve them, and we will email
-          you when they do. You do not have to wait: you can upload questions
-          now.
+          Classes nobody else teaches are usually ready straight away; any that
+          need your Head of Section show as waiting, and we will email you when
+          they decide. You do not have to wait: you can upload questions now.
         </NextSteps>
       ) : null}
       {sp.done === "corrected" ? (
@@ -203,33 +211,60 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
         ) : null}
       </header>
 
-      {/* Only what needs doing: exams to start or watch, and tests waiting for approval. */}
-      {liveNow.length || awaiting.length || (pending.count ?? 0) > 0 ? (
-        <section aria-label="Needs you now" className="divide-y divide-border rounded-lg border border-border bg-surface">
-          {awaiting.length ? (
-            <TodoRow
-              tone="warning"
-              text={`${awaiting.length} exam${awaiting.length === 1 ? " is" : "s are"} waiting for an administrator to press Start.`}
-              href={staff.isAdmin ? `/admin/exams/${awaiting[0].id}` : undefined}
-              action={staff.isAdmin && can(staff, "exam.start") ? "Start" : undefined}
-            />
-          ) : null}
-          {liveNow.length ? (
-            <TodoRow
-              tone="success"
-              text={`${liveNow.length} exam${liveNow.length === 1 ? " is" : "s are"} live now.`}
-              href={staff.isAdmin ? `/admin/exams/${liveNow[0].id}` : undefined}
-              action={staff.isAdmin ? "Watch" : undefined}
-            />
-          ) : null}
-          {(pending.count ?? 0) > 0 ? (
-            <TodoRow
-              tone="info"
-              text={`${pending.count} test${pending.count === 1 ? " is" : "s are"} waiting for your approval.`}
-              href="/admin/approvals"
-              action="Review"
-            />
-          ) : null}
+      {/* Only what needs doing: exams to start or watch, students to let back in, things to approve. */}
+      {liveNow.length || awaiting.length || (pending.count ?? 0) > 0 || (requests.count ?? 0) > 0 || (resumes.data ?? []).length ? (
+        <section aria-labelledby="needs-you" className="animate-enter overflow-hidden rounded-lg border border-brand/30 bg-surface shadow-sm">
+          <h2 id="needs-you" className="flex items-center gap-2 border-b border-border bg-brand-soft/50 px-4 py-2.5 text-sm font-semibold sm:px-5">
+            <span className="relative flex size-2.5" aria-hidden>
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60 motion-reduce:hidden" />
+              <span className="relative inline-flex size-2.5 rounded-full bg-brand" />
+            </span>
+            Needs you now
+          </h2>
+          <div className="stagger divide-y divide-border">
+            {awaiting.length ? (
+              <TodoRow
+                tone="danger"
+                text={`${awaiting.length} exam${awaiting.length === 1 ? " is" : "s are"} waiting for an administrator to press Start.`}
+                href={staff.isAdmin ? `/admin/exams/${awaiting[0].id}` : undefined}
+                action={staff.isAdmin && can(staff, "exam.start") ? "Start" : undefined}
+                primary
+              />
+            ) : null}
+            {(resumes.data ?? []).length ? (
+              <TodoRow
+                tone="danger"
+                text={`${resumes.data!.length} student${resumes.data!.length === 1 ? " is" : "s are"} asking to continue an exam.`}
+                href={`/admin/exams/${resumes.data![0].window_id}`}
+                action="Respond"
+                primary
+              />
+            ) : null}
+            {liveNow.length ? (
+              <TodoRow
+                tone="success"
+                text={`${liveNow.length} exam${liveNow.length === 1 ? " is" : "s are"} live now.`}
+                href={staff.isAdmin ? `/admin/exams/${liveNow[0].id}` : undefined}
+                action={staff.isAdmin ? "Watch" : undefined}
+              />
+            ) : null}
+            {(pending.count ?? 0) > 0 ? (
+              <TodoRow
+                tone="warning"
+                text={`${pending.count} test${pending.count === 1 ? " is" : "s are"} waiting for your review.`}
+                href="/admin/approvals"
+                action="Review"
+              />
+            ) : null}
+            {(requests.count ?? 0) > 0 ? (
+              <TodoRow
+                tone="warning"
+                text={`${requests.count} teaching request${requests.count === 1 ? " needs" : "s need"} your decision.`}
+                href="/admin/assignments"
+                action="Decide"
+              />
+            ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -399,14 +434,27 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
   );
 }
 
-function TodoRow({ tone, text, href, action }: { tone: "warning" | "success" | "info"; text: string; href?: string; action?: string }) {
-  const dot = { warning: "bg-warning", success: "bg-success", info: "bg-info" }[tone];
+function TodoRow({
+  tone,
+  text,
+  href,
+  action,
+  primary,
+}: {
+  tone: "warning" | "success" | "info" | "danger";
+  text: string;
+  href?: string;
+  action?: string;
+  /** Urgent: shown with a filled button. */
+  primary?: boolean;
+}) {
+  const dot = { warning: "bg-warning", success: "bg-success", info: "bg-info", danger: "bg-danger" }[tone];
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm sm:px-5">
       <span className={cn("size-2 shrink-0 rounded-full", dot)} aria-hidden />
-      <span className="min-w-0 flex-1">{text}</span>
+      <span className={cn("min-w-0 flex-1", primary && "font-semibold")}>{text}</span>
       {href && action ? (
-        <LinkButton href={href} size="sm" variant="secondary">
+        <LinkButton href={href} size="sm" variant={primary ? "primary" : "secondary"}>
           {action}
         </LinkButton>
       ) : null}

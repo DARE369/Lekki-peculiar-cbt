@@ -150,7 +150,7 @@ export default async function ClassBroadsheet(props: PageProps<"/reports/class/[
 
       <Card>
         {sheet.columns.length === 0 ? (
-          <EmptyState title="No results yet for this selection" />
+          <EmptyState title="No results yet for this selection">Try another term or subject, or check back after the exam.</EmptyState>
         ) : (
           <Table>
             <thead>

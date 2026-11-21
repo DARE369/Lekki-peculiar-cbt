@@ -89,6 +89,7 @@ export function UploadPanel({ upload: u, subjectId, yearId, afterDeleteHref }: {
             <Button
               size="sm"
               disabled={pending}
+              loading={pending && !preview}
               onClick={() =>
                 start(async () => {
                   const res = await makeTestFromQuestions({ bankId: u.id, subjectId, yearId });
@@ -137,8 +138,8 @@ export function UploadPanel({ upload: u, subjectId, yearId, afterDeleteHref }: {
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="del-upload-title">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-float">
+        <div className="fixed inset-0 z-50 flex items-end justify-center animate-fade bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="del-upload-title">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-float animate-rise">
             <h2 id="del-upload-title" className="text-base font-semibold">
               Delete “{u.label}”?
             </h2>

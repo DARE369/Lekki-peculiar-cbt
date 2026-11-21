@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { startTransition, useEffect, useRef, useState } from "react";
 import {
   CalendarDays,
+  Settings,
   BarChart3,
   BookOpenCheck,
   CalendarClock,
@@ -50,6 +51,7 @@ const ICONS = {
   sessions: ShieldCheck,
   rounds: Tag,
   calendar: CalendarDays,
+  settings: Settings,
   problems: TriangleAlert,
   papers: ClipboardList,
 } satisfies Record<string, LucideIcon>;
@@ -57,7 +59,7 @@ export type NavIcon = keyof typeof ICONS;
 
 export interface NavGroup {
   title: string;
-  items: { href: string; label: string; icon: NavIcon; badge?: number; /** other paths that count as this item */ also?: string[] }[];
+  items: { href: string; label: string; icon: NavIcon; badge?: number; /** other paths that count as this item */ also?: string[]; /** the count means something is waiting right now */ urgent?: boolean }[];
 }
 
 export interface ShellUser {
@@ -137,7 +139,15 @@ function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () =
                     <Icon className={cn("size-4 shrink-0", active ? "text-brand" : "text-subtle group-hover:text-muted")} aria-hidden />
                     <span className="flex-1 truncate">{item.label}</span>
                     {item.badge ? (
-                      <span className="min-w-5 rounded-sm bg-accent px-1.5 text-center text-xs font-semibold text-accent-ink tabular-nums">{item.badge}</span>
+                      <span
+                        className={cn(
+                          "animate-pop min-w-5 rounded-full px-1.5 text-center text-xs font-semibold tabular-nums",
+                          item.urgent ? "animate-attention bg-danger text-white" : "bg-accent text-accent-ink",
+                        )}
+                        aria-label={`${item.badge} waiting`}
+                      >
+                        {item.badge}
+                      </span>
                     ) : null}
                   </Link>
                 </li>
@@ -259,7 +269,9 @@ export function AppShell({
             <Avatar name={user.name} size={32} />
           </Link>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        <main key={pathname} className="animate-enter mx-auto w-full max-w-7xl px-4 py-6 sm:px-8 sm:py-8">
+          {children}
+        </main>
       </div>
     </div>
   );

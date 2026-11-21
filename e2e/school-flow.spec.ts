@@ -200,6 +200,7 @@ test("a teacher's subject with no other teacher is approved at once; the HOD is 
   await hod.goto("/admin/approvals");
   const nav = hod.getByRole("navigation", { name: "Main" });
   await expect(nav.getByRole("link", { name: "Class assignments" })).toHaveCount(0);
+  await expect(nav.getByText("Needs you", { exact: true })).toBeVisible();
   await hod.getByRole("navigation", { name: "Approvals" }).getByRole("link", { name: /Teaching requests/ }).click();
   await expect(hod.getByRole("navigation", { name: "Approvals" }).getByRole("link", { name: /Teaching requests/ })).toHaveAttribute("aria-current", "page");
   await expect(hod.getByText("No requests waiting")).toBeVisible();
@@ -301,7 +302,10 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
   // The HOD starts the exam; the student's screen updates by itself.
   const hod = await signIn(browser, "hod@lps.test", hodPassword);
   await hod.goto("/admin/exams");
-  await hod.getByRole("link", { name: "Basic Science Test 1" }).click();
+  // An exam waiting for Start is called out at the top, with its own button.
+  await expect(hod.getByText("1 exam is waiting for you to press Start")).toBeVisible();
+  await shot(hod, "07b-exam-waiting-to-start");
+  await hod.getByRole("link", { name: /^Start Basic Science Test 1/ }).click();
   hod.once("dialog", (d) => d.accept());
   await hod.getByRole("button", { name: /Start exam now/ }).click();
   await expect(hod.getByText(/Live — students in Year 4 Gold can start now/)).toBeVisible();
@@ -507,11 +511,16 @@ test("bulk add emails each person an invitation with steps for their role", asyn
 test("a new teacher is guided through setup, uploads while waiting, and is emailed on approval", async ({ browser }) => {
   // Super admin: a deadline and a small target, then a new teacher with a temporary password.
   const owner = await signIn(browser, OWNER.email, OWNER.password);
-  await owner.goto("/admin/progress");
+  // Settings lists what still needs setting up; deadlines are one click away.
+  await owner.goto("/admin/settings");
+  await expect(owner.getByText(/things? to set up/)).toBeVisible();
+  await owner.getByRole("link", { name: /Question deadlines: not set/ }).click();
+  await expect(owner.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Question deadlines" })).toHaveAttribute("aria-current", "page");
   const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
   await owner.getByLabel("Elementary").fill(due);
   await owner.getByRole("button", { name: "Save deadlines" }).click();
   await expect(owner.getByText("Deadlines saved.")).toBeVisible();
+  await owner.goto("/admin/progress");
   // The super admin sees what's still missing before inviting staff.
   await expect(owner.getByText(/^(Before you|Ready to) invite staff$/)).toBeVisible();
   await expect(owner.getByText("Question deadline set")).toBeVisible();
@@ -1190,4 +1199,49 @@ test("exam calendar dates approved tests; comments on questions go back to the t
 
   // The daily summary can only be triggered by the scheduler.
   expect((await request.get("/api/cron/digest")).status()).toBe(401);
+});
+
+test("settings: one place for setup, and auto-approval can be switched off per section", async ({ browser }) => {
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/dashboard");
+  const nav = hod.getByRole("navigation", { name: "Main" });
+  await nav.getByRole("link", { name: "Settings" }).click();
+  await expect(hod.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  const tabs = hod.getByRole("navigation", { name: "Settings" });
+  await expect(tabs.getByRole("link", { name: "Rounds" })).toBeVisible();
+  await expect(tabs.getByRole("link", { name: "Exam calendar" })).toBeVisible();
+  // The super admin's pages are not offered to a Head of Section.
+  await expect(tabs.getByRole("link", { name: "School year & terms" })).toHaveCount(0);
+  await shot(hod, "27-settings");
+
+  // Rounds is a settings page: the sidebar keeps Settings highlighted there.
+  await tabs.getByRole("link", { name: "Rounds" }).click();
+  await expect(hod.getByRole("heading", { name: "Rounds", level: 1 })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
+
+  // Turn automatic approval off for Elementary: it saves as soon as it is switched.
+  await tabs.getByRole("link", { name: "Approval rules" }).click();
+  const sw = hod.getByRole("switch", { name: "Approve automatically in Elementary" });
+  await expect(sw).toBeChecked();
+  await sw.uncheck({ force: true });
+  await expect(hod.getByText("Saved. Every request will now wait for you.")).toBeVisible();
+  await hod.reload();
+  await expect(hod.getByRole("switch", { name: "Approve automatically in Elementary" })).not.toBeChecked();
+  await shot(hod, "28-approval-rules");
+
+  // A new request now waits, even without a clash.
+  const teacher = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await teacher.goto("/teach/classes");
+  await teacher.getByRole("button", { name: "Basic Science — Year 6" }).click();
+  await teacher.getByRole("button", { name: "Save my subjects and classes" }).click();
+  await expect(teacher).toHaveURL(/\/dashboard\?done=subjects/);
+  await teacher.goto("/teach/classes");
+  await expect(teacher.getByText("Awaiting approval")).toBeVisible();
+  await hod.goto("/admin/assignments");
+  await expect(hod.getByText("Waiting for you (1)")).toBeVisible();
+
+  // Back on, for the rest of the school.
+  await hod.goto("/admin/settings/approvals");
+  await hod.getByRole("switch", { name: "Approve automatically in Elementary" }).check({ force: true });
+  await expect(hod.getByText(/Saved. Requests without a clash/)).toBeVisible();
 });

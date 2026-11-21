@@ -127,7 +127,7 @@ export function ResumePanel({
           <div className="rounded-md border border-border p-3 text-sm">
             <p className="font-medium">Waiting from before: {pending.length} request{pending.length === 1 ? "" : "s"}</p>
             <p className="text-muted">{pending.map((p) => `${p.studentName} (${p.extraMinutes} min)`).join(", ")}</p>
-            <Button size="sm" variant="secondary" className="mt-2" onClick={approveOld} disabled={busy}>
+            <Button size="sm" variant="secondary" className="mt-2" onClick={approveOld} loading={busy}>
               Approve {pending.length === 1 ? "it" : "them"}
             </Button>
           </div>

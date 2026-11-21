@@ -401,7 +401,7 @@ export default async function QuestionBank(props: PageProps<"/teach/questions">)
 
                       <Card>
                         {questions.length === 0 ? (
-                          <EmptyState title="No questions match" />
+                          <EmptyState title="No questions match">Clear the search or choose another bank or round.</EmptyState>
                         ) : (
                           <QuestionTable
                             key={`${roundParam}:${bankParam}:${q}:${topic}`}

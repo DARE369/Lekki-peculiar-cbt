@@ -89,13 +89,22 @@ export async function applySubjectPicks(teacherId: string, s: Structure, picksRa
 export async function autoApproveUnclaimed(teacherId: string, sessionId: string) {
   try {
     const admin = createAdminClient();
-    const { data: mine } = await admin
+    let { data: mine } = await admin
       .from("teaching_assignments")
       .select("id, subject_id, class_id")
       .eq("teacher_id", teacherId)
       .eq("session_id", sessionId)
       .eq("status", "requested");
     if (!mine?.length) return 0;
+    // Only in sections that allow it (Settings → Approval rules).
+    const [{ data: subjects }, { data: sections }] = await Promise.all([
+      admin.from("subjects").select("id, section_id").in("id", [...new Set(mine.map((r) => r.subject_id as string))]),
+      admin.from("sections").select("*"),
+    ]);
+    const off = new Set((sections ?? []).filter((x) => x.auto_approve_requests === false).map((x) => x.id as string));
+    const allowed = new Set((subjects ?? []).filter((x) => !off.has(x.section_id as string)).map((x) => x.id as string));
+    mine = mine.filter((r) => allowed.has(r.subject_id as string));
+    if (!mine.length) return 0;
     const { data: others } = await admin
       .from("teaching_assignments")
       .select("subject_id, class_id")

@@ -21,6 +21,7 @@ import { getQuestionSettings, getUploadProgress } from "@/lib/onboarding";
 import { createClient } from "@/lib/supabase/server";
 import { NextSteps } from "@/components/next-steps";
 import { NeedsAttention, type AttentionItem } from "./needs-attention";
+import { resumeCutoffIso } from "@/lib/resume";
 import { SchoolOverview } from "./school-overview";
 import { UploadChecklist } from "./upload-checklist";
 import type { AssessmentStatus, AssessmentType } from "@/lib/types";
@@ -49,7 +50,7 @@ export default async function Dashboard(props: PageProps<"/dashboard">) {
         can(staff, "teachers.manage")
           ? supabase.from("teaching_assignments").select("id", { count: "exact", head: true }).eq("status", "requested")
           : Promise.resolve({ count: 0 }),
-        supabase.from("resume_requests").select("id, window_id").eq("status", "pending").limit(50),
+        supabase.from("resume_requests").select("id, window_id, exam_windows!inner(ends_at)").eq("status", "pending").gt("exam_windows.ends_at", resumeCutoffIso()).limit(50),
       ])
     : [{ count: 0 }, { data: [] as { id: string; window_id: string }[] }];
   const [assignments, mine, windows, pending] = await Promise.all([

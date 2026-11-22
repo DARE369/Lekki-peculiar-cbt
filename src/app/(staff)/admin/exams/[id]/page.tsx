@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatTime, isoToLagosLocal } from "@/lib/time";
 import type { AssessmentType, WindowState } from "@/lib/types";
 import { deleteWindow, extendTime, grantMakeup, setFocusPenalty, unlockRelogin, voidAttempt, windowAction } from "../../actions";
+import { canStillResume, RESUME_GRACE_HOURS } from "@/lib/resume";
 import { ResumePanel, type ApprovedResumeRequest, type PendingResumeRequest, type ResumableStudent } from "./resume-panel";
 
 export const metadata: Metadata = { title: "Live monitor" };
@@ -127,6 +128,7 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
           return { id: st.id, name: fullName(st), submittedAt: t.submitted_at };
         })
     : [];
+  const resumeOpen = canStillResume(w);
   const pendingResumeRequests: PendingResumeRequest[] = resumeReqRows
     .filter((r) => r.status === "pending")
     .map((r) => {
@@ -384,14 +386,27 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
         </Table>
       </Card>
 
-      {(resumableStudents.length > 0 || pendingResumeRequests.length > 0 || approvedResumeRequests.length > 0) && (
-        <ResumePanel
-          windowId={id}
-          resumable={resumableStudents}
-          pending={pendingResumeRequests}
-          approved={approvedResumeRequests}
-        />
-      )}
+      {resumeOpen ? (
+        (resumableStudents.length > 0 || pendingResumeRequests.length > 0 || approvedResumeRequests.length > 0) && (
+          <ResumePanel
+            windowId={id}
+            resumable={resumableStudents}
+            pending={pendingResumeRequests}
+            approved={approvedResumeRequests}
+          />
+        )
+      ) : canStart && (resumableStudents.length > 0 || pendingResumeRequests.length > 0) ? (
+        <Card className="px-5 py-4 text-sm text-muted">
+          <p>
+            <span className="font-medium text-text">Results are final.</span> Students can be let back in until {RESUME_GRACE_HOURS} hours after an exam
+            closes, and this one closed on {formatDateTime(w.ends_at)}.
+            {pendingResumeRequests.length
+              ? ` ${pendingResumeRequests.length} request${pendingResumeRequests.length === 1 ? "" : "s"} to continue (${pendingResumeRequests.map((r) => r.studentName).join(", ")}) expired without being approved.`
+              : ""}{" "}
+            For a student who still needs to sit it, give a make-up exam.
+          </p>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {canStart ? (

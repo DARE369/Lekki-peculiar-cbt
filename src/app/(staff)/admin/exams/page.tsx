@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { bulkScheduleBySubject, scheduleFromExamsPage } from "./actions";
 import { ExamBulkTable } from "./exam-bulk-table";
+import { resumeCutoffIso } from "@/lib/resume";
 
 export const metadata: Metadata = { title: "Exams & live monitor" };
 
@@ -200,7 +201,12 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   const { data } = await q;
   rows = (data ?? []) as unknown as WindowRow[];
   const waiting = view === "today" ? rows.filter((w) => windowState(w) === "awaiting_start") : [];
-  const { data: resumeRows } = await supabase.from("resume_requests").select("window_id").eq("status", "pending").limit(50);
+  const { data: resumeRows } = await supabase
+    .from("resume_requests")
+    .select("window_id, exam_windows!inner(ends_at)")
+    .eq("status", "pending")
+    .gt("exam_windows.ends_at", resumeCutoffIso())
+    .limit(50);
 
   const emptyMessages = {
     today: "No exams today",

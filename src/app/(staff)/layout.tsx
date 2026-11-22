@@ -5,6 +5,7 @@ import { getStructure } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/app/login/actions";
 import { SETTINGS_PATHS } from "./admin/settings/sections";
+import { resumeCutoffIso } from "@/lib/resume";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff();
@@ -29,7 +30,12 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         .eq("auto_start", false)
         .lte("starts_at", nowIso)
         .gt("ends_at", nowIso),
-      supabase.from("resume_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      // Only requests for exams that can still be continued; older ones have expired.
+      supabase
+        .from("resume_requests")
+        .select("id, exam_windows!inner(ends_at)", { count: "exact", head: true })
+        .eq("status", "pending")
+        .gt("exam_windows.ends_at", resumeCutoffIso()),
     ]);
     pendingApprovals = can(staff, "exam.approve") ? (a.count ?? 0) : 0;
     pendingAssignments = can(staff, "teachers.manage") ? (t.count ?? 0) : 0;

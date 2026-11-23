@@ -4,7 +4,7 @@ import { createHash, randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { redirect } from "next/navigation";
-import { requireAdmin, can } from "@/lib/auth";
+import { requireAdmin, requireSuperAdmin, can } from "@/lib/auth";
 import { bool, fail, int, ok, str, type ActionResult } from "@/lib/actions";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { notifyAssessmentReview, notifyAssignmentDecisions, notifyBulkReview, type BulkDecision } from "@/lib/notify";
@@ -503,4 +503,39 @@ export async function updateTerminal(fd: FormData) {
   if (fd.has("active")) patch.active = str(fd, "active") === "true";
   await supabase.from("lab_terminals").update(patch).eq("id", str(fd, "id"));
   revalidatePath("/admin/terminals");
+}
+
+// ---------------------------------------------------------------------------
+// What students see after submitting
+// ---------------------------------------------------------------------------
+/** One switch: students see only a congratulations message (on) or their score again (off). */
+export async function setResultsHidden(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const assessmentId = str(fd, "assessment_id");
+  const hide = bool(fd, "hide_results");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_results_hidden", { p_assessment: assessmentId, p_hidden: hide });
+  if (error) return fail(error, "results.visibility");
+  revalidatePath("/admin/exams", "layout");
+  return ok(hide ? "Saved. Students now see a congratulations message instead of their score." : "Saved. Students will see their score after submitting.");
+}
+
+/** School-wide: hide results from every student, show them to every student, or let each test decide. */
+export async function setSchoolResults(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireSuperAdmin();
+  const mode = str(fd, "mode");
+  if (!["hide", "show", "each"].includes(mode)) return fail("That choice wasn't valid.");
+  const { error } = await (await createClient()).rpc("set_school_results_override", { p_mode: mode });
+  if (error) {
+    if (/set_school_results_override/.test(error.message)) return fail("This needs a database update first. Ask whoever looks after the system to run the latest migration.");
+    return fail(error, "results.school_wide");
+  }
+  revalidatePath("/admin/exams", "layout");
+  return ok(
+    mode === "hide"
+      ? "Saved. For every exam in the school, students now see only a congratulations message."
+      : mode === "show"
+        ? "Saved. For every exam in the school, students now see their score."
+        : "Saved. Each exam decides what its students see.",
+  );
 }

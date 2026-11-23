@@ -1455,3 +1455,62 @@ test("Needs a date: tests grouped by subject or year group, side by side, with t
   await expect(hod.getByText("Scheduled 1 class.")).toBeVisible();
   expect((await db.from("exam_windows").select("auto_start").eq("assessment_id", gamma)).data).toEqual([{ auto_start: false }]);
 });
+
+test("a student whose screen says everything is answered can still submit, even if the server missed some answers", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  // This exam makes students answer every question before they can submit (as exams do).
+  const { data: a } = await db.from("assessments").select("id, settings").eq("title", "Basic Science Test 1").single();
+  await db.from("assessments").update({ settings: { ...(a!.settings as object), require_all_answered: true } }).eq("id", a!.id);
+
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/terminals");
+  await hod.getByRole("button", { name: "Create registration code" }).click();
+  const code = (await hod.getByText(/Registration code: (\d{4} \d{4})/).textContent())!.match(/(\d{4} \d{4})/)![1];
+
+  const lab = await browser.newContext();
+  const pc = await lab.newPage();
+  await pc.goto("/exam");
+  await pc.getByLabel("Registration code").fill(code);
+  await pc.getByLabel("Name for this computer").fill("Lab 1 – PC 02");
+  await pc.getByRole("button", { name: "Register" }).click();
+  await pc.getByLabel("Admission number").fill("LPS-2024-0138");
+  await pc.getByRole("button", { name: "Continue" }).click();
+  await pc.getByRole("button", { name: "Yes, this is me" }).click();
+  await pc.getByRole("button", { name: "Start" }).click();
+  await pc.getByLabel(/I am Amaka Bello/).check();
+  await pc.getByRole("button", { name: "Start exam" }).click();
+  await expect(pc.getByText("Question 1 of 5")).toBeVisible();
+
+  for (let i = 0; i < 4; i++) {
+    await pc.getByRole("radio", { name: /two$/ }).click();
+    await pc.getByRole("button", { name: "Next →" }).click();
+  }
+  await pc.getByRole("radio", { name: /two$/ }).click();
+  await expect(pc.getByText("All answers saved")).toBeVisible({ timeout: 15_000 });
+
+  // What a rejected, out-of-order update leaves behind: the server holds a blank, stamped "just now", so the
+  // student's own (older-looking) answers lose. The screen still says 5 of 5 and "All answers saved".
+  const { data: attempt } = await db.from("attempts").select("id").eq("assessment_id", a!.id).eq("status", "in_progress").single();
+  const { data: rows } = await db.from("attempt_answers").select("question_id").eq("attempt_id", attempt!.id).limit(2);
+  expect(rows).toHaveLength(2);
+  for (const r of rows!) {
+    await db.from("attempt_answers").update({ selected: null, answered_at: new Date(Date.now() + 1000).toISOString() }).eq("attempt_id", attempt!.id).eq("question_id", r.question_id);
+  }
+  await pc.waitForTimeout(2500);
+
+  await pc.getByRole("button", { name: "Finish & submit" }).click();
+  await expect(pc.getByText("5 of 5 answered")).toBeVisible();
+  await pc.getByRole("button", { name: "Submit now" }).click();
+  // It used to stop here with "Please answer every question before submitting." and no way forward.
+  await expect(pc.getByText("Exam submitted")).toBeVisible({ timeout: 30_000 });
+  const { data: saved } = await db.from("attempt_answers").select("selected").eq("attempt_id", attempt!.id);
+  expect(saved).toHaveLength(5);
+  expect(saved!.every((r) => r.selected)).toBe(true);
+  await lab.close();
+});

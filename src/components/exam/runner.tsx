@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Crest } from "@/components/brand";
 import { Avatar, Button, cn } from "@/components/ui";
-import { applySync, remainingMs, saveAttempt, serverNow, syncOnce } from "./store";
+import { applySync, remainingMs, saveAttempt, serverNow, stampAt, syncOnce, withFreshStamps } from "./store";
 import type { LocalAttempt } from "./types";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -89,8 +89,23 @@ export function ExamRunner({
       setOnline(delta.kind !== "offline");
       if (delta.kind === "rejected") {
         if (delta.code === "unanswered") {
-          update((x) => ({ ...x, sealed: null, lastError: delta.message ?? null }));
-          setReviewOpen(true);
+          const cur = latest.current;
+          const missingHere = cur.questions.some((x) => !cur.answers[x.id]?.s);
+          if (!missingHere && (cur.healed ?? 0) < 2) {
+            // This screen has every answer but the server is missing some (it did not take them, e.g. because of
+            // clock timing). Send them all again with fresh timestamps instead of leaving the student stuck.
+            update((x) => ({ ...withFreshStamps(x), healed: (x.healed ?? 0) + 1 }));
+            setTimeout(() => void runSync(), 300);
+          } else {
+            update((x) => ({
+              ...x,
+              sealed: null,
+              lastError: missingHere
+                ? (delta.message ?? null)
+                : "Your answers are safe on this computer, but the server did not take them all yet. Press Submit now again. If it keeps happening, call your supervisor.",
+            }));
+            setReviewOpen(true);
+          }
         } else if (delta.code === "expired" || delta.code === "attempt_not_found") {
           setBlocked(
             "This exam can't continue on this computer (it may have been moved to another computer by your supervisor). Please call your supervisor.",
@@ -124,7 +139,7 @@ export function ExamRunner({
       setNow(Date.now());
       const a = latest.current;
       if (!a.sealed && !a.result && remainingMs(a) <= 0) {
-        update((x) => ({ ...x, sealed: { source: "timeout", at: new Date(serverNow(x)).toISOString() } }));
+        update((x) => ({ ...withFreshStamps(x), sealed: { source: "timeout", at: new Date(serverNow(x)).toISOString() } }));
         setReviewOpen(false);
         void runSync();
       }
@@ -185,7 +200,7 @@ export function ExamRunner({
         const s = prev?.s === key ? null : key; // tap again to clear
         return {
           ...a,
-          answers: { ...a.answers, [qid]: { s, f: prev?.f ?? false, at: new Date(serverNow(a)).toISOString() } },
+          answers: { ...a.answers, [qid]: { s, f: prev?.f ?? false, at: stampAt(a) } },
           dirty: a.dirty.includes(qid) ? a.dirty : [...a.dirty, qid],
         };
       });
@@ -200,7 +215,7 @@ export function ExamRunner({
       const prev = a.answers[qid];
       return {
         ...a,
-        answers: { ...a.answers, [qid]: { s: prev?.s ?? null, f: !prev?.f, at: new Date(serverNow(a)).toISOString() } },
+        answers: { ...a.answers, [qid]: { s: prev?.s ?? null, f: !prev?.f, at: stampAt(a) } },
         dirty: a.dirty.includes(qid) ? a.dirty : [...a.dirty, qid],
       };
     });
@@ -218,7 +233,7 @@ export function ExamRunner({
   );
 
   const submit = useCallback(() => {
-    update((a) => ({ ...a, sealed: { source: "student", at: new Date(serverNow(a)).toISOString() } }));
+    update((a) => ({ ...withFreshStamps(a), healed: 0, sealed: { source: "student", at: new Date(serverNow(a)).toISOString() } }));
     setReviewOpen(false);
     void runSync();
   }, [update, runSync]);

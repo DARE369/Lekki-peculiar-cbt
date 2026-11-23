@@ -48,6 +48,33 @@ export function remainingMs(a: Pick<LocalAttempt, "offsetMs" | "deadline">) {
   return Date.parse(a.deadline) - serverNow(a);
 }
 
+function latestAnswerAt(a: Pick<LocalAttempt, "answers">) {
+  let last = 0;
+  for (const v of Object.values(a.answers)) last = Math.max(last, Date.parse(v.at) || 0);
+  return last;
+}
+
+/**
+ * The timestamp for a new answer. The server keeps the newest answer per question, judged by this time, and our
+ * estimate of the server's clock wobbles with the network. So each new answer is stamped strictly later than every
+ * earlier one: a change of mind can never look older than the answer it replaces.
+ */
+export function stampAt(a: Pick<LocalAttempt, "offsetMs" | "answers">): string {
+  return new Date(Math.max(serverNow(a), latestAnswerAt(a) + 1)).toISOString();
+}
+
+/**
+ * A timestamp for re-sending answers the server did not take. The server stores the earlier of this and its own
+ * clock, so stamping a little ahead of our estimate guarantees the re-sent answer is never older than what the
+ * server already holds, whatever the clock wobble. Kept inside the exam time (the server drops answers stamped
+ * long after the deadline).
+ */
+export function resendStamp(a: Pick<LocalAttempt, "offsetMs" | "answers" | "deadline">): string {
+  const est = serverNow(a);
+  const wanted = Math.max(est + 20_000, latestAnswerAt(a) + 1);
+  return new Date(Math.max(est, Math.min(wanted, Date.parse(a.deadline) + 29_000))).toISOString();
+}
+
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -85,6 +112,12 @@ export async function api<T>(path: string, terminalToken: string, body: unknown,
   }
 }
 
+/** Every answer re-stamped for a final send, so the server cannot keep an older-looking copy of any of them. */
+export function withFreshStamps<T extends Pick<LocalAttempt, "offsetMs" | "answers" | "deadline">>(a: T): T {
+  const stamp = resendStamp(a);
+  return { ...a, answers: Object.fromEntries(Object.entries(a.answers).map(([q, v]) => [q, { ...v, at: stamp }])) };
+}
+
 export interface SyncDelta {
   kind: "ok" | "offline" | "finished" | "rejected";
   code?: string;
@@ -95,6 +128,8 @@ export interface SyncDelta {
   sent: Map<string, string>;
   eventsSent: number;
   result?: LocalAttempt["result"];
+  /** the server said it did not take some of the answers we sent: send them again */
+  redo?: boolean;
 }
 
 /** Push pending answers (or the final submission) to the server once. */
@@ -117,7 +152,9 @@ export async function syncOnce(att: LocalAttempt, terminalToken: string): Promis
     if (res.status === "submitted" || res.status === "voided") {
       return { ...base, kind: "finished", result: { status: res.status, show: "none" } };
     }
-    return { ...base, kind: "ok" };
+    // The server says how many answers it actually took. If it took fewer than we sent, they are not saved.
+    const rejected = typeof res.rejected === "number" ? res.rejected : 0;
+    return { ...base, kind: "ok", redo: rejected > 0 };
   } catch (e) {
     const err = e as ApiError;
     const kind = err.code === "offline" || err.status >= 500 ? "offline" : "rejected";
@@ -128,12 +165,30 @@ export async function syncOnce(att: LocalAttempt, terminalToken: string): Promis
 /** Merge a sync result into the latest local state (answers may have changed meanwhile). */
 export function applySync(latest: LocalAttempt, d: SyncDelta): LocalAttempt {
   if (d.kind === "offline" || d.kind === "rejected") return { ...latest, lastError: d.message ?? null };
+  // Some answers were not taken by the server: keep them waiting and re-send with a fresh timestamp.
+  // (Gives up after a few tries in a row, so a genuine refusal can't loop forever.)
+  if (d.redo && (latest.redoStreak ?? 0) < 3) {
+    const stamp = resendStamp(latest);
+    const answers = { ...latest.answers };
+    for (const [q, at] of d.sent) if (answers[q] && answers[q].at === at) answers[q] = { ...answers[q], at: stamp };
+    return {
+      ...latest,
+      answers,
+      offsetMs: d.offsetMs ?? latest.offsetMs,
+      deadline: d.deadline ?? latest.deadline,
+      events: latest.events.slice(d.eventsSent),
+      redoStreak: (latest.redoStreak ?? 0) + 1,
+      lastSyncAt: new Date().toISOString(),
+      lastError: null,
+    };
+  }
   return {
     ...latest,
     offsetMs: d.offsetMs ?? latest.offsetMs,
     deadline: d.deadline ?? latest.deadline,
     dirty: latest.dirty.filter((q) => !d.sent.has(q) || latest.answers[q]?.at !== d.sent.get(q)),
     events: latest.events.slice(d.eventsSent),
+    redoStreak: 0,
     lastSyncAt: new Date().toISOString(),
     lastError: null,
     result: d.kind === "finished" ? (d.result ?? { status: "submitted", show: "none" }) : latest.result,

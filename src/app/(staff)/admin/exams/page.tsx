@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { bulkScheduleBySubject, scheduleFromExamsPage } from "./actions";
 import { ExamBulkTable } from "./exam-bulk-table";
+import { ResultsPolicy } from "@/components/results-policy";
+import { getResultsOverride } from "@/lib/results-policy";
 import { resumeCutoffIso } from "@/lib/resume";
 
 export const metadata: Metadata = { title: "Exams & live monitor" };
@@ -20,7 +22,7 @@ const VIEWS = { today: "Today", upcoming: "Upcoming", past: "Past", drafts: "Nee
 export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   const sp = await props.searchParams;
   const view = (typeof sp.view === "string" && sp.view in VIEWS ? sp.view : "today") as keyof typeof VIEWS;
-  await requireAdmin();
+  const staff = await requireAdmin();
   const s = await getStructure();
   const supabase = await createClient();
 
@@ -227,6 +229,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
         actions={view === "today" ? <AutoRefresh seconds={20} /> : undefined}
       />
       <ViewTabs view={view} draftsCount={draftsCount} />
+      <ResultsPolicy value={await getResultsOverride()} canChange={staff.isSuperAdmin} />
       {waiting.length ? (
         <div className="animate-enter">
           <Alert tone="danger" title={`${waiting.length} exam${waiting.length === 1 ? " is" : "s are"} waiting for you to press Start`}>

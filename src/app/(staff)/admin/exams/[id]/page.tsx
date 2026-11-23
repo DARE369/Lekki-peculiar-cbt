@@ -14,6 +14,7 @@ import { formatTime, isoToLagosLocal } from "@/lib/time";
 import type { AssessmentType, WindowState } from "@/lib/types";
 import { deleteWindow, extendTime, grantMakeup, setFocusPenalty, setResultsHidden, unlockRelogin, voidAttempt, windowAction } from "../../actions";
 import { AutoSwitch } from "@/components/switch";
+import { getResultsOverride } from "@/lib/results-policy";
 import { canStillResume, RESUME_GRACE_HOURS } from "@/lib/resume";
 import { ResumePanel, type ApprovedResumeRequest, type PendingResumeRequest, type ResumableStudent } from "./resume-panel";
 
@@ -131,7 +132,10 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
     : [];
   const resumeOpen = canStillResume(w);
   const { data: settingsRow } = await supabase.from("assessments").select("settings").eq("id", a.id).maybeSingle();
-  const hideResults = (settingsRow?.settings as { show_result?: string } | null)?.show_result === "none";
+  const override = await getResultsOverride();
+  const testHides = (settingsRow?.settings as { show_result?: string } | null)?.show_result === "none";
+  // A school-wide choice wins over this exam's own switch.
+  const hideResults = override ? override === "hide" : testHides;
   const pendingResumeRequests: PendingResumeRequest[] = resumeReqRows
     .filter((r) => r.status === "pending")
     .map((r) => {
@@ -394,14 +398,16 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
           <div className="min-w-0">
             <p className="font-semibold">Show students their results</p>
             <p className="text-sm text-muted">
-              {(w.assessments as { id: string } | null) && hideResults
-                ? "Off: after submitting, students see a congratulations message, not their score. You still see every result."
-                : "On: after submitting, students see their score. Switch off to show only a congratulations message."}
+              {override
+                ? `Set school-wide to ${override === "hide" ? "hidden" : "shown"} for every exam, so this switch is locked. ${staff.isSuperAdmin ? "Change it on the Exams page." : "Ask the super admin to change it."}`
+                : hideResults
+                  ? "Off: after submitting, students see a congratulations message, not their score. You still see every result."
+                  : "On: after submitting, students see their score. Switch off to show only a congratulations message."}
             </p>
           </div>
           <ActionForm action={setResultsHidden}>
             <input type="hidden" name="assessment_id" value={a.id} />
-            <AutoSwitch name="hide_results" invert defaultChecked={!hideResults} label="Show students their results" />
+            <AutoSwitch name="hide_results" invert defaultChecked={!hideResults} label="Show students their results" disabled={Boolean(override)} />
           </ActionForm>
         </Card>
       ) : null}

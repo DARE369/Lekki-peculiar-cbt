@@ -1327,3 +1327,46 @@ test("school-wide results setting beats each exam's switch; only the super admin
   await hod.reload();
   await expect(hod.getByRole("switch", { name: "Show students their results" })).toBeEnabled();
 });
+
+test("switching the term by mistake loses nothing: the teacher is told, and switching back restores the papers", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const countAll = async (table: string) => (await db.from(table).select("id", { count: "exact", head: true })).count;
+  const before = { tests: await countAll("assessments"), questions: await countAll("questions"), links: await countAll("assessment_questions") };
+
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/school");
+  await expect(owner.getByText(/First Term · current · \d+ tests?/)).toBeVisible();
+  // Switching asks first, and says nothing is deleted.
+  let asked = "";
+  owner.once("dialog", (d) => {
+    asked = d.message();
+    return d.accept();
+  });
+  await owner.getByRole("button", { name: /^Second Term · 0 tests/ }).click();
+  await expect(owner.getByText(/Second Term · current/)).toBeVisible();
+  expect(asked).toContain("Nothing is deleted or moved");
+
+  // The teacher sees an explanation instead of an apparently empty term.
+  const teacher = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await teacher.goto("/teach/papers");
+  await expect(teacher.getByText("No papers in this term yet")).toBeVisible();
+  await expect(teacher.getByText(/Your earlier papers are safe: \d+ in .*First Term/)).toBeVisible();
+  await shot(teacher, "32-papers-wrong-term");
+
+  // Nothing was deleted or moved.
+  expect({ tests: await countAll("assessments"), questions: await countAll("questions"), links: await countAll("assessment_questions") }).toEqual(before);
+
+  // Switch back: the papers are all there again.
+  owner.once("dialog", (d) => d.accept());
+  await owner.getByRole("button", { name: /^First Term · \d+ tests?/ }).click();
+  await expect(owner.getByText(/First Term · current/)).toBeVisible();
+  await teacher.goto("/teach/papers");
+  await expect(teacher.getByText("No papers in this term yet")).toHaveCount(0);
+  await expect(teacher.getByRole("columnheader", { name: "2nd CA" })).toBeVisible();
+});

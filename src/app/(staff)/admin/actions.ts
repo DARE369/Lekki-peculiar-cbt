@@ -261,8 +261,12 @@ export async function setFocusPenalty(_: ActionResult, fd: FormData): Promise<Ac
   const minutes = int(fd, "minutes", 0);
   if (minutes < 0 || minutes > 60) return fail("Enter a value between 0 and 60 minutes.");
   const supabase = await createClient();
-  const { error } = await supabase.from("exam_windows").update({ focus_penalty_minutes: minutes }).eq("id", windowId);
-  if (error) return fail(error);
+  const { data, error } = await supabase.rpc("set_focus_penalty", { p_windows: [windowId], p_minutes: minutes });
+  if (error) {
+    if (/set_focus_penalty/.test(error.message)) return fail("This needs a database update first. Ask whoever looks after the system to run the latest migration.");
+    return fail(error, "exams.focus_penalty");
+  }
+  if (!data) return fail("That exam couldn't be found.");
   revalidatePath(`/admin/exams/${windowId}`);
   return ok(minutes === 0 ? "Focus penalty disabled." : `Focus penalty set to ${minutes} minutes.`);
 }

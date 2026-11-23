@@ -1514,3 +1514,81 @@ test("a student whose screen says everything is answered can still submit, even 
   expect(saved!.every((r) => r.selected)).toBe(true);
   await lab.close();
 });
+
+test("Exams screen: quick controls change several classes' exams at once, only for the classes chosen", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: a } = await db.from("assessments").select("id").eq("title", "Basic Science Test 1").single();
+  const win = async () => (await db.from("exam_windows").select("id, status, extra_minutes, focus_penalty_minutes, ends_at").eq("assessment_id", a!.id).single()).data!;
+  const test = async () => ((await db.from("assessments").select("settings").eq("id", a!.id).single()).data!.settings as { show_result?: string }).show_result;
+  const before = await win();
+  const resultsBefore = (await test()) ?? "score";
+
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/exams");
+  await expect(owner.getByText("Quick controls")).toBeVisible();
+  await shot(owner, "35-quick-controls");
+
+  // Choosing classes decides what is affected: with Year 4 Gold switched off, nothing is.
+  await owner.getByRole("checkbox", { name: "Year 4 Gold" }).uncheck();
+  await expect(owner.getByText("0 exams selected")).toBeVisible();
+  await expect(owner.getByRole("button", { name: /^Add 10 minutes to 0 exams/ })).toBeDisabled();
+  await owner.getByRole("checkbox", { name: "Year 4 Gold" }).check();
+  await expect(owner.getByText("1 exam selected")).toBeVisible();
+
+  // Extra time for everyone chosen: needs a reason, adds the minutes to the exam.
+  await owner.getByLabel("Extra minutes").fill("10");
+  await expect(owner.getByRole("button", { name: /^Add 10 minutes to 1 exam/ })).toBeDisabled(); // no reason yet
+  await owner.getByLabel("Reason for extra time").fill("Power cut 10:20");
+  owner.once("dialog", (d) => d.accept());
+  await owner.getByRole("button", { name: /^Add 10 minutes to 1 exam/ }).click();
+  await expect(owner.getByText("Added 10 minutes to 1 exam.")).toBeVisible();
+  const after = await win();
+  expect(after.extra_minutes).toBe(before.extra_minutes + 10);
+  expect(Date.parse(after.ends_at)).toBeGreaterThan(Date.parse(before.ends_at));
+
+  // Results shown to students: hide, then show again.
+  await owner.getByRole("button", { name: /^Hide results/ }).click();
+  await expect(owner.getByText(/Results hidden for 1 test/)).toBeVisible();
+  expect(await test()).toBe("none");
+  await owner.getByRole("button", { name: /^Show results/ }).click();
+  await expect(owner.getByText(/Results shown for 1 test/)).toBeVisible();
+  expect(await test()).toBe(resultsBefore);
+
+  // Leaving the exam screen: set a penalty.
+  await owner.getByLabel("Focus penalty minutes").fill("5");
+  await owner.getByRole("button", { name: /^Apply to 1 exam/ }).click();
+  await expect(owner.getByText("Focus penalty set to 5 minutes for 1 exam.")).toBeVisible();
+  expect((await win()).focus_penalty_minutes).toBe(5);
+
+  // Pause new starts, then resume.
+  await owner.getByRole("button", { name: /^Pause new starts \(1\)/ }).click();
+  await expect(owner.getByText("Paused 1 exam.")).toBeVisible();
+  expect((await win()).status).toBe("paused");
+  await owner.getByRole("button", { name: /^Resume \(1\)/ }).click();
+  await expect(owner.getByText("Resumed 1 exam.")).toBeVisible();
+  expect((await win()).status).toBe("live");
+
+  // The same setting on a single exam's own page used to say "saved" without changing anything.
+  const winId = (await win()).id;
+  await owner.goto(`/admin/exams/${winId}`);
+  await owner.getByLabel("Penalty (minutes, 0 = off)").fill("7");
+  const penaltyForm = owner.locator("form", { has: owner.getByLabel("Penalty (minutes, 0 = off)") });
+  await penaltyForm.getByRole("button", { name: "Save" }).click();
+  await expect(penaltyForm.getByText("Focus penalty set to 7 minutes.")).toBeVisible();
+  expect((await win()).focus_penalty_minutes).toBe(7);
+  await owner.goto("/admin/exams");
+
+  // With results set school-wide, the per-group buttons step aside and say why.
+  await owner.getByRole("button", { name: "Hide for everyone" }).click();
+  await expect(owner.getByText(/For every exam in the school, students now see only a congratulations message/)).toBeVisible();
+  await expect(owner.getByRole("button", { name: /^Hide results/ })).toBeDisabled();
+  await expect(owner.getByText(/Set school-wide to hidden for every exam, which overrides this/)).toBeVisible();
+  await owner.getByRole("button", { name: "Each exam decides" }).click();
+  await expect(owner.getByText("Saved. Each exam decides what its students see.")).toBeVisible();
+});

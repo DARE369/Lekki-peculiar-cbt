@@ -12,7 +12,8 @@ import { signPhotos } from "@/lib/photos";
 import { createClient } from "@/lib/supabase/server";
 import { formatTime, isoToLagosLocal } from "@/lib/time";
 import type { AssessmentType, WindowState } from "@/lib/types";
-import { deleteWindow, extendTime, grantMakeup, setFocusPenalty, unlockRelogin, voidAttempt, windowAction } from "../../actions";
+import { deleteWindow, extendTime, grantMakeup, setFocusPenalty, setResultsHidden, unlockRelogin, voidAttempt, windowAction } from "../../actions";
+import { AutoSwitch } from "@/components/switch";
 import { canStillResume, RESUME_GRACE_HOURS } from "@/lib/resume";
 import { ResumePanel, type ApprovedResumeRequest, type PendingResumeRequest, type ResumableStudent } from "./resume-panel";
 
@@ -129,6 +130,8 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
         })
     : [];
   const resumeOpen = canStillResume(w);
+  const { data: settingsRow } = await supabase.from("assessments").select("settings").eq("id", a.id).maybeSingle();
+  const hideResults = (settingsRow?.settings as { show_result?: string } | null)?.show_result === "none";
   const pendingResumeRequests: PendingResumeRequest[] = resumeReqRows
     .filter((r) => r.status === "pending")
     .map((r) => {
@@ -385,6 +388,23 @@ export default async function MonitorPage(props: PageProps<"/admin/exams/[id]">)
           </tbody>
         </Table>
       </Card>
+
+      {canStart ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+          <div className="min-w-0">
+            <p className="font-semibold">Show students their results</p>
+            <p className="text-sm text-muted">
+              {(w.assessments as { id: string } | null) && hideResults
+                ? "Off: after submitting, students see a congratulations message, not their score. You still see every result."
+                : "On: after submitting, students see their score. Switch off to show only a congratulations message."}
+            </p>
+          </div>
+          <ActionForm action={setResultsHidden}>
+            <input type="hidden" name="assessment_id" value={a.id} />
+            <AutoSwitch name="hide_results" invert defaultChecked={!hideResults} label="Show students their results" />
+          </ActionForm>
+        </Card>
+      ) : null}
 
       {resumeOpen ? (
         (resumableStudents.length > 0 || pendingResumeRequests.length > 0 || approvedResumeRequests.length > 0) && (

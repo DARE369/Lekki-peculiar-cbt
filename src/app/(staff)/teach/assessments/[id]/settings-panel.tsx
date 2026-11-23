@@ -207,7 +207,7 @@ export function SettingsPanel({
         </div>
         <Field label="After submitting, students see">
           <Select name="show_result" defaultValue={v.settings.show_result}>
-            <option value="none">Nothing (just “submitted”)</option>
+            <option value="none">Nothing: a congratulations message only</option>
             <option value="score">Their score</option>
             <option value="full">Score and corrections</option>
           </Select>

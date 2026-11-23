@@ -504,3 +504,18 @@ export async function updateTerminal(fd: FormData) {
   await supabase.from("lab_terminals").update(patch).eq("id", str(fd, "id"));
   revalidatePath("/admin/terminals");
 }
+
+// ---------------------------------------------------------------------------
+// What students see after submitting
+// ---------------------------------------------------------------------------
+/** One switch: students see only a congratulations message (on) or their score again (off). */
+export async function setResultsHidden(_: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  const assessmentId = str(fd, "assessment_id");
+  const hide = bool(fd, "hide_results");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_results_hidden", { p_assessment: assessmentId, p_hidden: hide });
+  if (error) return fail(error, "results.visibility");
+  revalidatePath("/admin/exams", "layout");
+  return ok(hide ? "Saved. Students now see a congratulations message instead of their score." : "Saved. Students will see their score after submitting.");
+}

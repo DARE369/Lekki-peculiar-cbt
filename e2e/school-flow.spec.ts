@@ -1245,3 +1245,37 @@ test("settings: one place for setup, and auto-approval can be switched off per s
   await hod.getByRole("switch", { name: "Approve automatically in Elementary" }).check({ force: true });
   await expect(hod.getByText(/Saved. Requests without a clash/)).toBeVisible();
 });
+
+test("one switch on the live exam screen hides results from students and brings them back", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: a } = await db.from("assessments").select("id, settings").eq("title", "Basic Science Test 1").single();
+  const { data: win } = await db.from("exam_windows").select("id").eq("assessment_id", a!.id).limit(1).single();
+  const { data: attempt } = await db.from("attempts").select("id").eq("assessment_id", a!.id).eq("status", "submitted").limit(1).single();
+  const before = (a!.settings as { show_result?: string }).show_result ?? "score";
+  const shown = async () => (await db.rpc("_exam_result", { p_attempt: attempt!.id })).data as { show: string; score?: number | null };
+  expect((await shown()).show).toBe(before);
+
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto(`/admin/exams/${win!.id}`);
+  const sw = hod.getByRole("switch", { name: "Show students their results" });
+  await expect(sw).toBeChecked();
+  await shot(hod, "29-results-switch-on");
+  await sw.uncheck({ force: true });
+  await expect(hod.getByText("Saved. Students now see a congratulations message instead of their score.")).toBeVisible();
+  // A student who finished now gets no score at all, only the message.
+  expect(await shown()).toEqual({ status: "submitted", show: "none" });
+  await hod.reload();
+  await expect(hod.getByRole("switch", { name: "Show students their results" })).not.toBeChecked();
+  await expect(hod.getByText(/Off: after submitting, students see a congratulations message/)).toBeVisible();
+  await shot(hod, "30-results-switch-off");
+
+  await hod.getByRole("switch", { name: "Show students their results" }).check({ force: true });
+  await expect(hod.getByText("Saved. Students will see their score after submitting.")).toBeVisible();
+  expect((await shown()).show).toBe(before);
+});

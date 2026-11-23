@@ -1,5 +1,6 @@
 "use client";
 
+import { encouragementFor } from "@/lib/encouragement";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -684,7 +685,10 @@ function Finished({ att, onFinish }: { att: LocalAttempt; onFinish: () => void }
               <p className="text-sm text-muted">Your score</p>
             </div>
           ) : r.status === "submitted" ? (
-            <p className="mt-6 text-lg">Your teacher will share your results.</p>
+            <div className="animate-enter mx-auto mt-6 max-w-lg space-y-3">
+              <p className="text-lg font-medium">{encouragementFor(`${att.student.first_name}:${att.assessment.title}`)}</p>
+              <p className="text-sm text-muted">Your teacher will share your results when they are ready.</p>
+            </div>
           ) : null}
         </div>
         {r.show === "full" && r.review ? (

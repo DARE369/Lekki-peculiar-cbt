@@ -3,12 +3,13 @@ import { CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { Alert, Card, EmptyState, LinkButton, PageHeader, cn } from "@/components/ui";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { requireAdmin } from "@/lib/auth";
+import { can, requireAdmin } from "@/lib/auth";
 import { getRoundConfigs, getStructure } from "@/lib/data";
 import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
 import { ExamBulkTable } from "./exam-bulk-table";
+import { ExamControls } from "./exam-controls";
 import { GroupToggle, NeedsDate, type GroupBy, type NeedsDateTest } from "./needs-date";
 import { ResultsPolicy } from "@/components/results-policy";
 import { getResultsOverride } from "@/lib/results-policy";
@@ -106,6 +107,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   if (view === "past") q = q.lt("ends_at", dayStart.toISOString()).order("starts_at", { ascending: false });
   const { data } = await q;
   rows = (data ?? []) as unknown as WindowRow[];
+  const resultsOverride = await getResultsOverride();
   const waiting = view === "today" ? rows.filter((w) => windowState(w) === "awaiting_start") : [];
   const { data: resumeRows } = await supabase
     .from("resume_requests")
@@ -133,7 +135,7 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
         actions={view === "today" ? <AutoRefresh seconds={20} /> : undefined}
       />
       <ViewTabs view={view} draftsCount={draftsCount} />
-      <ResultsPolicy value={await getResultsOverride()} canChange={staff.isSuperAdmin} />
+      <ResultsPolicy value={resultsOverride} canChange={staff.isSuperAdmin} />
       {waiting.length ? (
         <div className="animate-enter">
           <Alert tone="danger" title={`${waiting.length} exam${waiting.length === 1 ? " is" : "s are"} waiting for you to press Start`}>
@@ -156,6 +158,15 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
             </Link>
           </Alert>
         </div>
+      ) : null}
+      {view === "today" || view === "upcoming" ? (
+        <ExamControls
+          rows={rows}
+          classNames={classNames}
+          subjectNames={subjectNames}
+          can={{ start: can(staff, "exam.start"), extend: can(staff, "exam.extend_time"), results: can(staff, "exam.start") || can(staff, "exam.approve") }}
+          resultsOverride={resultsOverride}
+        />
       ) : null}
       <Card>
         {rows.length === 0 ? (

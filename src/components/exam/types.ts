@@ -78,4 +78,8 @@ export interface LocalAttempt {
   result: ExamResult | null;
   lastSyncAt: string | null;
   lastError: string | null;
+  /** times in a row the server reported not taking some answers (they are re-sent with fresh timestamps) */
+  redoStreak?: number;
+  /** times a refused submit was re-sent automatically (reset whenever the student presses Submit) */
+  healed?: number;
 }

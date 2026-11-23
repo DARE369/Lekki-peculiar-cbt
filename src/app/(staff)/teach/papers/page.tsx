@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/forms";
-import { Badge, Card, EmptyState, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Card, EmptyState, LinkButton, PageHeader, Table, Td, Th } from "@/components/ui";
 import { requireStaff } from "@/lib/auth";
 import { getRoundConfigs, getStructure } from "@/lib/data";
 import { STATUS_LABEL } from "@/lib/labels";
@@ -53,6 +53,17 @@ export default async function PapersPage() {
     const { data: links } = await supabase.from("assessment_questions").select("assessment_id").in("assessment_id", papers.map((p) => p.id));
     for (const l of links ?? []) counts.set(l.assessment_id as string, (counts.get(l.assessment_id as string) ?? 0) + 1);
   }
+  // Nothing in this term but papers in another? Say so, instead of looking like the work has gone.
+  let elsewhere: { term: string; count: number }[] = [];
+  if (!papers.length && subjectIds.length) {
+    const { data: other } = await supabase.from("assessments").select("term_id").in("subject_id", subjectIds).neq("term_id", termId).limit(500);
+    const byTerm = new Map<string, number>();
+    for (const o of other ?? []) byTerm.set(o.term_id as string, (byTerm.get(o.term_id as string) ?? 0) + 1);
+    elsewhere = [...byTerm.entries()].map(([id, count]) => {
+      const t = s.terms.find((x) => x.id === id);
+      return { term: t ? `${t.session_name} · ${t.name}` : "another term", count };
+    });
+  }
   // Questions already uploaded for each subject, year group and round (the teacher's own).
   const qCounts = new Map<string, number>();
   if (subjectIds.length) {
@@ -84,6 +95,13 @@ export default async function PapersPage() {
         description={`${s.currentTerm ? `${s.currentTerm.session_name} · ${s.currentTerm.name}. ` : ""}Each subject and year group has one paper per round. Open a paper to add questions and send it for review.`}
         actions={<LinkButton href="/teach/questions/import" variant="secondary">Upload questions</LinkButton>}
       />
+
+      {elsewhere.length ? (
+        <Alert tone="warning" title="No papers in this term yet">
+          Your earlier papers are safe: {elsewhere.map((e) => `${e.count} in ${e.term}`).join(", ")}. Your uploaded questions are all still in your question bank.
+          If you expected to see them here, the current term may have been changed by mistake. Ask the school office to check Settings → School year &amp; terms.
+        </Alert>
+      ) : null}
 
       {rows.length === 0 ? (
         <Card>

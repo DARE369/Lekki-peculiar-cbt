@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import { CalendarClock } from "lucide-react";
 import Link from "next/link";
-import { Alert, Badge, Card, EmptyState, LinkButton, PageHeader, cn } from "@/components/ui";
-import { ActionForm, SubmitButton } from "@/components/forms";
+import { Alert, Card, EmptyState, LinkButton, PageHeader, cn } from "@/components/ui";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { requireAdmin } from "@/lib/auth";
-import { getStructure } from "@/lib/data";
-import { TYPE_LABEL, windowState } from "@/lib/labels";
+import { getRoundConfigs, getStructure } from "@/lib/data";
+import { windowState } from "@/lib/labels";
 import { createClient } from "@/lib/supabase/server";
 import type { AssessmentType } from "@/lib/types";
-import { bulkScheduleBySubject, scheduleFromExamsPage } from "./actions";
 import { ExamBulkTable } from "./exam-bulk-table";
+import { GroupToggle, NeedsDate, type GroupBy, type NeedsDateTest } from "./needs-date";
 import { ResultsPolicy } from "@/components/results-policy";
 import { getResultsOverride } from "@/lib/results-policy";
 import { resumeCutoffIso } from "@/lib/resume";
@@ -36,7 +35,9 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   const [{ data: draftTests }, { data: existingWindows }] = await Promise.all([
     supabase
       .from("assessments")
-      .select("id, title, type, subject_id, created_by, year_id, staff:created_by(full_name)")
+      .select(
+        "id, title, type, subject_id, created_by, year_id, round_id, sequence_label, question_count, duration_minutes, class_ids, staff:created_by(full_name), assessment_questions(count)",
+      )
       .eq("status", "approved")
       .eq("term_id", s.currentTerm?.id ?? "")
       .order("created_at", { ascending: false })
@@ -44,8 +45,10 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
     supabase.from("exam_windows").select("assessment_id").limit(1000),
   ]);
   const scheduledIds = new Set((existingWindows ?? []).map((w: { assessment_id: string }) => w.assessment_id));
-  type DraftTest = { id: string; title: string; type: AssessmentType; subject_id: string; created_by: string; year_id: string; staff: { full_name: string } | null };
-  const unscheduled = ((draftTests ?? []) as unknown as DraftTest[]).filter((t) => !scheduledIds.has(t.id));
+  type DraftRow = Omit<NeedsDateTest, "pool" | "staff"> & { staff: { full_name: string } | null; assessment_questions: { count: number }[] | null };
+  const unscheduled: NeedsDateTest[] = ((draftTests ?? []) as unknown as DraftRow[])
+    .filter((t) => !scheduledIds.has(t.id))
+    .map(({ assessment_questions, ...t }) => ({ ...t, pool: assessment_questions?.[0]?.count ?? 0 }));
   const draftsCount = unscheduled.length;
 
   type WindowRow = {
@@ -59,20 +62,8 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
   };
 
   if (view === "drafts") {
-    // Group unscheduled tests by subject for bulk scheduling
-    type SubjectGroup = { subjectName: string; pairs: { assessmentId: string; classId: string; className: string; yearName: string }[] };
-    const bySubject = new Map<string, SubjectGroup>();
-    for (const t of unscheduled) {
-      const subjectName = s.subjectById.get(t.subject_id)?.name ?? t.subject_id;
-      if (!bySubject.has(t.subject_id)) bySubject.set(t.subject_id, { subjectName, pairs: [] });
-      const yearName = s.yearById.get(t.year_id)?.name ?? t.year_id;
-      const classesForYear = s.classes.filter((c) => c.year_id === t.year_id && c.active);
-      for (const c of classesForYear) {
-        bySubject.get(t.subject_id)!.pairs.push({ assessmentId: t.id, classId: c.id, className: c.name, yearName });
-      }
-    }
-    const subjectGroups = [...bySubject.values()].sort((a, b) => a.subjectName.localeCompare(b.subjectName));
-
+    const groupBy: GroupBy = sp.group === "year" ? "year" : "subject";
+    const rounds = await getRoundConfigs();
     return (
       <div className="space-y-6">
         <PageHeader
@@ -81,111 +72,24 @@ export default async function ExamsPage(props: PageProps<"/admin/exams">) {
           description="Open an exam to start it, watch progress and handle problems."
         />
         <ViewTabs view={view} draftsCount={draftsCount} />
-
-        {subjectGroups.length > 0 && (
-          <Card>
-            <div className="border-b border-border px-5 py-3">
-              <p className="font-semibold">Schedule by subject</p>
-              <p className="text-xs text-muted">Set one date and time to schedule all classes for a subject at once.</p>
-            </div>
-            <ul className="divide-y divide-border">
-              {subjectGroups.map((g) => {
-                const yearGroups = new Map<string, typeof g.pairs>();
-                for (const p of g.pairs) {
-                  if (!yearGroups.has(p.yearName)) yearGroups.set(p.yearName, []);
-                  yearGroups.get(p.yearName)!.push(p);
-                }
-                return (
-                  <li key={g.subjectName} className="space-y-4 px-5 py-4">
-                    <p className="font-semibold">{g.subjectName} <span className="text-xs font-normal text-muted">— {g.pairs.length} class{g.pairs.length === 1 ? "" : "es"}</span></p>
-                    <ActionForm action={bulkScheduleBySubject} className="space-y-3 rounded-lg border border-border p-4">
-                      <div className="space-y-2">
-                        {[...yearGroups.entries()].map(([yearName, pairs]) => (
-                          <div key={yearName}>
-                            <p className="mb-1.5 text-xs font-semibold text-muted">{yearName}</p>
-                            <div className="flex flex-wrap gap-2">
-                              {pairs.map((p) => (
-                                <label key={p.classId} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft">
-                                  <input type="checkbox" name="pair" value={`${p.assessmentId}:${p.classId}`} defaultChecked className="accent-[var(--brand)]" />
-                                  {p.className}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted">Opens (Lagos time)</label>
-                          <input type="datetime-local" name="starts_all" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted">Closes</label>
-                          <input type="datetime-local" name="ends_all" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
-                        </div>
-                      </div>
-                      <SubmitButton size="sm">Schedule all selected</SubmitButton>
-                    </ActionForm>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        )}
-
-        <Card>
-          <div className="border-b border-border px-5 py-3 text-sm text-muted">
-            {unscheduled.length === 0 ? "All approved tests have a date set." : `${unscheduled.length} approved test${unscheduled.length === 1 ? "" : "s"} still need${unscheduled.length === 1 ? "s" : ""} a date — schedule each individually below, or use the bulk tool above.`}
-          </div>
-          {unscheduled.length === 0 ? (
-            <EmptyState title="All approved tests have a date set">
-              Every approved test has been scheduled. Check Today or Upcoming.
-            </EmptyState>
-          ) : (
-            <ul className="divide-y divide-border">
-              {unscheduled.map((t) => {
-                const year = s.yearById.get(t.year_id);
-                const classesForYear = s.classes.filter((c) => c.year_id === t.year_id && c.active);
-                return (
-                  <li key={t.id} className="space-y-4 px-5 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-semibold">{t.title}</p>
-                        <p className="text-xs text-muted">
-                          {s.subjectById.get(t.subject_id)?.name} · {TYPE_LABEL[t.type]} · {year?.name ?? "—"} · by {(t.staff as unknown as { full_name: string } | null)?.full_name ?? "—"}
-                        </p>
-                      </div>
-                      <Badge tone="warning">No date set</Badge>
-                    </div>
-                    <ActionForm action={scheduleFromExamsPage} className="space-y-3 rounded-lg border border-border p-4">
-                      <input type="hidden" name="assessment_id" value={t.id} />
-                      <p className="text-sm font-medium">Set exam dates</p>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {classesForYear.map((c) => (
-                          <label key={c.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-brand has-checked:bg-brand-soft">
-                            <input type="checkbox" name="class_id" value={c.id} className="accent-[var(--brand)]" />
-                            {c.name}
-                          </label>
-                        ))}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted">Opens (Lagos time)</label>
-                          <input type="datetime-local" name="starts_all" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted">Closes</label>
-                          <input type="datetime-local" name="ends_all" className="h-9 w-full rounded-lg border border-border px-2 text-sm" />
-                        </div>
-                      </div>
-                      <SubmitButton size="sm">Set date</SubmitButton>
-                    </ActionForm>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+        {Number(sp.scheduled) > 0 ? (
+          <Alert tone="success" title={`Scheduled ${Number(sp.scheduled)} class${Number(sp.scheduled) === 1 ? "" : "es"}.`}>
+            {draftsCount === 0 ? "Every approved test now has a date. " : ""}
+            <Link href="/admin/exams?view=upcoming" className="font-semibold underline">
+              See them under Upcoming
+            </Link>
+            .
+          </Alert>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            {draftsCount === 0
+              ? "All approved tests have a date set."
+              : `${draftsCount} approved test${draftsCount === 1 ? "" : "s"} still need${draftsCount === 1 ? "s" : ""} a date. Tests are dated automatically when the Exam calendar has dates for their round (Settings → Exam calendar).`}
+          </p>
+          {draftsCount > 0 ? <GroupToggle groupBy={groupBy} /> : null}
+        </div>
+        <NeedsDate tests={unscheduled} groupBy={groupBy} s={s} rounds={rounds} />
       </div>
     );
   }

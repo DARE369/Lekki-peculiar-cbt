@@ -1327,3 +1327,131 @@ test("school-wide results setting beats each exam's switch; only the super admin
   await hod.reload();
   await expect(hod.getByRole("switch", { name: "Show students their results" })).toBeEnabled();
 });
+
+test("switching the term by mistake loses nothing: the teacher is told, and switching back restores the papers", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const countAll = async (table: string) => (await db.from(table).select("id", { count: "exact", head: true })).count;
+  const before = { tests: await countAll("assessments"), questions: await countAll("questions"), links: await countAll("assessment_questions") };
+
+  const owner = await signIn(browser, OWNER.email, OWNER.password);
+  await owner.goto("/admin/school");
+  await expect(owner.getByText(/First Term · current · \d+ tests?/)).toBeVisible();
+  // Switching asks first, and says nothing is deleted.
+  let asked = "";
+  owner.once("dialog", (d) => {
+    asked = d.message();
+    return d.accept();
+  });
+  await owner.getByRole("button", { name: /^Second Term · 0 tests/ }).click();
+  await expect(owner.getByText(/Second Term · current/)).toBeVisible();
+  expect(asked).toContain("Nothing is deleted or moved");
+
+  // The teacher sees an explanation instead of an apparently empty term.
+  const teacher = await signIn(browser, "dixon@lps.test", teacherPassword);
+  await teacher.goto("/teach/papers");
+  await expect(teacher.getByText("No papers in this term yet")).toBeVisible();
+  await expect(teacher.getByText(/Your earlier papers are safe: \d+ in .*First Term/)).toBeVisible();
+  await shot(teacher, "32-papers-wrong-term");
+
+  // Nothing was deleted or moved.
+  expect({ tests: await countAll("assessments"), questions: await countAll("questions"), links: await countAll("assessment_questions") }).toEqual(before);
+
+  // Switch back: the papers are all there again.
+  owner.once("dialog", (d) => d.accept());
+  await owner.getByRole("button", { name: /^First Term · \d+ tests?/ }).click();
+  await expect(owner.getByText(/First Term · current/)).toBeVisible();
+  await teacher.goto("/teach/papers");
+  await expect(teacher.getByText("No papers in this term yet")).toHaveCount(0);
+  await expect(teacher.getByRole("columnheader", { name: "2nd CA" })).toBeVisible();
+});
+
+test("Needs a date: tests grouped by subject or year group, side by side, with their details, scheduled together", async ({ browser }) => {
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: dixon } = await db.from("staff").select("id").eq("email", "dixon@lps.test").single();
+  const { data: elem } = await db.from("sections").select("id").eq("code", "ELEM").single();
+  const { data: maths } = await db.from("subjects").select("id").eq("section_id", elem!.id).eq("name", "Mathematics").single();
+  const { data: english } = await db.from("subjects").select("id").eq("section_id", elem!.id).eq("name", "English Language").single();
+  const { data: y4 } = await db.from("years").select("id").eq("section_id", elem!.id).eq("level", 4).single();
+  const { data: y5 } = await db.from("years").select("id").eq("section_id", elem!.id).eq("level", 5).single();
+  const { data: gold } = await db.from("classes").select("id").eq("name", "Year 4 Gold").single();
+  const { data: five } = await db.from("classes").select("id").eq("name", "Year 5").single();
+  const { data: term } = await db.from("terms").select("id").eq("is_current", true).single();
+  const { data: rounds } = await db.from("ca_round_configs").select("id, label").eq("is_active", true).order("sort_order").limit(2);
+  const make = async (title: string, subject: string, year: string, cls: string, round: { id: string; label: string }, questions: number, minutes: number) => {
+    const { data: a } = await db
+      .from("assessments")
+      .insert({ subject_id: subject, year_id: year, term_id: term!.id, title, type: "test", status: "approved", paper: { questions: [] }, question_count: questions, duration_minutes: minutes, created_by: dixon!.id, class_ids: [cls], round_id: round.id, sequence_label: round.label })
+      .select("id")
+      .single();
+    return a!.id as string;
+  };
+  const alpha = await make("Needs Date Alpha", maths!.id, y4!.id, gold!.id, rounds![0], 12, 25);
+  const beta = await make("Needs Date Beta", maths!.id, y4!.id, gold!.id, rounds![1], 40, 60);
+  const gamma = await make("Needs Date Gamma", english!.id, y5!.id, five!.id, rounds![0], 10, 15);
+
+  const hod = await signIn(browser, "hod@lps.test", hodPassword);
+  await hod.goto("/admin/exams?view=drafts");
+  // By subject (the default): one group per subject.
+  await expect(hod.getByRole("heading", { name: "Mathematics", level: 2 })).toBeVisible();
+  await expect(hod.getByRole("heading", { name: "English Language", level: 2 })).toBeVisible();
+  const card = (title: string) => hod.locator("article", { has: hod.getByRole("heading", { name: title }) });
+  // Each card says what the test is: round, questions, time, teacher.
+  await expect(card("Needs Date Alpha").getByText(rounds![0].label, { exact: true })).toBeVisible();
+  await expect(card("Needs Date Alpha").getByText("12", { exact: true })).toBeVisible();
+  await expect(card("Needs Date Alpha").getByText("25 minutes")).toBeVisible();
+  await expect(card("Needs Date Alpha").getByText("Mr Dixon")).toBeVisible();
+  await expect(card("Needs Date Beta").getByText(rounds![1].label, { exact: true })).toBeVisible();
+  await expect(card("Needs Date Beta").getByText("60 minutes")).toBeVisible();
+  // Side by side, not stacked.
+  const a = (await card("Needs Date Alpha").boundingBox())!;
+  const b = (await card("Needs Date Beta").boundingBox())!;
+  expect(Math.abs(a.y - b.y)).toBeLessThan(2);
+  expect(b.x).toBeGreaterThan(a.x + a.width - 2);
+  await shot(hod, "33-needs-a-date");
+
+  // By year group: the same tests, grouped by year, each card naming its subject.
+  await hod.getByRole("navigation", { name: "Group tests" }).getByRole("link", { name: "By year group" }).click();
+  await expect(hod.getByRole("heading", { name: "Year 4", level: 2 })).toBeVisible();
+  await expect(hod.getByRole("heading", { name: "Year 5", level: 2 })).toBeVisible();
+  await expect(card("Needs Date Alpha").getByText("Mathematics")).toBeVisible();
+  await shot(hod, "34-needs-a-date-by-year");
+  await hod.getByRole("navigation", { name: "Group tests" }).getByRole("link", { name: "By subject" }).click();
+
+  // One date for the whole Mathematics group.
+  const day = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+  const maths_form = hod.locator('form[id^="schedule-"]', { hasText: "Schedule Mathematics" });
+  await maths_form.getByLabel("Opens (Lagos time)").fill(`${day}T09:00`);
+  await maths_form.getByLabel("Closes (no new starts after this)").fill(`${day}T11:00`);
+  await maths_form.getByRole("button", { name: "Schedule Mathematics" }).click();
+  // The group is gone from the list once scheduled, so the confirmation is a banner above it.
+  await expect(hod.getByText("Scheduled 2 classes.")).toBeVisible();
+  await expect(hod).toHaveURL(/scheduled=2/);
+  for (const id of [alpha, beta]) {
+    const { data: w } = await db.from("exam_windows").select("class_id, auto_start").eq("assessment_id", id);
+    expect(w).toEqual([{ class_id: gold!.id, auto_start: true }]);
+  }
+  // They leave the list; the other subject is still waiting.
+  await expect(card("Needs Date Alpha")).toHaveCount(0);
+  await expect(card("Needs Date Gamma")).toBeVisible();
+
+  // "I'll press Start myself" is respected.
+  const eng_form = hod.locator('form[id^="schedule-"]', { hasText: "Schedule English Language" });
+  await eng_form.getByLabel("Opens (Lagos time)").fill(`${day}T09:00`);
+  await eng_form.getByLabel("Closes (no new starts after this)").fill(`${day}T11:00`);
+  await eng_form.getByLabel("I'll press Start myself").check();
+  await eng_form.getByRole("button", { name: "Schedule English Language" }).click();
+  await expect(hod.getByText("Scheduled 1 class.")).toBeVisible();
+  expect((await db.from("exam_windows").select("auto_start").eq("assessment_id", gamma)).data).toEqual([{ auto_start: false }]);
+});

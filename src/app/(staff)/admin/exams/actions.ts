@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { bool, fail, ok, str, type ActionResult } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/server";
@@ -47,6 +48,7 @@ export async function bulkScheduleBySubject(_prev: ActionResult | undefined, fd:
   if (!ends) return fail("Pick a closing time.");
   if (ends <= starts) return fail("Closing time must be after opening time.");
 
+  let done = 0;
   for (const pair of pairs) {
     const colonIdx = pair.indexOf(":");
     if (colonIdx === -1) continue;
@@ -59,11 +61,18 @@ export async function bulkScheduleBySubject(_prev: ActionResult | undefined, fd:
       p_ends: ends,
       p_auto_start: !bool(fd, "manual_start"),
     });
-    if (error) return fail(`Could not schedule for one class: ${error.message}`);
+    if (error) {
+      revalidatePath("/admin/exams");
+      return fail(`${done ? `${done} scheduled, then it stopped: ` : "Could not schedule: "}${error.message}`);
+    }
+    done++;
   }
   revalidatePath("/admin/exams");
   revalidatePath("/dashboard");
-  return ok(`Scheduled ${pairs.length} window${pairs.length === 1 ? "" : "s"}.`);
+  // Back to the same tab with a banner: once every test in a group has a date the group is gone from the
+  // list, and a message inside it would disappear with it.
+  const group = str(fd, "group") === "year" ? "year" : "subject";
+  redirect(`/admin/exams?view=drafts&group=${group}&scheduled=${done}`);
 }
 
 /** Start (or pause/resume/close) multiple exam windows at once. */

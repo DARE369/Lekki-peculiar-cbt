@@ -8,7 +8,8 @@ import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader, Select, Stat, T
 import { requireStaff } from "@/lib/auth";
 import { formatDateTime, fullName, getStructure } from "@/lib/data";
 import { TYPE_LABEL } from "@/lib/labels";
-import { loadAssessmentReport } from "@/lib/report-data";
+import { countCalculatorUses, loadAssessmentReport, loadCalculatorLog } from "@/lib/report-data";
+import { CalculatorTab } from "./calculator-tab";
 import { distribution, integrityFlags, itemAnalysis, ordinal, percent, positions, summarize } from "@/lib/reports";
 import { minutesBetween } from "@/lib/time";
 import { correctAnswerKey } from "../../actions";
@@ -21,7 +22,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
   const staff = await requireStaff();
   const s = await getStructure();
   const classId = typeof sp.class === "string" && sp.class ? sp.class : undefined;
-  const tab = sp.tab === "questions" ? "questions" : sp.tab === "integrity" ? "integrity" : "results";
+  const tab = sp.tab === "questions" ? "questions" : sp.tab === "integrity" ? "integrity" : sp.tab === "calculator" ? "calculator" : "results";
   const data = await loadAssessmentReport(id, classId);
   if (!data) notFound();
   const { assessment: a, attempts, questions, answers, students } = data;
@@ -34,6 +35,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
   const items = itemAnalysis(questions, attempts, answers);
   const canFixKey = a.created_by === staff.id || staff.isAdmin;
   const base = `/reports/assessment/${id}?${classId ? `class=${classId}&` : ""}`;
+  const calcCount = await countCalculatorUses(attempts.map((t) => t.id));
   const flagged = attempts.filter((t) => integrityFlags(t).some((f) => f.tone !== "neutral" && f.tone !== "info"));
 
   return (
@@ -81,6 +83,7 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
           ["results", "Students"],
           ["questions", "Questions"],
           ["integrity", `Integrity${flagged.length ? ` (${flagged.length})` : ""}`],
+          ["calculator", `Calculator${calcCount ? ` (${calcCount})` : ""}`],
         ].map(([key, label]) => (
           <Link
             key={key}
@@ -96,6 +99,16 @@ export default async function AssessmentReport(props: PageProps<"/reports/assess
         <Card>
           <EmptyState title="Nobody has submitted this test yet">Results appear here as soon as students finish.</EmptyState>
         </Card>
+      ) : tab === "calculator" ? (
+        <CalculatorTab
+          uses={await loadCalculatorLog(attempts.map((t) => t.id))}
+          attempts={attempts}
+          students={students}
+          questions={questions}
+          className={s.className}
+          allowed={a.settings.allow_calculator !== false}
+          csvHref={`/api/reports/assessment/${id}/calculator${classId ? `?class=${classId}` : ""}`}
+        />
       ) : tab === "results" ? (
         <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
           <Card>

@@ -32,6 +32,7 @@ export interface ExamSettings {
   require_all_answered?: boolean;
   allow_flag?: boolean;
   allow_back?: boolean;
+  allow_calculator?: boolean;
   show_result?: "none" | "score" | "full";
   instructions?: string;
 }

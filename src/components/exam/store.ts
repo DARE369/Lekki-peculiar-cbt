@@ -138,13 +138,15 @@ export async function syncOnce(att: LocalAttempt, terminalToken: string): Promis
     ? Object.entries(att.answers).map(([q, v]) => ({ q, s: v.s, f: v.f, at: v.at }))
     : att.dirty.filter((q) => att.answers[q]).map((q) => ({ q, ...att.answers[q] }));
   const sent = new Map(answers.map((x) => [x.q, x.at]));
-  const eventsSent = att.events.length;
+  // The server accepts up to 200 events per request; send the rest on the next sync rather than fail the lot.
+  const events = att.events.slice(0, 190);
+  const eventsSent = events.length;
   try {
     type Resp = { status: string; deadline?: string; server_now: string } & Record<string, unknown>;
     const res = await api<Resp>(
       att.sealed ? "submit" : "sync",
       terminalToken,
-      { answers, events: att.events, source: att.sealed?.source },
+      { answers, events, source: att.sealed?.source },
       att.token,
     );
     const base = { sent, eventsSent, offsetMs: Date.parse(res.server_now) - Date.now(), deadline: res.deadline };

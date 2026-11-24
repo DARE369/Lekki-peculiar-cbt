@@ -204,6 +204,12 @@ export function SettingsPanel({
           />
           <Checkbox name="allow_flag" label="Allow flagging questions for review" defaultChecked={v.settings.allow_flag} />
           <Checkbox name="allow_back" label="Allow going back to earlier questions" defaultChecked={v.settings.allow_back} />
+          <Checkbox
+            name="allow_calculator"
+            label="Give students a calculator"
+            hint="A basic calculator on their screen: + − × ÷, brackets and decimals. Turn off for tests that shouldn't use one."
+            defaultChecked={v.settings.allow_calculator !== false}
+          />
         </div>
         <Field label="After submitting, students see">
           <Select name="show_result" defaultValue={v.settings.show_result}>

@@ -246,6 +246,17 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Test is out of" })).toHaveValue("20");
 
+  // Students get a calculator by default; a teacher can switch it off for a test, and back on.
+  await expect(page.getByLabel("Give students a calculator")).toBeChecked();
+  await page.getByLabel("Give students a calculator").uncheck();
+  await page.waitForTimeout(2000); // the panel saves by itself after a short pause
+  await page.reload();
+  await expect(page.getByLabel("Give students a calculator")).not.toBeChecked();
+  await page.getByLabel("Give students a calculator").check();
+  await page.waitForTimeout(2000);
+  await page.reload();
+  await expect(page.getByLabel("Give students a calculator")).toBeChecked();
+
   // Nothing left to check, so it goes straight off for review.
   await page.getByRole("button", { name: "Send for review" }).click();
   await expect(page).toHaveURL(/\/dashboard\?done=submitted/);
@@ -317,6 +328,47 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
   await expect(pc.getByText("Question 1 of 5")).toBeVisible();
   await shot(pc, "07-question");
 
+  // The calculator: brackets, order of working, decimals, mistakes, keyboard, and it stays while moving between questions.
+  await pc.getByRole("button", { name: "Open calculator" }).click();
+  const sum = pc.getByLabel("Your sum");
+  const press = async (...keys: string[]) => {
+    for (const k of keys) await pc.getByRole("button", { name: k, exact: true }).click();
+  };
+  await press("Open bracket", "2", "Plus", "3", "Close bracket", "Multiply", "4");
+  await expect(sum).toHaveValue("(2+3)×4");
+  await expect(pc.getByText("= 20")).toBeVisible(); // live preview before pressing equals
+  await press("Equals");
+  await expect(sum).toHaveValue("20");
+  await press("Divide", "8", "Equals"); // carries on from the answer
+  await expect(sum).toHaveValue("2.5");
+  await press("7"); // a number after an answer starts a new sum
+  await expect(sum).toHaveValue("7");
+  await press("Clear");
+  await sum.fill("0.1+0.2");
+  await sum.press("Enter");
+  await expect(sum).toHaveValue("0.3"); // not 0.30000000000000004
+  await press("Clear");
+  await sum.fill("2+3*4");
+  await sum.press("Enter");
+  await expect(sum).toHaveValue("14"); // × before +
+  await press("Clear");
+  await sum.fill("5/0");
+  await sum.press("Enter");
+  await expect(pc.getByText("Can't divide by zero")).toBeVisible();
+  await press("Clear");
+  await sum.pressSequentially("b"); // letters are not part of a sum (and don't pick an answer)
+  await expect(sum).toHaveValue("");
+  await shot(pc, "36-calculator");
+  // It keeps the working while the student moves between questions.
+  await sum.fill("7×6");
+  await pc.getByRole("button", { name: "Next →" }).click();
+  await expect(pc.getByText("Question 2 of 5")).toBeVisible();
+  await expect(sum).toHaveValue("7×6");
+  await pc.getByRole("button", { name: "← Previous" }).click();
+  await expect(pc.getByText("Question 1 of 5")).toBeVisible();
+  await sum.press("Escape");
+  await expect(pc.getByRole("dialog", { name: "Calculator" })).toHaveCount(0);
+
   // Answer two questions online. Options are shuffled, so pick by text: "two" is always correct.
   for (let i = 0; i < 2; i++) {
     await pc.getByRole("radio", { name: /two$/ }).click();
@@ -385,6 +437,49 @@ test("teacher sees organised reports and can fix an answer key", async ({ browse
   await expect(page.getByRole("link", { name: "Charles Okafor" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "60%" })).toBeVisible();
   await shot(page, "14-results");
+
+  // Calculator log, for review or audit: every sum the student worked out, and the question it was on.
+  const reportId = page.url().match(/\/reports\/assessment\/([0-9a-f-]{36})/)![1];
+  await expect(page.getByRole("link", { name: /^Calculator \(\d+\)/ })).toBeVisible();
+  await page.getByRole("link", { name: /^Calculator/ }).click();
+  await expect(page.getByText("Sums worked out")).toBeVisible();
+  const charlesLog = page.locator("details", { hasText: "Charles Okafor" });
+  await charlesLog.locator("summary").click();
+  for (const text of ["(2+3)×4", "20", "0.1+0.2", "0.3", "2+3×4", "14", "7×6", "42"]) {
+    await expect(charlesLog.getByText(text, { exact: true }).first()).toBeVisible();
+  }
+  await expect(charlesLog.getByText(/^Q\d+$/).first()).toBeVisible(); // which question it was on
+  await expect(charlesLog.getByText("5/0")).toHaveCount(0); // a mistake (divide by zero) isn't a sum
+  await shot(page, "37-calculator-log");
+  // The same record as a spreadsheet.
+  const csv = await page.request.get(`/api/reports/assessment/${reportId}/calculator`);
+  expect(csv.status()).toBe(200);
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  const csvText = await csv.text();
+  expect(csvText).toContain("Charles Okafor");
+  expect(csvText).toContain("(2+3)×4");
+  expect(csvText).toContain("Question no. in test");
+
+  // The log comes from the student's browser, so a crafted entry must never reach the screen or the spreadsheet.
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const svc = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: charlesAttempt } = await svc.from("attempts").select("id, student_id").eq("assessment_id", reportId).eq("status", "submitted").limit(1).single();
+  await svc.from("attempt_events").insert([
+    { attempt_id: charlesAttempt!.id, student_id: charlesAttempt!.student_id, type: "calculator", detail: { q: "x", n: 1, expr: '=HYPERLINK("http://evil.example")', result: "1" } },
+    { attempt_id: charlesAttempt!.id, student_id: charlesAttempt!.student_id, type: "calculator", detail: { q: "x", n: 1, expr: "1+1", result: "<script>alert(1)</script>" } },
+  ]);
+  await page.reload();
+  await expect(page.getByText("Sums worked out")).toBeVisible();
+  await expect(page.getByText("HYPERLINK")).toHaveCount(0);
+  await expect(page.getByText("<script>")).toHaveCount(0);
+  const csvAfter = await (await page.request.get(`/api/reports/assessment/${reportId}/calculator`)).text();
+  expect(csvAfter).not.toContain("HYPERLINK");
+  expect(csvAfter).not.toContain("<script>");
 
   await page.getByRole("link", { name: "Questions" }).click();
   await expect(page.getByText("Sorted hardest first")).toBeVisible();
@@ -1466,7 +1561,7 @@ test("a student whose screen says everything is answered can still submit, even 
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   // This exam makes students answer every question before they can submit (as exams do).
   const { data: a } = await db.from("assessments").select("id, settings").eq("title", "Basic Science Test 1").single();
-  await db.from("assessments").update({ settings: { ...(a!.settings as object), require_all_answered: true } }).eq("id", a!.id);
+  await db.from("assessments").update({ settings: { ...(a!.settings as object), require_all_answered: true, allow_calculator: false } }).eq("id", a!.id);
 
   const hod = await signIn(browser, "hod@lps.test", hodPassword);
   await hod.goto("/admin/terminals");
@@ -1486,6 +1581,8 @@ test("a student whose screen says everything is answered can still submit, even 
   await pc.getByLabel(/I am Amaka Bello/).check();
   await pc.getByRole("button", { name: "Start exam" }).click();
   await expect(pc.getByText("Question 1 of 5")).toBeVisible();
+  // The teacher switched the calculator off for this test, so there isn't one.
+  await expect(pc.getByRole("button", { name: "Open calculator" })).toHaveCount(0);
 
   for (let i = 0; i < 4; i++) {
     await pc.getByRole("radio", { name: /two$/ }).click();

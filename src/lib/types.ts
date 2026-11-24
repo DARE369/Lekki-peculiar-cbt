@@ -75,6 +75,8 @@ export interface AssessmentSettings {
   require_all_answered: boolean;
   allow_flag: boolean;
   allow_back: boolean;
+  /** a basic calculator on the student's exam screen (default on) */
+  allow_calculator: boolean;
   show_result: "none" | "score" | "full";
   pass_mark: number;
   /** "per_question": each question is worth marks_per_question; "total": the whole test is out of total_marks */
@@ -90,6 +92,7 @@ export const DEFAULT_SETTINGS: AssessmentSettings = {
   require_all_answered: false,
   allow_flag: true,
   allow_back: true,
+  allow_calculator: true,
   show_result: "score",
   pass_mark: 50,
   marks_mode: "per_question",

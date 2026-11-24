@@ -426,6 +426,7 @@ export async function updateAssessmentSettings(_: ActionResult, fd: FormData): P
     require_all_answered: bool(fd, "require_all_answered"),
     allow_flag: bool(fd, "allow_flag"),
     allow_back: bool(fd, "allow_back"),
+    allow_calculator: bool(fd, "allow_calculator"),
     show_result: (["none", "score", "full"].includes(str(fd, "show_result")) ? str(fd, "show_result") : "score") as AssessmentSettings["show_result"],
     pass_mark: Math.min(100, Math.max(0, int(fd, "pass_mark", 50))),
     marks_mode: marksMode,

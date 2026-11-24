@@ -146,6 +146,8 @@ export default async function ReviewPage(props: PageProps<"/admin/approvals/[id]
               </dd>
               <dt className="text-muted">Must answer all</dt>
               <dd>{settings.require_all_answered ? "Yes" : "No"}</dd>
+              <dt className="text-muted">Calculator</dt>
+              <dd>{settings.allow_calculator === false ? "Not allowed" : "Allowed"}</dd>
               <dt className="text-muted">Students see</dt>
               <dd>{{ none: "A congratulations message only", score: "Score", full: "Score + corrections" }[settings.show_result]}</dd>
               <dt className="text-muted">Marks</dt>

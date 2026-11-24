@@ -438,6 +438,49 @@ test("teacher sees organised reports and can fix an answer key", async ({ browse
   await expect(page.getByRole("cell", { name: "60%" })).toBeVisible();
   await shot(page, "14-results");
 
+  // Calculator log, for review or audit: every sum the student worked out, and the question it was on.
+  const reportId = page.url().match(/\/reports\/assessment\/([0-9a-f-]{36})/)![1];
+  await expect(page.getByRole("link", { name: /^Calculator \(\d+\)/ })).toBeVisible();
+  await page.getByRole("link", { name: /^Calculator/ }).click();
+  await expect(page.getByText("Sums worked out")).toBeVisible();
+  const charlesLog = page.locator("details", { hasText: "Charles Okafor" });
+  await charlesLog.locator("summary").click();
+  for (const text of ["(2+3)×4", "20", "0.1+0.2", "0.3", "2+3×4", "14", "7×6", "42"]) {
+    await expect(charlesLog.getByText(text, { exact: true }).first()).toBeVisible();
+  }
+  await expect(charlesLog.getByText(/^Q\d+$/).first()).toBeVisible(); // which question it was on
+  await expect(charlesLog.getByText("5/0")).toHaveCount(0); // a mistake (divide by zero) isn't a sum
+  await shot(page, "37-calculator-log");
+  // The same record as a spreadsheet.
+  const csv = await page.request.get(`/api/reports/assessment/${reportId}/calculator`);
+  expect(csv.status()).toBe(200);
+  expect(csv.headers()["content-type"]).toContain("text/csv");
+  const csvText = await csv.text();
+  expect(csvText).toContain("Charles Okafor");
+  expect(csvText).toContain("(2+3)×4");
+  expect(csvText).toContain("Question no. in test");
+
+  // The log comes from the student's browser, so a crafted entry must never reach the screen or the spreadsheet.
+  const env = Object.fromEntries(
+    readFileSync(".env.local", "utf8")
+      .split("\n")
+      .filter((l) => l.includes("="))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
+  );
+  const svc = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { data: charlesAttempt } = await svc.from("attempts").select("id, student_id").eq("assessment_id", reportId).eq("status", "submitted").limit(1).single();
+  await svc.from("attempt_events").insert([
+    { attempt_id: charlesAttempt!.id, student_id: charlesAttempt!.student_id, type: "calculator", detail: { q: "x", n: 1, expr: '=HYPERLINK("http://evil.example")', result: "1" } },
+    { attempt_id: charlesAttempt!.id, student_id: charlesAttempt!.student_id, type: "calculator", detail: { q: "x", n: 1, expr: "1+1", result: "<script>alert(1)</script>" } },
+  ]);
+  await page.reload();
+  await expect(page.getByText("Sums worked out")).toBeVisible();
+  await expect(page.getByText("HYPERLINK")).toHaveCount(0);
+  await expect(page.getByText("<script>")).toHaveCount(0);
+  const csvAfter = await (await page.request.get(`/api/reports/assessment/${reportId}/calculator`)).text();
+  expect(csvAfter).not.toContain("HYPERLINK");
+  expect(csvAfter).not.toContain("<script>");
+
   await page.getByRole("link", { name: "Questions" }).click();
   await expect(page.getByText("Sorted hardest first")).toBeVisible();
   await shot(page, "15-item-analysis");

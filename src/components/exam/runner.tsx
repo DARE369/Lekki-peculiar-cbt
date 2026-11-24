@@ -373,7 +373,9 @@ export function ExamRunner({
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             {/* A basic calculator, unless the teacher turned it off for this test. */}
-            {settings.allow_calculator !== false ? <Calculator /> : null}
+            {settings.allow_calculator !== false ? (
+              <Calculator question={q ? { id: q.id, number: att.current + 1 } : null} onUse={(entry) => logEvent("calculator", entry)} />
+            ) : null}
             <span
               className={cn(
                 "hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:inline-flex",

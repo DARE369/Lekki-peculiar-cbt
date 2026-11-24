@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { parseCalcEvent, type CalcUse } from "@/lib/calculator-log";
 import type { AttemptRow, PaperQuestion } from "@/lib/reports";
 import { DEFAULT_SETTINGS, type AssessmentSettings, type AssessmentType } from "@/lib/types";
 
@@ -49,6 +50,46 @@ export async function loadAssessmentReport(id: string, classId?: string) {
     students: new Map(((students ?? []) as StudentLite[]).map((s) => [s.id, s])),
     classIds: [...new Set((windows ?? []).map((w) => w.class_id as string))],
   };
+}
+
+/** Everything students worked out on the exam calculator for these attempts (only those this user may see — RLS). */
+export async function loadCalculatorLog(attemptIds: string[]): Promise<CalcUse[]> {
+  const supabase = await createClient();
+  const out: CalcUse[] = [];
+  for (let i = 0; i < attemptIds.length; i += 100) {
+    const chunk = attemptIds.slice(i, i + 100);
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase
+        .from("attempt_events")
+        .select("attempt_id, detail, created_at")
+        .eq("type", "calculator")
+        .in("attempt_id", chunk)
+        .order("created_at")
+        .range(from, from + 999);
+      for (const r of data ?? []) {
+        const use = parseCalcEvent(r as { attempt_id: string; created_at: string; detail: unknown });
+        if (use) out.push(use);
+      }
+      if (!data || data.length < 1000) break;
+    }
+  }
+  return out;
+}
+
+/** How many calculator entries there are (for the tab label), without loading them. */
+export async function countCalculatorUses(attemptIds: string[]): Promise<number> {
+  if (!attemptIds.length) return 0;
+  const supabase = await createClient();
+  let total = 0;
+  for (let i = 0; i < attemptIds.length; i += 100) {
+    const { count } = await supabase
+      .from("attempt_events")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "calculator")
+      .in("attempt_id", attemptIds.slice(i, i + 100));
+    total += count ?? 0;
+  }
+  return total;
 }
 
 export interface BroadsheetAttempt extends AttemptRow {

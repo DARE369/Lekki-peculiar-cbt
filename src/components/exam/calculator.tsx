@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Calculator as CalcIcon, Delete, X } from "lucide-react";
-import { calculate, CALC_ALLOWED } from "@/lib/calc";
+import { calculate, CALC_ALLOWED, normalise } from "@/lib/calc";
 import { cn } from "@/components/ui";
 
 const KEYS: { label: string; aria: string; kind: "digit" | "op" | "fn" | "equals"; value?: string }[] = [
@@ -36,7 +36,12 @@ const pretty = (s: string) => s.replace(/[*]/g, "×").replace(/[/]/g, "÷").repl
  * A basic calculator for the exam screen: + − × ÷, brackets and decimal points, by mouse or keyboard.
  * It stays mounted while the student moves between questions, so their working is still there.
  */
-export function Calculator() {
+export type CalcUseEntry = { q: string; n: number; expr: string; result: string };
+
+/** The most sums recorded for one exam: enough for any real use, and it stops a flood of entries. */
+const MAX_LOGGED = 150;
+
+export function Calculator({ question, onUse }: { question: { id: string; number: number } | null; onUse?: (entry: CalcUseEntry) => void }) {
   const [open, setOpen] = useState(false);
   const [expr, setExpr] = useState("");
   const [shownResult, setShownResult] = useState(false); // the box holds an answer: a digit starts a new sum
@@ -52,11 +57,62 @@ export function Calculator() {
     if (open) input.current?.focus();
   }, [open]);
 
+  const live = expr && !shownResult ? calculate(expr) : null;
+  const preview = live && live.ok && /[+\-−×÷*/x(]/i.test(expr.replace(/^[-−]/, "")) ? live.text : null;
+
+  // ---- Record what was worked out, and on which question, so a teacher can review it later.
+  const questionRef = useRef(question);
+  const onUseRef = useRef(onUse);
+  // Keep the latest question and callback where timers and cleanups can read them (declared first, so it runs first).
+  useEffect(() => {
+    questionRef.current = question;
+    onUseRef.current = onUse;
+  });
+  const logged = useRef({ count: 0, lastKey: "" });
+  const pending = useRef<{ entry: CalcUseEntry; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  function record(entry: CalcUseEntry) {
+    const key = `${entry.q}|${normalise(entry.expr)}`;
+    if (logged.current.count >= MAX_LOGGED || key === logged.current.lastKey) return;
+    logged.current.lastKey = key;
+    logged.current.count++;
+    onUseRef.current?.({ ...entry, expr: entry.expr.slice(0, 80), result: entry.result.slice(0, 40) });
+  }
+  /** Records a sum that was shown but not yet recorded (the student moved on, or closed the calculator). */
+  function flush() {
+    if (!pending.current) return;
+    clearTimeout(pending.current.timer);
+    const { entry } = pending.current;
+    pending.current = null;
+    record(entry);
+  }
+  // A result seen in the live preview counts even if "=" was never pressed: record it once it has stayed put.
+  useEffect(() => {
+    if (pending.current) {
+      clearTimeout(pending.current.timer);
+      pending.current = null;
+    }
+    const qn = questionRef.current;
+    if (!preview || !qn || shownResult) return;
+    const entry = { q: qn.id, n: qn.number, expr, result: preview };
+    pending.current = {
+      entry,
+      timer: setTimeout(() => {
+        pending.current = null;
+        record(entry);
+      }, 1500),
+    };
+  }, [expr, preview, shownResult]);
+  // Leaving a question, closing the calculator, or finishing the exam: keep what has been seen.
+  const questionId = question?.id;
+  useEffect(() => flush, [questionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) flush();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const WIDTH = 288;
   const place = pos ?? { x: Math.max(8, (typeof window === "undefined" ? 1000 : window.innerWidth) - WIDTH - 16), y: 88 };
 
-  const live = expr && !shownResult ? calculate(expr) : null;
-  const preview = live && live.ok && /[+\-−×÷*/x(]/i.test(expr.replace(/^[-−]/, "")) ? live.text : null;
 
   function press(value: string, kind: "digit" | "op") {
     setError("");
@@ -69,6 +125,14 @@ export function Calculator() {
     if (!expr.trim()) return;
     const r = calculate(expr);
     if (r.ok) {
+      const qn = questionRef.current;
+      if (qn) {
+        if (pending.current) {
+          clearTimeout(pending.current.timer);
+          pending.current = null;
+        }
+        record({ q: qn.id, n: qn.number, expr, result: r.text });
+      }
       setExpr(r.text);
       setShownResult(true);
       setError("");

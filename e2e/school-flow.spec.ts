@@ -246,6 +246,17 @@ test("teacher uploads questions, builds a test and submits it", async ({ browser
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Test is out of" })).toHaveValue("20");
 
+  // Students get a calculator by default; a teacher can switch it off for a test, and back on.
+  await expect(page.getByLabel("Give students a calculator")).toBeChecked();
+  await page.getByLabel("Give students a calculator").uncheck();
+  await page.waitForTimeout(2000); // the panel saves by itself after a short pause
+  await page.reload();
+  await expect(page.getByLabel("Give students a calculator")).not.toBeChecked();
+  await page.getByLabel("Give students a calculator").check();
+  await page.waitForTimeout(2000);
+  await page.reload();
+  await expect(page.getByLabel("Give students a calculator")).toBeChecked();
+
   // Nothing left to check, so it goes straight off for review.
   await page.getByRole("button", { name: "Send for review" }).click();
   await expect(page).toHaveURL(/\/dashboard\?done=submitted/);
@@ -316,6 +327,47 @@ test("students sit the exam on a lab computer, surviving an internet outage", as
   await pc.getByRole("button", { name: "Start exam" }).click();
   await expect(pc.getByText("Question 1 of 5")).toBeVisible();
   await shot(pc, "07-question");
+
+  // The calculator: brackets, order of working, decimals, mistakes, keyboard, and it stays while moving between questions.
+  await pc.getByRole("button", { name: "Open calculator" }).click();
+  const sum = pc.getByLabel("Your sum");
+  const press = async (...keys: string[]) => {
+    for (const k of keys) await pc.getByRole("button", { name: k, exact: true }).click();
+  };
+  await press("Open bracket", "2", "Plus", "3", "Close bracket", "Multiply", "4");
+  await expect(sum).toHaveValue("(2+3)×4");
+  await expect(pc.getByText("= 20")).toBeVisible(); // live preview before pressing equals
+  await press("Equals");
+  await expect(sum).toHaveValue("20");
+  await press("Divide", "8", "Equals"); // carries on from the answer
+  await expect(sum).toHaveValue("2.5");
+  await press("7"); // a number after an answer starts a new sum
+  await expect(sum).toHaveValue("7");
+  await press("Clear");
+  await sum.fill("0.1+0.2");
+  await sum.press("Enter");
+  await expect(sum).toHaveValue("0.3"); // not 0.30000000000000004
+  await press("Clear");
+  await sum.fill("2+3*4");
+  await sum.press("Enter");
+  await expect(sum).toHaveValue("14"); // × before +
+  await press("Clear");
+  await sum.fill("5/0");
+  await sum.press("Enter");
+  await expect(pc.getByText("Can't divide by zero")).toBeVisible();
+  await press("Clear");
+  await sum.pressSequentially("b"); // letters are not part of a sum (and don't pick an answer)
+  await expect(sum).toHaveValue("");
+  await shot(pc, "36-calculator");
+  // It keeps the working while the student moves between questions.
+  await sum.fill("7×6");
+  await pc.getByRole("button", { name: "Next →" }).click();
+  await expect(pc.getByText("Question 2 of 5")).toBeVisible();
+  await expect(sum).toHaveValue("7×6");
+  await pc.getByRole("button", { name: "← Previous" }).click();
+  await expect(pc.getByText("Question 1 of 5")).toBeVisible();
+  await sum.press("Escape");
+  await expect(pc.getByRole("dialog", { name: "Calculator" })).toHaveCount(0);
 
   // Answer two questions online. Options are shuffled, so pick by text: "two" is always correct.
   for (let i = 0; i < 2; i++) {
@@ -1466,7 +1518,7 @@ test("a student whose screen says everything is answered can still submit, even 
   const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   // This exam makes students answer every question before they can submit (as exams do).
   const { data: a } = await db.from("assessments").select("id, settings").eq("title", "Basic Science Test 1").single();
-  await db.from("assessments").update({ settings: { ...(a!.settings as object), require_all_answered: true } }).eq("id", a!.id);
+  await db.from("assessments").update({ settings: { ...(a!.settings as object), require_all_answered: true, allow_calculator: false } }).eq("id", a!.id);
 
   const hod = await signIn(browser, "hod@lps.test", hodPassword);
   await hod.goto("/admin/terminals");
@@ -1486,6 +1538,8 @@ test("a student whose screen says everything is answered can still submit, even 
   await pc.getByLabel(/I am Amaka Bello/).check();
   await pc.getByRole("button", { name: "Start exam" }).click();
   await expect(pc.getByText("Question 1 of 5")).toBeVisible();
+  // The teacher switched the calculator off for this test, so there isn't one.
+  await expect(pc.getByRole("button", { name: "Open calculator" })).toHaveCount(0);
 
   for (let i = 0; i < 4; i++) {
     await pc.getByRole("radio", { name: /two$/ }).click();
